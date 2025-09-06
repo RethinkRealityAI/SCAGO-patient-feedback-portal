@@ -2,29 +2,21 @@
 
 import { analyzePatientFeedbackSentiment, type AnalyzePatientFeedbackSentimentOutput } from '@/ai/flows/analyze-patient-feedback-sentiment';
 import { z } from 'zod';
-import { toast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 
-// All fields are optional for now, as we are not validating the entire form yet.
-// We only need feedbackText for the AI analysis.
-const feedbackActionSchema = z.object({
-  feedbackText: z.string().optional(),
-});
+// We just need a Zod schema to represent the data object coming from the form.
+// We aren't doing any strict validation here as the form has its own client-side validation.
+const feedbackActionSchema = z.record(z.any());
 
 export async function submitFeedback(
   data: z.infer<typeof feedbackActionSchema>
 ): Promise<(Partial<AnalyzePatientFeedbackSentimentOutput> & { error?: never }) | { error: string }> {
-  const validatedData = feedbackActionSchema.safeParse(data);
-
-  if (!validatedData.success) {
-    return { error: 'Invalid input.' };
-  }
-
+  
   try {
     // AI analysis is temporarily disabled.
     // const analysis = await analyzePatientFeedbackSentiment({
-    //   feedbackText: validatedData.data.feedbackText || '',
+    //   feedbackText: data.feedbackText || '',
     // });
     
     const analysis = {
@@ -42,8 +34,6 @@ export async function submitFeedback(
     return analysis;
   } catch (e) {
     console.error(e);
-    // This is a generic error message. In a real app, you might want to
-    // provide more specific error messages based on the error type.
     if (e instanceof Error && e.message.includes('permission-denied')) {
         return { error: 'Permission denied. Make sure your Firestore security rules are set up correctly.' };
     }
