@@ -14,14 +14,17 @@ export async function submitFeedback(
 ): Promise<(Partial<AnalyzePatientFeedbackSentimentOutput> & { error?: never }) | { error: string }> {
   
   try {
-    // AI analysis is temporarily disabled.
+    // The AI analysis part is temporarily disabled.
+    // When enabled, it would perform sentiment analysis on the feedback text.
     // const analysis = await analyzePatientFeedbackSentiment({
     //   feedbackText: data.feedbackText || '',
     // });
     
-    const analysis = {
+    // For now, we'll use a placeholder analysis object to ensure the
+    // data structure returned to the client is consistent.
+    const analysis: Partial<AnalyzePatientFeedbackSentimentOutput> = {
         sentiment: 'N/A',
-        summary: 'AI analysis disabled.'
+        summary: 'AI analysis is currently disabled.'
     };
 
     // Save the full feedback to Firestore
@@ -31,12 +34,15 @@ export async function submitFeedback(
       submittedAt: new Date(),
     });
 
+    // Return the placeholder analysis object on success.
     return analysis;
   } catch (e) {
     console.error(e);
+    // Provide a more specific error message if it's a Firestore permission issue.
     if (e instanceof Error && e.message.includes('permission-denied')) {
-        return { error: 'Permission denied. Make sure your Firestore security rules are set up correctly.' };
+        return { error: 'Submission failed due to a permission error. Please check your Firestore security rules.' };
     }
-    return { error: 'Failed to save feedback. Please try again later.' };
+    // Return a generic error for other issues.
+    return { error: 'An unexpected error occurred while saving your feedback. Please try again later.' };
   }
 }
