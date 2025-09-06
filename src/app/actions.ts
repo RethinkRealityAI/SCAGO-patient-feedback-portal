@@ -6,13 +6,15 @@ import { toast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 
+// All fields are optional for now, as we are not validating the entire form yet.
+// We only need feedbackText for the AI analysis.
 const feedbackActionSchema = z.object({
-  feedbackText: z.string(),
+  feedbackText: z.string().optional(),
 });
 
 export async function submitFeedback(
   data: z.infer<typeof feedbackActionSchema>
-): Promise<(AnalyzePatientFeedbackSentimentOutput & { error?: never }) | { error: string }> {
+): Promise<(Partial<AnalyzePatientFeedbackSentimentOutput> & { error?: never }) | { error: string }> {
   const validatedData = feedbackActionSchema.safeParse(data);
 
   if (!validatedData.success) {
@@ -20,11 +22,16 @@ export async function submitFeedback(
   }
 
   try {
-    // In a real app, we would also save the full feedback (data) to a database here.
-    const analysis = await analyzePatientFeedbackSentiment({
-      feedbackText: validatedData.data.feedbackText,
-    });
+    // AI analysis is temporarily disabled.
+    // const analysis = await analyzePatientFeedbackSentiment({
+    //   feedbackText: validatedData.data.feedbackText || '',
+    // });
     
+    const analysis = {
+        sentiment: 'N/A',
+        summary: 'AI analysis disabled.'
+    };
+
     // Save the full feedback to Firestore
     await addDoc(collection(db, "feedback"), {
       ...data,
@@ -40,6 +47,6 @@ export async function submitFeedback(
     if (e instanceof Error && e.message.includes('permission-denied')) {
         return { error: 'Permission denied. Make sure your Firestore security rules are set up correctly.' };
     }
-    return { error: 'Failed to analyze and save feedback. Please try again later.' };
+    return { error: 'Failed to save feedback. Please try again later.' };
   }
 }

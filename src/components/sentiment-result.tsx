@@ -11,12 +11,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Frown, Meh, Smile, PartyPopper } from "lucide-react"
 
-type Sentiment = "positive" | "negative" | "neutral"
+type Sentiment = "positive" | "negative" | "neutral" | "n/a"
 
 type SentimentResultProps = {
   analysis: {
-    sentiment: string
-    summary: string
+    sentiment?: string
+    summary?: string
   }
   onReset: () => void
 }
@@ -44,11 +44,16 @@ const sentimentDetails: Record<
     title: "Neutral Feedback",
     className: "text-yellow-600",
   },
+  "n/a": {
+    icon: <PartyPopper className="h-12 w-12" />,
+    title: "Feedback Submitted",
+    className: "text-foreground",
+  }
 }
 
 export default function SentimentResult({ analysis, onReset }: SentimentResultProps) {
-  const sentiment = analysis.sentiment.toLowerCase() as Sentiment
-  const details = sentimentDetails[sentiment] || sentimentDetails.neutral
+  const sentiment = (analysis.sentiment?.toLowerCase() || 'n/a') as Sentiment
+  const details = sentimentDetails[sentiment] || sentimentDetails['n/a']
 
   return (
     <Card className="w-full max-w-4xl mx-auto border-border/50 bg-card/60 p-6 shadow-lg backdrop-blur-lg sm:p-8">
@@ -61,7 +66,7 @@ export default function SentimentResult({ analysis, onReset }: SentimentResultPr
       </CardHeader>
       <CardContent className="text-center">
         <div className="rounded-lg border bg-muted/50 p-4">
-          <p className="text-muted-foreground">{analysis.summary}</p>
+          <p className="text-muted-foreground">{analysis.summary || 'Your feedback has been recorded.'}</p>
         </div>
       </CardContent>
       <CardFooter className="flex-col items-center gap-4 pt-6">

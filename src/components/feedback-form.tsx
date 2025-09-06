@@ -123,7 +123,7 @@ const formSchema = z
     }
   )
 
-type AnalysisResult = (AnalyzePatientFeedbackSentimentOutput & { error?: never }) | { error: string };
+type AnalysisResult = (Partial<AnalyzePatientFeedbackSentimentOutput> & { error?: never }) | { error: string };
 
 export default function FeedbackForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
