@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
-import Header from '@/components/header'
 
 export const metadata: Metadata = {
-  title: 'SCAGO Feedback',
+  title: 'Patient Feedback',
   description: 'A patient feedback portal for the Sickle Cell Awareness Group of Ontario.',
 }
 
@@ -22,7 +21,6 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <div className="relative flex min-h-screen flex-col">
-          <Header />
           <main className="flex-1">{children}</main>
         </div>
         <Toaster />

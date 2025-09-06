@@ -176,7 +176,7 @@ export default function FeedbackForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true)
-    const result = await submitFeedback({ feedbackText: values.feedbackText })
+    const result = await submitFeedback(values)
     setIsSubmitting(false)
 
     if (result.error) {
@@ -993,5 +993,3 @@ function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     />
   )
 }
-
-    
