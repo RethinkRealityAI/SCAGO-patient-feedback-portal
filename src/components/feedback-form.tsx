@@ -189,12 +189,48 @@ export default function FeedbackForm() {
     }
   }
 
+  function prefillForm() {
+    form.reset({
+      isAnonymous: false,
+      name: "Jane Doe",
+      email: "jane.doe@example.com",
+      patientOrCaregiver: "patient",
+      physicianName: "Dr. Welby",
+      triageNurseName: "Nurse Carol",
+      firstReception: "The reception was quick and efficient.",
+      visitReason: "Annual check-up",
+      inPainCrisis: "no",
+      admittedToWard: "no",
+      timelyMedications: "yes",
+      hospitalStayLength: "N/A",
+      hcpFamiliarity: "somewhat-familiar",
+      hcpRespectfulness: "The HCPs were very respectful and listened to my concerns.",
+      experienced: ["anxiety"],
+      location: "Toronto General Hospital",
+      interactionMonth: "may",
+      interactionYear: String(new Date().getFullYear()),
+      hospitalUnit: "outpatient",
+      clinicianNames: "Dr. Welby, Nurse Carol",
+      investigationConducted: "yes",
+      concernsAddressed: "yes",
+      reportedToHospital: "no",
+      reportNotDoneReason: "not-aware",
+      hospitalInteraction: "Overall a positive experience, but could be improved.",
+      feedbackText: "I had a generally positive experience at the hospital. The staff was friendly and the facilities were clean. However, the wait time was a bit long. I hope this feedback helps improve the service.",
+      rating: "4",
+      contactForAdvocacy: true,
+    });
+  }
+
   if (analysisResult && !analysisResult.error) {
     return <SentimentResult analysis={analysisResult} onReset={() => setAnalysisResult(null)} />
   }
 
   return (
     <Card className="border-border/50 bg-card/60 p-6 shadow-lg backdrop-blur-lg sm:p-8">
+      <div className="mb-4">
+        <Button type="button" onClick={prefillForm} variant="outline">Prefill Form for Testing</Button>
+      </div>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <div className="space-y-4">
@@ -483,7 +519,7 @@ export default function FeedbackForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>How familiar were the health care providers (HCP) with your condition?</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select an option" />
@@ -590,7 +626,7 @@ export default function FeedbackForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Month of Interaction</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a month" />
@@ -612,7 +648,7 @@ export default function FeedbackForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Year of Interaction</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a year" />
@@ -650,7 +686,7 @@ export default function FeedbackForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Unit or Department</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a unit or department" />
@@ -795,7 +831,7 @@ export default function FeedbackForm() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>If "No", why not?</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a reason" />
