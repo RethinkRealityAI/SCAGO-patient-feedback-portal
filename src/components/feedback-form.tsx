@@ -25,19 +25,19 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { CalendarIcon, Loader2, Star } from "lucide-react"
-import { format } from "date-fns"
+import { Loader2, Star, PartyPopper } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
-import SentimentResult from "./sentiment-result"
 import { useToast } from "@/hooks/use-toast"
-import type { AnalyzePatientFeedbackSentimentOutput } from "@/ai/flows/analyze-patient-feedback-sentiment"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+
 
 const experiences = [
   {
@@ -123,11 +123,9 @@ const formSchema = z
     }
   )
 
-type AnalysisResult = (Partial<AnalyzePatientFeedbackSentimentOutput> & { error?: never }) | { error: string };
-
 export default function FeedbackForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [isSubmitted, setIsSubmitted] = useState(false)
   const { toast } = useToast()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -180,7 +178,7 @@ export default function FeedbackForm() {
         description: result.error,
       })
     } else {
-      setAnalysisResult(result)
+      setIsSubmitted(true);
       toast({
         title: "Feedback Submitted",
         description: "Thank you for sharing your experience.",
@@ -222,8 +220,28 @@ export default function FeedbackForm() {
     });
   }
 
-  if (analysisResult && !analysisResult.error) {
-    return <SentimentResult analysis={analysisResult} onReset={() => setAnalysisResult(null)} />
+  if (isSubmitted) {
+    return (
+        <Card className="w-full max-w-4xl mx-auto border-border/50 bg-card/60 p-6 shadow-lg backdrop-blur-lg sm:p-8">
+            <CardHeader className="items-center text-center">
+                <div className={`mb-4 text-foreground`}><PartyPopper className="h-12 w-12" /></div>
+                <CardTitle className="text-2xl">Feedback Submitted</CardTitle>
+                <CardDescription>
+                Thank you for your valuable input. Your feedback has been recorded.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+                <div className="rounded-lg border bg-muted/50 p-4">
+                <p className="text-muted-foreground">Your feedback helps us improve.</p>
+                </div>
+            </CardContent>
+            <CardFooter className="flex-col items-center gap-4 pt-6">
+                <Button onClick={() => setIsSubmitted(false)} variant="outline">
+                    Submit Another Feedback
+                </Button>
+            </CardFooter>
+        </Card>
+    )
   }
 
   return (
@@ -971,7 +989,7 @@ export default function FeedbackForm() {
 }
 
 // A wrapper card for styling purposes
-function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function FormCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
