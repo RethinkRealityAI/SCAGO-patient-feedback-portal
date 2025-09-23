@@ -24,6 +24,7 @@ export const defaultSurvey = {
           type: 'group',
           conditionField: 'isAnonymous',
           conditionValue: false,
+          label: 'Personal Details',
           fields: [
             {
               id: 'name',
@@ -66,6 +67,7 @@ export const defaultSurvey = {
         },
         {
           id: 'interaction-date',
+          label: 'Interaction Date',
           type: 'group',
           fields: [
             {

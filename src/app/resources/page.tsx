@@ -1,50 +1,7 @@
 import ResourceCard from "@/components/resource-card";
+import placeholderImages from "@/lib/placeholder-images.json";
 
-const resources = [
-  {
-    title: "Understanding Sickle Cell Disease",
-    description: "A comprehensive guide to the basics of sickle cell disease, its symptoms, and treatments.",
-    link: "#",
-    imageUrl: "https://picsum.photos/600/400",
-    imageHint: "medical textbook"
-  },
-  {
-    title: "Managing Pain",
-    description: "Learn about different strategies and treatments for managing pain associated with sickle cell disease.",
-    link: "#",
-    imageUrl: "https://picsum.photos/601/400",
-    imageHint: "comforting hand"
-  },
-  {
-    title: "SCAGO News & Updates",
-    description: "Stay up-to-date with the latest news, events, and announcements from the Sickle Cell Awareness Group of Ontario.",
-    link: "#",
-    imageUrl: "https://picsum.photos/600/401",
-    imageHint: "community event"
-  },
-  {
-    title: "Patient Support Programs",
-    description: "Find information on support groups, financial assistance, and other programs available to patients.",
-    link: "#",
-    imageUrl: "https://picsum.photos/601/401",
-    imageHint: "support group"
-  },
-  {
-    title: "Transitioning to Adult Care",
-    description: "Guidance and resources for young adults moving from pediatric to adult healthcare systems.",
-    link: "#",
-    imageUrl: "https://picsum.photos/600/402",
-    imageHint: "doctor patient"
-  },
-  {
-    title: "Advocacy and Awareness",
-    description: "Get involved in raising awareness and advocating for better care and more research.",
-    link: "#",
-    imageUrl: "https://picsum.photos/602/400",
-    imageHint: "public speaking"
-  },
-];
-
+const resources = placeholderImages.resources;
 
 export default function ResourcesPage() {
   return (
@@ -67,6 +24,8 @@ export default function ResourcesPage() {
             link={resource.link}
             imageUrl={resource.imageUrl}
             imageHint={resource.imageHint}
+            width={resource.width}
+            height={resource.height}
           />
         ))}
       </div>

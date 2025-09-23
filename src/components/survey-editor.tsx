@@ -73,7 +73,7 @@ const optionSchema = z.object({
   value: z.string().min(1, 'Value is required'),
 });
 
-const fieldSchema = z.object({
+const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string().min(1, 'ID is required'),
   label: z.string().min(1, 'Label is required'),
   type: z.enum([
@@ -94,8 +94,9 @@ const fieldSchema = z.object({
   options: z.array(optionSchema).optional(),
   conditionField: z.string().optional(),
   conditionValue: z.string().optional(),
-  fields: z.lazy(() => z.array(fieldSchema)).optional(), // For grouped fields
-});
+  fields: z.array(fieldSchema).optional(), // For grouped fields
+}));
+
 
 const sectionSchema = z.object({
   id: z.string().min(1, 'ID is required'),
@@ -111,7 +112,18 @@ const surveySchema = z.object({
 });
 
 type SurveyFormData = z.infer<typeof surveySchema>;
-type FormFieldConfig = z.infer<typeof fieldSchema>;
+interface FormFieldConfig {
+  id: string;
+  label: string;
+  type: 'text' | 'textarea' | 'email' | 'select' | 'radio' | 'checkbox' | 'rating' | 'conditional' | 'group' | 'boolean-checkbox';
+  options?: { value: string; label: string }[];
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  fields?: FormFieldConfig[]; // For grouped fields
+  conditionField?: string; // For conditional logic
+  conditionValue?: any;
+}
 
 // Function to generate a slug from a string
 const generateSlug = (text: string) => {
@@ -127,29 +139,31 @@ const generateSlug = (text: string) => {
 
 
 function FieldEditor({
-  sectionIndex,
+  fieldPath,
   fieldIndex,
   remove,
   move,
   totalFields,
 }: {
-  sectionIndex: number;
+  fieldPath: `sections.${number}.fields.${number}` | `sections.${number}.fields.${number}.fields.${number}`;
   fieldIndex: number;
   remove: (index: number) => void;
   move: (from: number, to: number) => void;
   totalFields: number;
 }) {
   const { control, watch, getValues, setValue } = useFormContext<SurveyFormData>();
-  const fieldType = watch(`sections.${sectionIndex}.fields.${fieldIndex}.type`);
-  const fieldLabel = watch(`sections.${sectionIndex}.fields.${fieldIndex}.label`);
+  const field = watch(fieldPath);
+  const fieldType = field.type;
+  const fieldLabel = field.label;
+
 
   // Auto-generate ID from label
   useEffect(() => {
     const slug = generateSlug(fieldLabel);
     if (slug) {
-        setValue(`sections.${sectionIndex}.fields.${fieldIndex}.id`, slug, { shouldValidate: true, shouldDirty: true });
+        setValue(`${fieldPath}.id`, slug, { shouldValidate: true, shouldDirty: true });
     }
-  }, [fieldLabel, sectionIndex, fieldIndex, setValue]);
+  }, [fieldLabel, fieldPath, setValue]);
 
 
   const {
@@ -158,7 +172,17 @@ function FieldEditor({
     remove: removeOption,
   } = useFieldArray({
     control,
-    name: `sections.${sectionIndex}.fields.${fieldIndex}.options`,
+    name: `${fieldPath}.options`,
+  });
+  
+  const {
+    fields: subFields,
+    append: appendSubField,
+    remove: removeSubField,
+    move: moveSubField
+  } = useFieldArray({
+    control,
+    name: `${fieldPath}.fields`,
   });
 
   const hasOptions = ['select', 'radio', 'checkbox'].includes(fieldType);
@@ -166,35 +190,31 @@ function FieldEditor({
   const availableConditionalFields = useMemo(() => {
     const allFields: { label: string; value: string }[] = [];
     const sections = getValues('sections');
-    for (let i = 0; i <= sectionIndex; i++) {
-      const section = sections[i];
-      for (let j = 0; j < section.fields.length; j++) {
-        // A field can't depend on itself
-        if (i === sectionIndex && j === fieldIndex) {
-          break;
-        }
-        const field = section.fields[j];
-        // Only allow conditioning on fields that produce a distinct value
-        if (['radio', 'select', 'boolean-checkbox'].includes(field.type)) {
-            allFields.push({ label: `${field.label} (ID: ${field.id})`, value: field.id });
-        }
-      }
-    }
+    sections.forEach(section => {
+        section.fields.forEach(f => {
+             // A field can't depend on itself
+            if (f.id === field.id) return;
+            // Only allow conditioning on fields that produce a distinct value
+            if (['radio', 'select', 'boolean-checkbox'].includes(f.type)) {
+                allFields.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
+            }
+        })
+    })
     return allFields;
-  }, [getValues, sectionIndex, fieldIndex]);
+  }, [getValues, field.id]);
 
-  const conditionalField = watch(`sections.${sectionIndex}.fields.${fieldIndex}.conditionField`);
+  const conditionalFieldId = watch(`${fieldPath}.conditionField`);
   const conditionalFieldType = useMemo(() => {
     const sections = getValues('sections');
     for (const section of sections) {
-        for (const field of section.fields) {
-            if (field.id === conditionalField) {
-                return field.type;
+        for (const f of section.fields) {
+            if (f.id === conditionalFieldId) {
+                return f.type;
             }
         }
     }
     return null;
-  }, [conditionalField, getValues]);
+  }, [conditionalFieldId, getValues]);
 
   return (
     <Card className="bg-muted/30 relative">
@@ -238,7 +258,7 @@ function FieldEditor({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={control}
-            name={`sections.${sectionIndex}.fields.${fieldIndex}.label`}
+            name={`${fieldPath}.label`}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Question Label</FormLabel>
@@ -251,7 +271,7 @@ function FieldEditor({
           />
           <FormField
             control={control}
-            name={`sections.${sectionIndex}.fields.${fieldIndex}.id`}
+            name={`${fieldPath}.id`}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Field ID (Auto-generated)</FormLabel>
@@ -270,7 +290,7 @@ function FieldEditor({
         </div>
         <FormField
           control={control}
-          name={`sections.${sectionIndex}.fields.${fieldIndex}.type`}
+          name={`${fieldPath}.type`}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Question Type</FormLabel>
@@ -291,6 +311,7 @@ function FieldEditor({
                   <SelectItem value="boolean-checkbox">
                     Single Checkbox (Yes/No)
                   </SelectItem>
+                  <SelectItem value="group">Group (for layout)</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -308,7 +329,7 @@ function FieldEditor({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <FormField
                         control={control}
-                        name={`sections.${sectionIndex}.fields.${fieldIndex}.conditionField`}
+                        name={`${fieldPath}.conditionField`}
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Condition Field</FormLabel>
@@ -331,7 +352,7 @@ function FieldEditor({
                     />
                      <FormField
                         control={control}
-                        name={`sections.${sectionIndex}.fields.${fieldIndex}.conditionValue`}
+                        name={`${fieldPath}.conditionValue`}
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Condition Value</FormLabel>
@@ -374,7 +395,7 @@ function FieldEditor({
                 >
                   <FormField
                     control={control}
-                    name={`sections.${sectionIndex}.fields.${fieldIndex}.options.${optionIndex}.label`}
+                    name={`${fieldPath}.options.${optionIndex}.label`}
                     render={({ field }) => (
                       <FormItem className="flex-1">
                         <FormLabel>Label</FormLabel>
@@ -386,7 +407,7 @@ function FieldEditor({
                   />
                   <FormField
                     control={control}
-                    name={`sections.${sectionIndex}.fields.${fieldIndex}.options.${optionIndex}.value`}
+                    name={`${fieldPath}.options.${optionIndex}.value`}
                     render={({ field }) => (
                       <FormItem className="flex-1">
                         <FormLabel>Value</FormLabel>
@@ -415,6 +436,41 @@ function FieldEditor({
               </Button>
             </CardContent>
           </Card>
+        )}
+        {fieldType === 'group' && (
+             <Card className="bg-card">
+                 <CardHeader>
+                    <CardTitle className="text-md">Grouped Questions</CardTitle>
+                    <CardDescription>
+                        Add questions to be displayed within this group (e.g., side-by-side).
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {subFields.map((subField, subFieldIndex) => (
+                        <FieldEditor
+                            key={subField.id}
+                            fieldPath={`${fieldPath}.fields.${subFieldIndex}`}
+                            fieldIndex={subFieldIndex}
+                            remove={removeSubField}
+                            move={moveSubField}
+                            totalFields={subFields.length}
+                        />
+                    ))}
+                     <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                        appendSubField({
+                            id: `new_subfield_${Date.now()}`,
+                            label: 'New Sub-Question',
+                            type: 'text',
+                        })
+                        }
+                    >
+                        <PlusCircle className="mr-2" /> Add Question to Group
+                    </Button>
+                </CardContent>
+             </Card>
         )}
       </CardContent>
     </Card>
@@ -586,7 +642,7 @@ export default function SurveyEditor({
                         {sectionFields.map((field, fieldIndex) => (
                           <FieldEditor
                             key={field.id}
-                            sectionIndex={sectionIndex}
+                            fieldPath={`sections.${sectionIndex}.fields.${fieldIndex}`}
                             fieldIndex={fieldIndex}
                             remove={removeField}
                             move={moveField}
@@ -638,7 +694,7 @@ export default function SurveyEditor({
             </Accordion>
           </div>
 
-          <div className="flex justify-end sticky bottom-4 z-10">
+          <div className="sticky bottom-4 z-10 flex justify-end">
             <Button
               type="submit"
               size="lg"

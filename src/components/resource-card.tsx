@@ -17,11 +17,11 @@ type ResourceCardProps = {
   link: string;
   imageUrl: string;
   imageHint: string;
+  width: number;
+  height: number;
 };
 
-export default function ResourceCard({ title, description, link, imageUrl, imageHint }: ResourceCardProps) {
-  const [width, height] = imageUrl.split('/').slice(-2).map(Number);
-  
+export default function ResourceCard({ title, description, link, imageUrl, imageHint, width, height }: ResourceCardProps) {
   return (
     <Card className="flex flex-col overflow-hidden transition-transform duration-300 hover:scale-[1.02] hover:shadow-xl">
       <CardHeader className="p-0">

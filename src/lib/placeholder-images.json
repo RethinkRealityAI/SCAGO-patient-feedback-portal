@@ -1,0 +1,58 @@
+{
+  "resources": [
+    {
+      "title": "Understanding Sickle Cell Disease",
+      "description": "A comprehensive guide to the basics of sickle cell disease, its symptoms, and treatments.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/med-book/600/400",
+      "imageHint": "medical textbook",
+      "width": 600,
+      "height": 400
+    },
+    {
+      "title": "Managing Pain",
+      "description": "Learn about different strategies and treatments for managing pain associated with sickle cell disease.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/comfort-hand/600/400",
+      "imageHint": "comforting hand",
+      "width": 600,
+      "height": 400
+    },
+    {
+      "title": "SCAGO News & Updates",
+      "description": "Stay up-to-date with the latest news, events, and announcements from the Sickle Cell Awareness Group of Ontario.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/community-event/600/400",
+      "imageHint": "community event",
+      "width": 600,
+      "height": 400
+    },
+    {
+      "title": "Patient Support Programs",
+      "description": "Find information on support groups, financial assistance, and other programs available to patients.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/support-group/600/400",
+      "imageHint": "support group",
+      "width": 600,
+      "height": 400
+    },
+    {
+      "title": "Transitioning to Adult Care",
+      "description": "Guidance and resources for young adults moving from pediatric to adult healthcare systems.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/doctor-patient/600/400",
+      "imageHint": "doctor patient",
+      "width": 600,
+      "height": 400
+    },
+    {
+      "title": "Advocacy and Awareness",
+      "description": "Get involved in raising awareness and advocating for better care and more research.",
+      "link": "#",
+      "imageUrl": "https://picsum.photos/seed/speaking-public/600/400",
+      "imageHint": "public speaking",
+      "width": 600,
+      "height": 400
+    }
+  ]
+}
