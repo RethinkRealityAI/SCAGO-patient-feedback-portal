@@ -427,7 +427,6 @@ export default function SurveyEditor({
   survey: Record<string, any>;
 }) {
   const { toast } = useToast();
-  const [isSubmitting] = useState(false);
   const form = useForm<SurveyFormData>({
     resolver: zodResolver(surveySchema),
     defaultValues: {
@@ -437,15 +436,15 @@ export default function SurveyEditor({
     },
   });
 
+  const { formState: { isSubmitting } } = form;
+
   const { fields: sections, append, remove, move } = useFieldArray({
     control: form.control,
     name: 'sections',
   });
 
   async function onSubmit(values: SurveyFormData) {
-    setIsSubmitting(true);
     const result = await updateSurvey(survey.id, values);
-    setIsSubmitting(false);
 
     if (result.error) {
       toast({
@@ -655,5 +654,3 @@ export default function SurveyEditor({
     </FormProvider>
   );
 }
-
-    
