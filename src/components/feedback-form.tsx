@@ -117,29 +117,41 @@ export default function FeedbackForm({ survey }: { survey: FormStructure }) {
         return null;
     }
     
+    // For boolean-checkbox, we need to wrap the FormLabel in the FormItem to link it correctly.
+    if (fieldConfig.type === 'boolean-checkbox') {
+        return (
+            <FormField
+                control={form.control}
+                key={fieldConfig.id}
+                name={fieldConfig.id}
+                render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-card/60">
+                        <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                            <FormLabel>{fieldConfig.label}</FormLabel>
+                            {fieldConfig.description && <FormDescription>{fieldConfig.description}</FormDescription>}
+                        </div>
+                    </FormItem>
+                )}
+            />
+        )
+    }
+
     return (
         <FormField
             control={form.control}
             key={fieldConfig.id}
             name={fieldConfig.id}
             render={({ field }) => (
-                <FormItem className={cn(fieldConfig.type === 'boolean-checkbox' && "flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-card/60")}>
-                    {fieldConfig.type !== 'boolean-checkbox' && <FormLabel>{fieldConfig.label}</FormLabel>}
+                <FormItem>
+                    <FormLabel>{fieldConfig.label}</FormLabel>
                     <FormControl>
-                        <>
+                        <div>
                             {fieldConfig.type === 'text' && <Input placeholder={fieldConfig.placeholder} {...field} />}
                             {fieldConfig.type === 'email' && <Input type="email" placeholder={fieldConfig.placeholder} {...field} />}
                             {fieldConfig.type === 'textarea' && <Textarea placeholder={fieldConfig.placeholder} {...field} className="min-h-[120px]" />}
-                            
-                            {fieldConfig.type === 'boolean-checkbox' && (
-                                <>
-                                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                    <div className="space-y-1 leading-none">
-                                        <FormLabel>{fieldConfig.label}</FormLabel>
-                                        {fieldConfig.description && <FormDescription>{fieldConfig.description}</FormDescription>}
-                                    </div>
-                                </>
-                            )}
                             
                             {fieldConfig.type === 'select' && (
                                 <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -208,9 +220,9 @@ export default function FeedbackForm({ survey }: { survey: FormStructure }) {
                                 </div>
                             )}
 
-                        </>
+                        </div>
                     </FormControl>
-                     {fieldConfig.description && fieldConfig.type !== 'boolean-checkbox' && <FormDescription>{fieldConfig.description}</FormDescription>}
+                     {fieldConfig.description && <FormDescription>{fieldConfig.description}</FormDescription>}
                     <FormMessage />
                 </FormItem>
             )}
