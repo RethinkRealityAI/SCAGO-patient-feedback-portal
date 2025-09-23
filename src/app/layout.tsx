@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
-import Header from '@/components/header'
+import AppBody from './app-body'
 
 export const metadata: Metadata = {
-  title: 'Patient Feedback',
+  title: 'Patient Feedback Portal',
   description: 'A patient feedback portal for the Sickle Cell Awareness Group of Ontario.',
 }
 
@@ -21,10 +21,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        <div className="relative flex min-h-screen flex-col">
-          <Header />
-          <main className="flex-1">{children}</main>
-        </div>
+        <AppBody>{children}</AppBody>
         <Toaster />
       </body>
     </html>

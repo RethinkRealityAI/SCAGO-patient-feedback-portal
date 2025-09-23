@@ -8,7 +8,7 @@ export default function Header() {
         <div className="mr-4 flex items-center">
           <Link href="/" className="flex items-center space-x-2">
             <HeartPulse className="h-6 w-6 text-primary" />
-            <span className="font-bold">SCAGO Feedback</span>
+            <span className="font-bold">Patient Feedback Portal</span>
           </Link>
         </div>
         <nav className="flex flex-1 items-center space-x-6 sm:justify-end">
