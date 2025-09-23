@@ -5,8 +5,7 @@ import { getFirestore } from "firebase/firestore";
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
-// For more information on how to use this object, see the following page:
-// https://firebase.google.com/docs/web/learn-more#config-object
+// This is now read from environment variables to keep keys secure
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -17,6 +16,7 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
+// Check if the app is already initialized to avoid errors during hot-reloads
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
