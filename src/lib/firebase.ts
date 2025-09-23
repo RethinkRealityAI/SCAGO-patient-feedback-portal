@@ -6,13 +6,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "API_KEY",
-  authDomain: "PROJECT_ID.firebaseapp.com",
-  projectId: "PROJECT_ID",
-  storageBucket: "PROJECT_ID.appspot.com",
-  messagingSenderId: "SENDER_ID",
-  appId: "APP_ID",
-  measurementId: "G-MEASUREMENT_ID"
+  apiKey: "AIzaSyD7mz-MY4WtL26YIwIbdJKVQgzNjkwvQmg",
+  authDomain: "scago-feedback.firebaseapp.com",
+  projectId: "scago-feedback",
+  storageBucket: "scago-feedback.appspot.com",
+  messagingSenderId: "698862461210",
+  appId: "1:698862461210:web:3f4074e0410dcfb4f10ca3"
 };
 
 // Initialize Firebase
