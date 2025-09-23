@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
+import { defaultSurvey } from '@/lib/survey-template';
 
 // We just need a Zod schema to represent the data object coming from the form.
 const surveyActionSchema = z.record(z.any());
@@ -16,21 +17,10 @@ export async function getSurvey(id: string) {
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      // If survey doesn't exist, return a default structure
-      // This allows the editor to create a new survey from a template.
-      return { 
-        id,
-        title: 'New Patient Feedback Survey',
-        description: 'Describe the purpose of this survey.',
-        sections: [
-            {
-                id: 'default-section',
-                title: 'New Section',
-                description: 'A new section for your survey.',
-                fields: []
-            }
-        ]
-      };
+      // If survey doesn't exist, return our default template.
+      // This allows the editor to create the survey from the template on first save.
+      // We return a copy to avoid potential mutation issues.
+      return JSON.parse(JSON.stringify(defaultSurvey));
     }
   } catch (e) {
     console.error('Error getting survey:', e);
