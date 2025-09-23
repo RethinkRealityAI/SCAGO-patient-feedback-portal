@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -35,7 +36,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText } from 'lucide-react';
+import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -48,7 +49,8 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
-import { analyzeFeedback, type FeedbackAnalysisOutput } from '@/ai/flows/analyze-feedback-flow';
+import { analyzeFeedback } from '@/ai/flows/analyze-feedback-flow';
+import type { FeedbackAnalysisOutput } from '@/ai/flows/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -164,6 +166,7 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
                 )}
                  {analysisError && (
                   <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Error</AlertTitle>
                     <AlertDescription>{analysisError}</AlertDescription>
                   </Alert>
@@ -461,3 +464,5 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
     </div>
   );
 }
+
+    
