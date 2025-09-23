@@ -5,8 +5,10 @@ import { getFirestore } from "firebase/firestore";
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
+// For more information on how to use this object, see the following page:
+// https://firebase.google.com/docs/web/learn-more#config-object
 const firebaseConfig = {
-  apiKey: "AIzaSyD7mz-MY4WtL26YIwIbdJKVQgzNjkwvQmg",
+  apiKey: process.env.FIREBASE_API_KEY,
   authDomain: "scago-feedback.firebaseapp.com",
   projectId: "scago-feedback",
   storageBucket: "scago-feedback.appspot.com",

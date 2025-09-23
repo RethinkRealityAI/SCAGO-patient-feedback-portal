@@ -36,7 +36,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText, AlertCircle, Copy } from 'lucide-react';
+import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText, AlertCircle, Copy, BarChart2, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -540,125 +540,148 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
       <div className="grid gap-6 lg:grid-cols-1 mb-8">
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Rating Distribution</CardTitle>
+             <CardTitle className="flex items-center gap-2">
+                <BarChart2 />
+                Rating Distribution
+            </CardTitle>
             <CardDescription>
               Number of submissions for each star rating.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={ratingDistribution} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <defs>
-                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
-                <XAxis dataKey="rating" tickFormatter={(value) => `${value} Star`} stroke="hsl(var(--muted-foreground))" />
-                <YAxis allowDecimals={false} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip
-                  cursor={{ fill: 'hsl(var(--accent) / 0.5)' }}
-                  contentStyle={{
-                    background: 'hsl(var(--background) / 0.8)',
-                    border: '1px solid hsl(var(--border) / 0.5)',
-                    backdropFilter: 'blur(4px)',
-                  }}
-                />
-                <Bar dataKey="count" name="Submissions" radius={[4, 4, 0, 0]} fill="url(#barGradient)">
-                  {ratingDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[entry.rating - 1]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+             {totalSubmissions > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={ratingDistribution} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <defs>
+                            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                        <XAxis dataKey="rating" tickFormatter={(value) => `${value} Star`} stroke="hsl(var(--muted-foreground))" />
+                        <YAxis allowDecimals={false} stroke="hsl(var(--muted-foreground))" />
+                        <Tooltip
+                        cursor={{ fill: 'hsl(var(--accent) / 0.5)' }}
+                        contentStyle={{
+                            background: 'hsl(var(--background) / 0.8)',
+                            border: '1px solid hsl(var(--border) / 0.5)',
+                            backdropFilter: 'blur(4px)',
+                        }}
+                        />
+                        <Bar dataKey="count" name="Submissions" radius={[4, 4, 0, 0]} fill="url(#barGradient)">
+                        {ratingDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[entry.rating - 1]} />
+                        ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+             ) : (
+                <div className="flex h-[300px] flex-col items-center justify-center text-center">
+                    <BarChart2 className="h-12 w-12 text-muted-foreground/30" />
+                    <p className="mt-4 text-muted-foreground">No rating data available yet.</p>
+                </div>
+             )}
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Submissions</CardTitle>
+           <CardTitle className="flex items-center gap-2">
+                <MessageSquare />
+                All Submissions
+            </CardTitle>
           <CardDescription>
             Browse through all submitted feedback. Click the eye icon to view details and analyze.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/50">
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-center">Rating</TableHead>
-                  <TableHead>Hospital</TableHead>
-                  <TableHead>Key Reason</TableHead>
-                  <TableHead className="text-right">View & Analyze</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedSubmissions.map((sub) => (
-                  <TableRow key={sub.id} className="border-border/50">
-                    <TableCell>
-                      {format(new Date(sub.submittedAt), 'MMM d, yyyy')}
-                    </TableCell>
-                    <TableCell className="text-center">{sub.rating}</TableCell>
-                    <TableCell>{sub.location}</TableCell>
-                    <TableCell>{sub.visitReason}</TableCell>
-                    <TableCell className="text-right">
-                       <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <SubmissionDetailsDialog submission={sub} />
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+           {totalSubmissions > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border/50">
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-center">Rating</TableHead>
+                      <TableHead>Hospital</TableHead>
+                      <TableHead>Key Reason</TableHead>
+                      <TableHead className="text-right">View & Analyze</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedSubmissions.map((sub) => (
+                      <TableRow key={sub.id} className="border-border/50">
+                        <TableCell>
+                          {format(new Date(sub.submittedAt), 'MMM d, yyyy')}
+                        </TableCell>
+                        <TableCell className="text-center">{sub.rating}</TableCell>
+                        <TableCell>{sub.location}</TableCell>
+                        <TableCell>{sub.visitReason}</TableCell>
+                        <TableCell className="text-right">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <SubmissionDetailsDialog submission={sub} />
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-          <Pagination className="mt-6">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handlePageChange(currentPage - 1);
-                  }}
-                  aria-disabled={currentPage === 1}
-                  className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined}
-                />
-              </PaginationItem>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <PaginationItem key={page}>
-                    <PaginationLink 
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); handlePageChange(page); }}
-                        isActive={currentPage === page}
-                    >
-                        {page}
-                    </PaginationLink>
+              <Pagination className="mt-6">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePageChange(currentPage - 1);
+                      }}
+                      aria-disabled={currentPage === 1}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined}
+                    />
                   </PaginationItem>
-              ))}
+                  
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <PaginationItem key={page}>
+                        <PaginationLink 
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); handlePageChange(page); }}
+                            isActive={currentPage === page}
+                        >
+                            {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                  ))}
 
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handlePageChange(currentPage + 1);
-                  }}
-                  aria-disabled={currentPage === totalPages}
-                   className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePageChange(currentPage + 1);
+                      }}
+                      aria-disabled={currentPage === totalPages}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </>
+           ) : (
+            <div className="flex h-48 flex-col items-center justify-center text-center">
+                <Inbox className="h-12 w-12 text-muted-foreground/30" />
+                <p className="mt-4 text-muted-foreground">No feedback has been submitted yet.</p>
+                <p className="text-sm text-muted-foreground">As new submissions arrive, they will appear here.</p>
+            </div>
+           )}
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   useForm,
   useFieldArray,
@@ -51,9 +51,22 @@ import {
   ArrowUp,
   GripVertical,
   Loader2,
+  Wand2,
 } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+
 
 const optionSchema = z.object({
   label: z.string().min(1, 'Label is required'),
@@ -98,6 +111,20 @@ const surveySchema = z.object({
 });
 
 type SurveyFormData = z.infer<typeof surveySchema>;
+type FormFieldConfig = z.infer<typeof fieldSchema>;
+
+// Function to generate a slug from a string
+const generateSlug = (text: string) => {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .replace(/\s+/g, '-')           // Replace spaces with -
+        .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+        .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+        .replace(/^-+/, '')             // Trim - from start of text
+        .replace(/-+$/, '');            // Trim - from end of text
+};
+
 
 function FieldEditor({
   sectionIndex,
@@ -112,8 +139,18 @@ function FieldEditor({
   move: (from: number, to: number) => void;
   totalFields: number;
 }) {
-  const { control, watch } = useFormContext();
+  const { control, watch, getValues, setValue } = useFormContext<SurveyFormData>();
   const fieldType = watch(`sections.${sectionIndex}.fields.${fieldIndex}.type`);
+  const fieldLabel = watch(`sections.${sectionIndex}.fields.${fieldIndex}.label`);
+
+  // Auto-generate ID from label
+  React.useEffect(() => {
+    const slug = generateSlug(fieldLabel);
+    if (slug) {
+        setValue(`sections.${sectionIndex}.fields.${fieldIndex}.id`, slug, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [fieldLabel, sectionIndex, fieldIndex, setValue]);
+
 
   const {
     fields: options,
@@ -125,6 +162,39 @@ function FieldEditor({
   });
 
   const hasOptions = ['select', 'radio', 'checkbox'].includes(fieldType);
+
+  const availableConditionalFields = useMemo(() => {
+    const allFields: { label: string; value: string }[] = [];
+    const sections = getValues('sections');
+    for (let i = 0; i <= sectionIndex; i++) {
+      const section = sections[i];
+      for (let j = 0; j < section.fields.length; j++) {
+        // A field can't depend on itself
+        if (i === sectionIndex && j === fieldIndex) {
+          break;
+        }
+        const field = section.fields[j];
+        // Only allow conditioning on fields that produce a distinct value
+        if (['radio', 'select', 'boolean-checkbox'].includes(field.type)) {
+            allFields.push({ label: `${field.label} (ID: ${field.id})`, value: field.id });
+        }
+      }
+    }
+    return allFields;
+  }, [getValues, sectionIndex, fieldIndex]);
+
+  const conditionalField = watch(`sections.${sectionIndex}.fields.${fieldIndex}.conditionField`);
+  const conditionalFieldType = useMemo(() => {
+    const sections = getValues('sections');
+    for (const section of sections) {
+        for (const field of section.fields) {
+            if (field.id === conditionalField) {
+                return field.type;
+            }
+        }
+    }
+    return null;
+  }, [conditionalField, getValues]);
 
   return (
     <Card className="bg-muted/30 relative">
@@ -184,11 +254,13 @@ function FieldEditor({
             name={`sections.${sectionIndex}.fields.${fieldIndex}.id`}
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Field ID</FormLabel>
+                <FormLabel>Field ID (Auto-generated)</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="e.g., 'userName' (unique, no spaces)"
+                    placeholder="unique-id-will-appear-here"
                     {...field}
+                    readOnly
+                    className="bg-muted/50"
                   />
                 </FormControl>
                 <FormMessage />
@@ -214,10 +286,10 @@ function FieldEditor({
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="select">Select Dropdown</SelectItem>
                   <SelectItem value="radio">Radio Group</SelectItem>
-                  <SelectItem value="checkbox">Checkboxes</SelectItem>
+                  <SelectItem value="checkbox">Checkboxes (Multi-select)</SelectItem>
                   <SelectItem value="rating">Rating (1-5 Stars)</SelectItem>
                   <SelectItem value="boolean-checkbox">
-                    Single Checkbox (Boolean)
+                    Single Checkbox (Yes/No)
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -225,6 +297,65 @@ function FieldEditor({
             </FormItem>
           )}
         />
+        
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="item-1">
+            <AccordionTrigger className="text-sm">Conditional Logic (Optional)</AccordionTrigger>
+            <AccordionContent className="p-2 space-y-4">
+                 <FormDescription>
+                    Show this question only if another question has a specific answer.
+                </FormDescription>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <FormField
+                        control={control}
+                        name={`sections.${sectionIndex}.fields.${fieldIndex}.conditionField`}
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Condition Field</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a field..." />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="">None</SelectItem>
+                                    {availableConditionalFields.map(f => (
+                                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={control}
+                        name={`sections.${sectionIndex}.fields.${fieldIndex}.conditionValue`}
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Condition Value</FormLabel>
+                            <FormControl>
+                                {conditionalFieldType === 'boolean-checkbox' ? (
+                                     <Switch
+                                        checked={field.value === 'true'}
+                                        onCheckedChange={(checked) => field.onChange(String(checked))}
+                                     />
+                                ) : (
+                                    <Input placeholder="e.g., 'yes' or 'option1'" {...field} />
+                                )}
+                            </FormControl>
+                            <FormDescription>
+                                For Yes/No checkboxes, use 'true' or 'false'. For others, use the option's value.
+                            </FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         {hasOptions && (
           <Card className="bg-card">
@@ -232,7 +363,7 @@ function FieldEditor({
               <CardTitle className="text-md">Options</CardTitle>
               <CardDescription>
                 Add options for this question. The value is stored in the
-                database.
+                database and should be unique and without spaces.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -372,7 +503,16 @@ export default function SurveyEditor({
           </Card>
 
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Sections</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Sections</h2>
+                 <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => append({ id: `section_${Date.now()}`, title: 'New Section', fields: [] })}
+                    >
+                    <PlusCircle className="mr-2" /> Add Section
+                </Button>
+            </div>
             <Accordion type="multiple" defaultValue={['section-0']} className="space-y-4">
               {sections.map((section, sectionIndex) => {
                 const {
@@ -391,22 +531,38 @@ export default function SurveyEditor({
                     key={section.id}
                     className="border rounded-lg bg-card/80"
                   >
-                    <AccordionTrigger className="p-6 text-xl">
-                      <FormField
-                        control={form.control}
-                        name={`sections.${sectionIndex}.title`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1 mr-4">
-                            <Input
-                              {...field}
-                              className="text-xl font-semibold tracking-tight text-primary border-0"
-                              onClick={(e) => e.stopPropagation()}
+                    <AccordionTrigger className="p-6 text-xl hover:no-underline">
+                        <div className="flex-1 flex items-center gap-4">
+                            <GripVertical className="text-muted-foreground" />
+                            <FormField
+                                control={form.control}
+                                name={`sections.${sectionIndex}.title`}
+                                render={({ field }) => (
+                                <FormItem className="flex-1">
+                                    <Input
+                                    {...field}
+                                    className="text-xl font-semibold tracking-tight text-primary border-0 bg-transparent p-0 h-auto focus-visible:ring-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                    />
+                                </FormItem>
+                                )}
                             />
-                          </FormItem>
-                        )}
-                      />
+                        </div>
                     </AccordionTrigger>
-                    <AccordionContent className="p-6 space-y-6">
+                    <AccordionContent className="p-6 space-y-6 border-t">
+                      <FormField
+                            control={form.control}
+                            name={`sections.${sectionIndex}.description`}
+                            render={({ field }) => (
+                            <FormItem className="flex-1">
+                                <FormLabel>Section Description</FormLabel>
+                                <Textarea
+                                {...field}
+                                placeholder="A brief description for this section."
+                                />
+                            </FormItem>
+                            )}
+                        />
                       <div className="space-y-4">
                         {sectionFields.map((field, fieldIndex) => (
                           <FieldEditor
@@ -419,19 +575,43 @@ export default function SurveyEditor({
                           />
                         ))}
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          appendField({
-                            id: `new_field_${Date.now()}`,
-                            label: 'New Question',
-                            type: 'text',
-                          })
-                        }
-                      >
-                        <PlusCircle className="mr-2" /> Add Question
-                      </Button>
+                      <div className="flex justify-between items-center pt-4 border-t">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                            appendField({
+                                id: `new_field_${Date.now()}`,
+                                label: 'New Question',
+                                type: 'text',
+                            })
+                            }
+                        >
+                            <PlusCircle className="mr-2" /> Add Question
+                        </Button>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                 <Button
+                                    type="button"
+                                    variant="destructive"
+                                >
+                                    <Trash2 className="mr-2" /> Delete Section
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete this section and all of its questions.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => remove(sectionIndex)}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
                 );
