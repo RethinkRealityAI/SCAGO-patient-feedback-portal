@@ -10,13 +10,12 @@ import { Button } from '@/components/ui/button'
 import { FileEdit, PlusCircle } from 'lucide-react'
 import Link from 'next/link'
 
-// Placeholder data - in the future, this will be fetched from Firestore
+// This data will eventually be fetched from a 'surveys' collection list
 const surveys = [
   {
     id: 'main-feedback',
     title: 'Patient Care Feedback',
     description: 'The primary feedback form for patient hospital experiences.',
-    submissionCount: 128, // Example data
   },
 ]
 
@@ -46,9 +45,7 @@ export default function EditorPage() {
               <CardDescription>{survey.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {survey.submissionCount} submissions
-              </p>
+              {/* The submission count was causing permission errors and is not needed here. */}
             </CardContent>
             <CardFooter>
               <Button asChild variant="outline">
