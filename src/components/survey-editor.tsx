@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   useForm,
   useFieldArray,
@@ -144,7 +144,7 @@ function FieldEditor({
   const fieldLabel = watch(`sections.${sectionIndex}.fields.${fieldIndex}.label`);
 
   // Auto-generate ID from label
-  React.useEffect(() => {
+  useEffect(() => {
     const slug = generateSlug(fieldLabel);
     if (slug) {
         setValue(`sections.${sectionIndex}.fields.${fieldIndex}.id`, slug, { shouldValidate: true, shouldDirty: true });
