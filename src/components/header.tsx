@@ -13,13 +13,16 @@ export default function Header() {
         </div>
         <nav className="flex flex-1 items-center space-x-6 sm:justify-end">
           <Link href="/" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
-            Feedback
+            Surveys
           </Link>
           <Link href="/resources" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
             Resources
           </Link>
           <Link href="/dashboard" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
             Dashboard
+          </Link>
+           <Link href="/editor" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
+            Editor
           </Link>
         </nav>
       </div>
