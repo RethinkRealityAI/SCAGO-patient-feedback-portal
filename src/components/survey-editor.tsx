@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   useForm,
   useFieldArray,
@@ -427,7 +427,7 @@ export default function SurveyEditor({
   survey: Record<string, any>;
 }) {
   const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting] = useState(false);
   const form = useForm<SurveyFormData>({
     resolver: zodResolver(surveySchema),
     defaultValues: {
@@ -437,7 +437,7 @@ export default function SurveyEditor({
     },
   });
 
-  const { fields: sections, append, remove } = useFieldArray({
+  const { fields: sections, append, remove, move } = useFieldArray({
     control: form.control,
     name: 'sections',
   });
@@ -533,7 +533,7 @@ export default function SurveyEditor({
                   >
                     <AccordionTrigger className="p-6 text-xl hover:no-underline">
                         <div className="flex-1 flex items-center gap-4">
-                            <GripVertical className="text-muted-foreground" />
+                            <GripVertical className="text-muted-foreground cursor-grab" />
                             <FormField
                                 control={form.control}
                                 name={`sections.${sectionIndex}.title`}
@@ -547,6 +547,26 @@ export default function SurveyEditor({
                                 </FormItem>
                                 )}
                             />
+                             <div className="flex items-center gap-2">
+                                <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => { e.stopPropagation(); move(sectionIndex, sectionIndex - 1); }}
+                                disabled={sectionIndex === 0}
+                                >
+                                <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => { e.stopPropagation(); move(sectionIndex, sectionIndex + 1); }}
+                                disabled={sectionIndex === sections.length - 1}
+                                >
+                                <ArrowDown className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     </AccordionTrigger>
                     <AccordionContent className="p-6 space-y-6 border-t">
@@ -635,3 +655,5 @@ export default function SurveyEditor({
     </FormProvider>
   );
 }
+
+    
