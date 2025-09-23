@@ -18,7 +18,7 @@ export default async function DashboardPage() {
             <AlertDescription>
                 <p className="mb-2">{submissionsOrError.error}</p>
                 <p className="text-xs">
-                Please ensure your Firestore security rules allow reads on the 'feedback' collection for authenticated users.
+                Please ensure your Firestore security rules allow reads on the 'feedback' collection.
                 </p>
             </AlertDescription>
         </Alert>

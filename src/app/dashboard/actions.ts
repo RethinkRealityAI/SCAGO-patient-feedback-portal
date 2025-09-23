@@ -24,7 +24,7 @@ export async function getSubmissions(): Promise<FeedbackSubmission[] | { error: 
   } catch (e) {
     console.error("Error fetching submissions:", e);
     if (e instanceof Error && e.message.includes('permission-denied')) {
-        return { error: 'Could not fetch submissions due to a permission error. Please check Firestore security rules for the feedback collection.' };
+        return { error: 'Could not fetch submissions due to a permission error. Please check your Firestore security rules to ensure reads are allowed on the feedback collection.' };
     }
     return { error: 'An unexpected error occurred while fetching submissions.' };
   }

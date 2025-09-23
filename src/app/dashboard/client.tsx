@@ -35,7 +35,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Eye, MessageSquare, Star, Sparkles, Loader2, ListTodo, FileText, Bot } from 'lucide-react';
+import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -84,11 +84,11 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
     } catch (error) {
       console.error('Analysis failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-       setAnalysisError(`Failed to analyze feedback. Please ensure your Google AI API key is correctly configured in a .env.local file. Error: ${errorMessage}`);
+       setAnalysisError(`Failed to analyze feedback. Please ensure your Google AI API key is correctly configured in a .env.local file and that your project has access to the Gemini API. Error: ${errorMessage}`);
        toast({
         variant: 'destructive',
         title: 'Analysis Failed',
-        description: `Failed to analyze feedback. Please ensure your Google AI API key is correctly configured in a .env.local file.`,
+        description: `Please check your Google AI API key and project settings.`,
       });
     } finally {
       setIsAnalyzing(false);
