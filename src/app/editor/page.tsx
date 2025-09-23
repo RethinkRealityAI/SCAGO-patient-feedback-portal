@@ -51,7 +51,7 @@ export default function EditorPage() {
               </p>
             </CardContent>
             <CardFooter>
-              <Button asChild variant="outline" disabled>
+              <Button asChild variant="outline">
                 <Link href={`/editor/${survey.id}`}>
                   <FileEdit className="mr-2" />
                   Edit Survey
@@ -61,20 +61,6 @@ export default function EditorPage() {
           </Card>
         ))}
       </div>
-
-       <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Full Editor Coming Soon!</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8 border-2 border-dashed border-border rounded-lg">
-            <FileEdit className="h-12 w-12 mb-4" />
-            <p>
-              Soon, you'll be able to design your forms with custom questions, logic, and more right from this page. For now, the forms are rendered based on data in the 'surveys' collection in Firestore.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
