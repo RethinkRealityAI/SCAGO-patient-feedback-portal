@@ -12,6 +12,8 @@ export default function Home() {
 interacting with the Ontario healthcare system, the Patient Feedback Portal is established by the
 SCAGO to support patients in documenting the quality of care they receive, whether optimal or
 sub-optimal.
+        </p>
+         <p className="mt-4 text-lg text-muted-foreground whitespace-pre-wrap">
 Kindly note that the information collected on this portal wil be used to advance advocacy and
 education in improving the quality of care delivered to peers with SCD in Ontario. Personal
 identifying information provided, such as your name and contact details, will not be shared with

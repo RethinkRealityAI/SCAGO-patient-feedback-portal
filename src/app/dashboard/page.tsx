@@ -2,26 +2,33 @@ import { getSubmissions } from "./actions";
 import DashboardClient from "./client";
 import { Suspense } from "react";
 import Loading from "../loading";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 export default async function DashboardPage() {
-  const submissions = await getSubmissions();
+  const submissionsOrError = await getSubmissions();
 
-  if ('error' in submissions) {
+  if ('error' in submissionsOrError) {
     return (
-      <div className="container py-8 text-center text-destructive">
-        <h1 className="text-2xl font-bold">Error loading dashboard</h1>
-        <p className="mt-2">{submissions.error}</p>
-        <p className="mt-4 text-sm text-muted-foreground">
-          Please ensure your Firestore security rules allow reads on the 'feedback' collection.
-          You might need to update your rules to allow authenticated users to read data.
-        </p>
+      <div className="container max-w-2xl py-8 text-center">
+        <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error Loading Dashboard</AlertTitle>
+            <AlertDescription>
+                <p className="mb-2">{submissionsOrError.error}</p>
+                <p className="text-xs">
+                Please ensure your Firestore security rules allow reads on the 'feedback' collection for authenticated users.
+                </p>
+            </AlertDescription>
+        </Alert>
       </div>
     )
   }
 
   return (
     <Suspense fallback={<Loading />}>
-      <DashboardClient submissions={submissions} />
+      <DashboardClient submissions={submissionsOrError} />
     </Suspense>
   );
 }
