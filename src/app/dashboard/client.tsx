@@ -36,7 +36,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText, AlertCircle } from 'lucide-react';
+import { Eye, MessageSquare, Star, Sparkles, Loader2, Bot, FileText, AlertCircle, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -54,6 +54,10 @@ import type { FeedbackAnalysisOutput } from '@/ai/flows/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { chatWithData } from '@/ai/flows/chat-with-data-flow';
+import { generateReport } from '@/ai/flows/generate-report-flow';
+import ReactMarkdown from 'react-markdown';
+
 
 const ITEMS_PER_PAGE = 10;
 const AUTH_PASSWORD = 'scago-admin'; // This should be in an environment variable
@@ -209,28 +213,192 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
   );
 }
 
-function ComingSoonDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Feature Coming Soon</DialogTitle>
-                    <DialogDescription>
-                        This feature is currently under development. Please check back later!
-                    </DialogDescription>
-                </DialogHeader>
-            </DialogContent>
-        </Dialog>
-    );
+function ChatDialog({ submissions }: { submissions: FeedbackSubmission[] }) {
+  const [query, setQuery] = useState('');
+  const [history, setHistory] = useState<{ query: string; response: string }[]>([]);
+  const [isThinking, setIsThinking] = useState(false);
+  const { toast } = useToast();
+
+  const exampleQueries = [
+    'How many submissions have a rating of 3 or less?',
+    'Which hospital has the most feedback?',
+    'What are the common themes in negative feedback?',
+    'Summarize the feedback for Toronto General Hospital.',
+  ];
+
+  const handleQuery = async (currentQuery: string) => {
+    if (!currentQuery.trim()) return;
+    setQuery('');
+    setIsThinking(true);
+    setHistory((prev) => [...prev, { query: currentQuery, response: '...' }]);
+
+    try {
+      const response = await chatWithData(currentQuery, submissions);
+      setHistory((prev) =>
+        prev.map((item) =>
+          item.response === '...' ? { ...item, response } : item
+        )
+      );
+    } catch (error) {
+      console.error('Chat failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast({
+        variant: 'destructive',
+        title: 'Chat Failed',
+        description: `Could not get a response from the AI. Error: ${errorMessage}`,
+      });
+       setHistory((prev) =>
+        prev.map((item) =>
+          item.response === '...' ? { ...item, response: 'Sorry, I encountered an error.' } : item
+        )
+      );
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
+  return (
+    <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2"><Bot /> Chat with Data</DialogTitle>
+        <DialogDescription>
+          Ask questions about the feedback submissions and get AI-powered answers.
+        </DialogDescription>
+      </DialogHeader>
+      <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="space-y-4">
+          {history.map((item, index) => (
+            <div key={index} className="space-y-2">
+              <div className="p-3 rounded-lg bg-muted/50 text-right">
+                <p className="font-semibold text-primary">You</p>
+                <p>{item.query}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-secondary">
+                 <p className="font-semibold">AI Assistant</p>
+                {item.response === '...' ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                   <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-full">{item.response}</ReactMarkdown>
+                )}
+              </div>
+            </div>
+          ))}
+           {history.length === 0 && (
+            <div className="text-center text-muted-foreground p-8">
+              <p>No messages yet. Ask a question to get started!</p>
+               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {exampleQueries.map(q => (
+                  <Button key={q} variant="outline" size="sm" onClick={() => handleQuery(q)}>
+                    {q}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleQuery(query);
+        }}
+        className="flex items-center gap-2 pt-4"
+      >
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="e.g., What's the average rating?"
+          disabled={isThinking}
+        />
+        <Button type="submit" disabled={isThinking}>
+          {isThinking ? <Loader2 className="animate-spin" /> : 'Send'}
+        </Button>
+      </form>
+    </DialogContent>
+  );
 }
+
+function ReportDialog({ submissions }: { submissions: FeedbackSubmission[] }) {
+  const [report, setReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setReport(null);
+    try {
+      const result = await generateReport(submissions);
+      setReport(result);
+    } catch (error) {
+      console.error('Report generation failed:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Report Generation Failed',
+        description: 'Could not generate the report.',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (report) {
+      navigator.clipboard.writeText(report);
+      toast({ title: 'Report Copied!', description: 'The report has been copied to your clipboard.' });
+    }
+  };
+
+  return (
+    <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2"><FileText /> Generate Feedback Report</DialogTitle>
+        <DialogDescription>
+          Create a comprehensive summary of all feedback submissions with AI.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex-1 flex flex-col min-h-0">
+        {!report && !isGenerating && (
+           <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <p className="text-muted-foreground mb-4">Click the button below to generate an AI-powered report.</p>
+            <Button onClick={handleGenerate}>
+              <Sparkles className="mr-2" /> Generate Report
+            </Button>
+          </div>
+        )}
+        {isGenerating && (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2">Generating your report...</p>
+          </div>
+        )}
+        {report && (
+          <>
+            <div className="flex justify-end gap-2 mb-2">
+                 <Button onClick={handleCopy} variant="outline" size="sm">
+                    <Copy className="mr-2"/> Copy Markdown
+                </Button>
+                <Button onClick={handleGenerate} variant="secondary" size="sm" disabled={isGenerating}>
+                    <Sparkles className="mr-2"/> Regenerate
+                </Button>
+            </div>
+            <ScrollArea className="flex-1 rounded-md border bg-black/20 p-4">
+                 <ReactMarkdown className="prose dark:prose-invert max-w-full">{report}</ReactMarkdown>
+            </ScrollArea>
+          </>
+        )}
+      </div>
+    </DialogContent>
+  );
+}
+
 
 export default function DashboardClient({ submissions }: { submissions: FeedbackSubmission[] }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [isChatBotOpen, setIsChatBotOpen] = useState(false);
-  const [isReportGenOpen, setIsReportGenOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
 
   const handleLogin = (e: React.FormEvent) => {
@@ -317,8 +485,12 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
         </p>
       </header>
 
-      <ComingSoonDialog open={isChatBotOpen} onOpenChange={setIsChatBotOpen} />
-      <ComingSoonDialog open={isReportGenOpen} onOpenChange={setIsReportGenOpen} />
+      <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
+        <ChatDialog submissions={submissions} />
+      </Dialog>
+      <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+        <ReportDialog submissions={submissions} />
+      </Dialog>
 
       <section className="mb-8">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -348,19 +520,19 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
                 </p>
               </CardContent>
             </Card>
-             <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsChatBotOpen(true)}>
+             <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsChatOpen(true)}>
                 <div className="flex items-center gap-2">
                   <Bot className="h-6 w-6" />
                   <span className="text-lg font-semibold">Chat with Data</span>
                 </div>
                 <p className="text-sm text-muted-foreground">Ask AI questions about the feedback.</p>
             </Button>
-            <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsReportGenOpen(true)}>
+            <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsReportOpen(true)}>
                  <div className="flex items-center gap-2">
                   <FileText className="h-6 w-6" />
                   <span className="text-lg font-semibold">Generate Report</span>
                 </div>
-                <p className="text-sm text-muted-foreground">Create a PDF summary of feedback.</p>
+                <p className="text-sm text-muted-foreground">Create a summary of all feedback.</p>
             </Button>
         </div>
       </section>
