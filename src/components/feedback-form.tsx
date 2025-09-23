@@ -222,9 +222,9 @@ export default function FeedbackForm() {
 
   if (isSubmitted) {
     return (
-        <Card className="w-full max-w-4xl mx-auto border-border/50 bg-card/60 p-6 shadow-lg backdrop-blur-lg sm:p-8">
+        <Card className="w-full max-w-4xl mx-auto p-6 sm:p-8">
             <CardHeader className="items-center text-center">
-                <div className={`mb-4 text-foreground`}><PartyPopper className="h-12 w-12" /></div>
+                <div className={`mb-4 text-primary`}><PartyPopper className="h-12 w-12" /></div>
                 <CardTitle className="text-2xl">Feedback Submitted</CardTitle>
                 <CardDescription>
                 Thank you for your valuable input. Your feedback has been recorded.
@@ -245,7 +245,7 @@ export default function FeedbackForm() {
   }
 
   return (
-    <Card className="border-border/50 bg-card/60 p-6 shadow-lg backdrop-blur-lg sm:p-8">
+    <Card className="p-6 sm:p-8">
       <div className="mb-4">
         <Button type="button" onClick={prefillForm} variant="outline">Prefill Form for Testing</Button>
       </div>
@@ -256,7 +256,7 @@ export default function FeedbackForm() {
               control={form.control}
               name="isAnonymous"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-card/60">
                   <FormControl>
                     <Checkbox
                       checked={field.value}
@@ -922,7 +922,7 @@ export default function FeedbackForm() {
               control={form.control}
               name="contactForAdvocacy"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-card/60">
                   <FormControl>
                     <Checkbox
                       checked={field.value}
@@ -985,18 +985,5 @@ export default function FeedbackForm() {
         </form>
       </Form>
     </Card>
-  )
-}
-
-// A wrapper card for styling purposes
-function FormCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border bg-card text-card-foreground",
-        className
-      )}
-      {...props}
-    />
   )
 }

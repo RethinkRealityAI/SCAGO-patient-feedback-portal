@@ -124,7 +124,7 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
             {/* Original Submission Data */}
             <div className="space-y-4">
               <h3 className="font-semibold text-lg text-primary">Original Submission</h3>
-              <div className="space-y-3 rounded-md border p-4">
+              <div className="space-y-3 rounded-md border p-4 bg-black/20">
                 {Object.entries(submission).map(([key, value]) => {
                   if (key === 'id' || value === '' || value === null || (Array.isArray(value) && value.length === 0)) return null;
                    // Format date for display
@@ -157,7 +157,7 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
                 </Button>
               </div>
 
-              <div className="space-y-4 rounded-md border p-4 min-h-[200px]">
+              <div className="space-y-4 rounded-md border p-4 min-h-[200px] bg-black/20">
                 {isAnalyzing && (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -209,11 +209,29 @@ function SubmissionDetailsDialog({ submission }: { submission: FeedbackSubmissio
   );
 }
 
+function ComingSoonDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Feature Coming Soon</DialogTitle>
+                    <DialogDescription>
+                        This feature is currently under development. Please check back later!
+                    </DialogDescription>
+                </DialogHeader>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function DashboardClient({ submissions }: { submissions: FeedbackSubmission[] }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isChatBotOpen, setIsChatBotOpen] = useState(false);
+  const [isReportGenOpen, setIsReportGenOpen] = useState(false);
+
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,8 +281,8 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
 
   if (!isAuthenticated) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-100/50 dark:bg-gray-900/50">
-        <Card className="w-full max-w-sm shadow-lg">
+      <div className="flex h-screen items-center justify-center">
+        <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Dashboard Access</CardTitle>
             <CardDescription>
@@ -299,6 +317,9 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
         </p>
       </header>
 
+      <ComingSoonDialog open={isChatBotOpen} onOpenChange={setIsChatBotOpen} />
+      <ComingSoonDialog open={isReportGenOpen} onOpenChange={setIsReportGenOpen} />
+
       <section className="mb-8">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
            <Card>
@@ -327,19 +348,19 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
                 </p>
               </CardContent>
             </Card>
-             <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" disabled>
+             <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsChatBotOpen(true)}>
                 <div className="flex items-center gap-2">
                   <Bot className="h-6 w-6" />
                   <span className="text-lg font-semibold">Chat with Data</span>
                 </div>
-                <p className="text-sm text-muted-foreground">Ask AI questions about the feedback. (Coming Soon)</p>
+                <p className="text-sm text-muted-foreground">Ask AI questions about the feedback.</p>
             </Button>
-            <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" disabled>
+            <Button variant="outline" className="lg:col-span-1 h-full text-left flex-col items-start justify-center gap-2 p-4" onClick={() => setIsReportGenOpen(true)}>
                  <div className="flex items-center gap-2">
                   <FileText className="h-6 w-6" />
                   <span className="text-lg font-semibold">Generate Report</span>
                 </div>
-                <p className="text-sm text-muted-foreground">Create a PDF summary of feedback. (Coming Soon)</p>
+                <p className="text-sm text-muted-foreground">Create a PDF summary of feedback.</p>
             </Button>
         </div>
       </section>
@@ -355,17 +376,24 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={ratingDistribution} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="rating" tickFormatter={(value) => `${value} Star`} />
-                <YAxis allowDecimals={false} />
+                <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
+                    </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis dataKey="rating" tickFormatter={(value) => `${value} Star`} stroke="hsl(var(--muted-foreground))" />
+                <YAxis allowDecimals={false} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
-                  cursor={{ fill: 'hsl(var(--accent))' }}
+                  cursor={{ fill: 'hsl(var(--accent) / 0.5)' }}
                   contentStyle={{
-                    background: 'hsl(var(--background))',
-                    border: '1px solid hsl(var(--border))',
+                    background: 'hsl(var(--background) / 0.8)',
+                    border: '1px solid hsl(var(--border) / 0.5)',
+                    backdropFilter: 'blur(4px)',
                   }}
                 />
-                <Bar dataKey="count" name="Submissions" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="count" name="Submissions" radius={[4, 4, 0, 0]} fill="url(#barGradient)">
                   {ratingDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={CHART_COLORS[entry.rating - 1]} />
                   ))}
@@ -387,7 +415,7 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="border-border/50">
                   <TableHead>Date</TableHead>
                   <TableHead className="text-center">Rating</TableHead>
                   <TableHead>Hospital</TableHead>
@@ -397,7 +425,7 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
               </TableHeader>
               <TableBody>
                 {paginatedSubmissions.map((sub) => (
-                  <TableRow key={sub.id}>
+                  <TableRow key={sub.id} className="border-border/50">
                     <TableCell>
                       {format(new Date(sub.submittedAt), 'MMM d, yyyy')}
                     </TableCell>
@@ -464,5 +492,3 @@ export default function DashboardClient({ submissions }: { submissions: Feedback
     </div>
   );
 }
-
-    
