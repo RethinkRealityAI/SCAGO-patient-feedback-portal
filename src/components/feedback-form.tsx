@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { cn } from "@/lib/utils"
@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper, AlertCircle } from "lucide-react"
+import { Loader2, Star, PartyPopper } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -36,10 +36,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { db } from "@/lib/firebase"
-import { doc, getDoc } from "firebase/firestore"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Skeleton } from "@/components/ui/skeleton"
 
 // Define the shape of our form structure from Firestore
 interface FormFieldConfig {
@@ -73,10 +69,7 @@ interface FormStructure {
 // A simple Zod schema for any object
 const anyObjectSchema = z.record(z.any());
 
-export default function FeedbackForm() {
-  const [formStructure, setFormStructure] = useState<FormStructure | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function FeedbackForm({ survey }: { survey: FormStructure }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const { toast } = useToast();
@@ -89,32 +82,6 @@ export default function FeedbackForm() {
         errors: {},
     }),
   });
-
-  useEffect(() => {
-    async function fetchFormStructure() {
-      try {
-        const docRef = doc(db, "surveys", "main-feedback");
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          setFormStructure(docSnap.data() as FormStructure);
-        } else {
-          setError("Could not find the survey configuration. Please ensure 'main-feedback' exists in the 'surveys' collection.");
-        }
-      } catch (e) {
-        console.error("Error fetching form structure:", e);
-        if (e instanceof Error && e.message.includes('permission-denied')) {
-            setError("Could not load the form due to a permission error. Please ensure Firestore security rules allow reads on the 'surveys' collection.");
-        } else {
-            setError("An error occurred while loading the form. Please try again later.");
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchFormStructure();
-  }, []);
 
   const watchedValues = form.watch();
 
@@ -250,32 +217,6 @@ export default function FeedbackForm() {
         />
     )
   }
-
-  if (isLoading) {
-    return (
-        <Card className="p-6 sm:p-8">
-            <div className="space-y-8">
-                <Skeleton className="h-8 w-1/4" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                </div>
-                 <Skeleton className="h-24 w-full" />
-                 <Skeleton className="h-10 w-full" />
-            </div>
-        </Card>
-    );
-  }
-
-  if (error) {
-    return (
-        <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error Loading Form</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-        </Alert>
-    );
-  }
   
   if (isSubmitted) {
     return (
@@ -306,7 +247,7 @@ export default function FeedbackForm() {
     <Card className="p-6 smp-8">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          {formStructure?.sections.map((section, index) => (
+          {survey.sections.map((section, index) => (
             <div key={section.id} className={cn(index > 0 && "border-t border-border/50 pt-8", "space-y-8")}>
                 <div className="text-center">
                     <h3 className="text-xl font-semibold tracking-tight text-primary">{section.title}</h3>
