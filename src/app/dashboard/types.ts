@@ -1,0 +1,36 @@
+export interface FeedbackSubmission {
+  id: string;
+  name?: string;
+  email?: string;
+  isAnonymous: boolean;
+  patientOrCaregiver: string;
+  physicianName?: string;
+  triageNurseName?: string;
+  firstReception?: string;
+  visitReason?: string;
+  inPainCrisis: string;
+  analgesiaTime?: string;
+  admittedToWard: string;
+  timelyMedications: string;
+  hospitalStayLength?: string;
+  hcpFamiliarity: string;
+  hcpRespectfulness?: string;
+  experienced?: string[];
+  experiencedOther?: string;
+  location: string;
+  rating: number;
+  feedbackText?: string;
+  investigationConducted?: string;
+  concernsAddressed?: string;
+  reportedToHospital?: string;
+  reportOutcome?: string;
+  reportNotDoneReason?: string;
+  reportNotDoneReasonOther?: string;
+  contactForAdvocacy: boolean;
+  interactionMonth?: string;
+  interactionYear?: string;
+  hospitalUnit?: string;
+  clinicianNames?: string;
+  hospitalInteraction?: string;
+  submittedAt: Date;
+}

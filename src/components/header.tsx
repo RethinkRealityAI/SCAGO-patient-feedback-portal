@@ -18,6 +18,9 @@ export default function Header() {
           <Link href="/resources" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
             Resources
           </Link>
+          <Link href="/dashboard" className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
+            Dashboard
+          </Link>
         </nav>
       </div>
     </header>
