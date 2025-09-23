@@ -103,7 +103,11 @@ export default function FeedbackForm() {
         }
       } catch (e) {
         console.error("Error fetching form structure:", e);
-        setError("An error occurred while loading the form. Please try again later.");
+        if (e instanceof Error && e.message.includes('permission-denied')) {
+            setError("Could not load the form due to a permission error. Please ensure Firestore security rules allow reads on the 'surveys' collection.");
+        } else {
+            setError("An error occurred while loading the form. Please try again later.");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -299,7 +303,7 @@ export default function FeedbackForm() {
 
 
   return (
-    <Card className="p-6 sm:p-8">
+    <Card className="p-6 smp-8">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           {formStructure?.sections.map((section, index) => (

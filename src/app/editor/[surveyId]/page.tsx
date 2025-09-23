@@ -21,7 +21,10 @@ export default async function SurveyEditorPage({
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error Loading Survey</AlertTitle>
           <AlertDescription>
-            <p>{surveyData.error}</p>
+            <p className="mb-2">{surveyData.error}</p>
+             <p className="text-xs">
+                Please ensure your Firestore security rules allow reads on the 'surveys' collection for this document.
+             </p>
           </AlertDescription>
         </Alert>
       </div>
