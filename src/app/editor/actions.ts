@@ -16,10 +16,27 @@ export async function getSurvey(id: string) {
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      return { error: 'Survey not found.' };
+      // If survey doesn't exist, return a default structure
+      // This allows the editor to create a new survey from a template.
+      return { 
+        id,
+        title: 'New Patient Feedback Survey',
+        description: 'Describe the purpose of this survey.',
+        sections: [
+            {
+                id: 'default-section',
+                title: 'New Section',
+                description: 'A new section for your survey.',
+                fields: []
+            }
+        ]
+      };
     }
   } catch (e) {
     console.error('Error getting survey:', e);
+    if (e instanceof Error && e.message.includes('permission-denied')) {
+        return { error: 'Could not fetch the survey due to a permission error. Please check your Firestore security rules.' };
+    }
     return { error: 'An unexpected error occurred while fetching the survey.' };
   }
 }
