@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useForm, useFieldArray, FormProvider, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,20 +17,21 @@ import { useToast } from '@/hooks/use-toast';
 import { DndContext, closestCenter, KeyboardSensor as DndKeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
-const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({ id: z.string(), label: z.string().min(1, 'Question label is required.'), type: z.enum(['text', 'textarea', 'email', 'select', 'radio', 'checkbox', 'rating', 'group', 'boolean-checkbox']), options: z.array(optionSchema).optional(), fields: z.array(fieldSchema).optional() }));
+const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({ id: z.string(), label: z.string().min(1, 'Question label is required.'), type: z.enum(['text', 'textarea', 'email', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox']), options: z.array(optionSchema).optional(), fields: z.array(fieldSchema).optional(), conditionField: z.string().optional(), conditionValue: z.string().optional() }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), fields: z.array(fieldSchema) });
 const surveySchema = z.object({ title: z.string().min(1, 'Survey title is required.'), description: z.string().optional(), sections: z.array(sectionSchema) });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
-interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; }
+interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; conditionField?: string; conditionValue?: any; }
 
 // Event handler to prevent dnd-kit from capturing clicks on interactive elements
 const stopPropagation = (e: React.PointerEvent) => e.stopPropagation();
@@ -44,11 +45,43 @@ class CustomKeyboardSensor extends DndKeyboardSensor {
 }
 
 function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listeners }: { fieldPath: FieldTypePath; fieldIndex: number; remove: (index: number) => void; move: (from: number, to: number) => void; totalFields: number; listeners?: any }) {
-  const { control, watch, setValue } = useFormContext<SurveyFormData>();
+  const { control, watch, getValues, setValue } = useFormContext<SurveyFormData>();
   const field = watch(fieldPath);
   const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({ control, name: `${fieldPath}.options` });
 
   const handleTypeChange = (newType: string) => setValue(fieldPath, { ...field, type: newType, options: [] });
+
+  const availableConditionalFields = useMemo(() => {
+    const allFields: { label: string; value: string }[] = [];
+    const sections = getValues('sections');
+    sections.forEach(section => {
+        section.fields.forEach(f => {
+            if (f.id === field.id) return;
+            if (['radio', 'select', 'boolean-checkbox'].includes(f.type)) {
+                allFields.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
+            }
+        })
+    })
+    return allFields;
+  }, [getValues, field.id]);
+
+  const conditionalFieldId = watch(`${fieldPath}.conditionField`);
+  const conditionalFieldType = useMemo(() => {
+    const sections = getValues('sections');
+    for (const section of sections) {
+        for (const f of section.fields) {
+            if (f.id === conditionalFieldId) {
+                return f.type;
+            }
+        }
+    }
+    return null;
+  }, [conditionalFieldId, getValues]);
+  
+  const clearConditionalLogic = () => {
+    setValue(`${fieldPath}.conditionField`, '');
+    setValue(`${fieldPath}.conditionValue`, '');
+  };
 
   return (
     <Card className="bg-muted/30 relative">
@@ -81,10 +114,12 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
               <SelectContent>
                 <SelectItem value="text">Text</SelectItem>
                 <SelectItem value="textarea">Text Area</SelectItem>
-                <SelectItem value="rating">Rating</SelectItem>
+                <SelectItem value="rating">Rating (1-5 Stars)</SelectItem>
+                <SelectItem value="nps">NPS Scale (1-10)</SelectItem>
                 <SelectItem value="select">Select</SelectItem>
                 <SelectItem value="radio">Radio</SelectItem>
                 <SelectItem value="checkbox">Checkbox</SelectItem>
+                <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -94,15 +129,44 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
           <div className="space-y-2">
             <Label>Options</Label>
             {options.map((option, optionIndex) => (
-              <div key={option.id} className="flex items-center gap-2">
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label`} render={({ field: formField }) => (<FormItem className="flex-grow"><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value`} render={({ field: formField }) => (<FormItem className="flex-grow"><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
+              <div key={option.id} className="flex flex-col md:flex-row items-center gap-2">
+                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label`} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value`} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Value</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
                 <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => removeOption(optionIndex)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
             ))}
             <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => appendOption({ id: nanoid(), label: '', value: '' })}>Add Option</Button>
           </div>
         )}
+        <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="conditional-logic">
+                <AccordionTrigger onPointerDown={stopPropagation}>Conditional Logic</AccordionTrigger>
+                <AccordionContent className="p-4 space-y-4">
+                    <FormDescription>Show this question only when another question has a specific answer.</FormDescription>
+                    <FormField control={control} name={`${fieldPath}.conditionField`} render={({ field: formField }) => (
+                        <FormItem><FormLabel>Show when</FormLabel>
+                            <div className="flex items-center gap-2">
+                                <Select onValueChange={formField.onChange} value={formField.value ?? ''}>
+                                    <FormControl><SelectTrigger onPointerDown={stopPropagation}><SelectValue placeholder="Select a question..." /></SelectTrigger></FormControl>
+                                    <SelectContent>{availableConditionalFields.map(f => (<SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>))}</SelectContent>
+                                </Select>
+                                {formField.value && <Button variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={clearConditionalLogic}><X className="h-4 w-4" /></Button>}
+                            </div>
+                        <FormMessage /></FormItem>
+                    )} />
+                    {conditionalFieldId && (
+                         <FormField control={control} name={`${fieldPath}.conditionValue`} render={({ field: formField }) => (
+                            <FormItem><FormLabel>Has the value</FormLabel>
+                                <FormControl>
+                                    {conditionalFieldType === 'boolean-checkbox' ? (<Switch checked={formField.value === 'true'} onCheckedChange={(checked: boolean) => formField.onChange(String(checked))} />) : (<Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="Enter the required value" />)}
+                                </FormControl>
+                                <FormDescription>For Yes/No questions, the value is 'true' or 'false'. For others, use the option's value (e.g., 'option-1').</FormDescription>
+                            <FormMessage /></FormItem>
+                        )} />
+                    )}
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
       </CardContent>
     </Card>
   );
@@ -172,23 +236,17 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const item = sections.find(s => s.id === active.id);
-    if (item) {
-        setActiveItem({ ...item, type: 'section' }); return;
-    }
+    if (item) { setActiveItem({ ...item, type: 'section' }); return; }
     for (const [sectionIndex, section] of sections.entries()) {
         const field = section.fields.find(f => f.id === active.id);
         if (field) { setActiveItem({ ...field, type: 'field', sectionIndex }); return; }
     }
   };
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
-    setOverId(over ? String(over.id) : null);
-  };
+  const handleDragOver = (event: DragOverEvent) => setOverId(event.over ? String(event.over.id) : null);
   
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveItem(null);
-    setOverId(null);
+    setActiveItem(null); setOverId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     if (active.data.current?.type === 'section') {
@@ -203,10 +261,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
     }
   };
 
-  const handleDragCancel = () => {
-    setActiveItem(null);
-    setOverId(null);
-  };
+  const handleDragCancel = () => { setActiveItem(null); setOverId(null); };
 
   async function onSubmit(values: SurveyFormData) {
     setIsSubmitting(true);

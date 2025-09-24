@@ -32,16 +32,16 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
 
   return (
     <div className="container max-w-4xl py-8 md:py-12">
-      <section className="text-center">
+      <section className="text-center mb-12">
         <h1 className="scroll-m-20 text-4xl font-bold tracking-tight text-primary lg:text-5xl font-headline">
           {surveyData.title}
         </h1>
-        <p className="mt-4 text-lg text-muted-foreground whitespace-pre-wrap">
+        <p className="mt-4 text-lg text-muted-foreground whitespace-pre-wrap max-w-3xl mx-auto">
           {surveyData.description}
         </p>
       </section>
 
-      <section className="mt-12">
+      <section>
         <FeedbackForm survey={surveyData as any} />
       </section>
     </div>
