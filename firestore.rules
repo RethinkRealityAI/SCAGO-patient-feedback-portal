@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Surveys should be world-readable
+    match /surveys/{surveyId} {
+      allow read: if true;
+      // TODO: In a real app, you would want to restrict this to authenticated users
+      // who have permission to edit this survey.
+      allow write: if true; 
+    }
+
+    // Feedback can be written by anyone.
+    // TODO: In a real app, you might want to add some rate limiting or
+    // validation to prevent abuse.
+    match /feedback/{feedbackId} {
+        allow create: if true;
+        // Restrict read access to feedback. In a real app, only authenticated
+        // users with the correct permissions should be able to read feedback.
+        allow read: if false; 
+    }
+  }
+}
