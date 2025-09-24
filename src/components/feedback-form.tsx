@@ -36,12 +36,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Label } from "./ui/label"
 
 // Define the shape of our form structure from Firestore
 interface FormFieldConfig {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'email' | 'select' | 'radio' | 'checkbox' | 'rating' | 'conditional' | 'group' | 'boolean-checkbox';
+  type: 'text' | 'textarea' | 'email' | 'select' | 'radio' | 'checkbox' | 'rating' | 'nps' | 'conditional' | 'group' | 'boolean-checkbox';
   options?: { value: string; label: string }[];
   description?: string;
   placeholder?: string;
@@ -63,6 +64,20 @@ interface FormStructure {
   title: string;
   description: string;
   sections: FormSection[];
+}
+
+const NPS_THRESHOLDS = {
+    bad: 3,
+    medium: 6,
+  good: 8,
+    great: 10
+}
+
+const getNPSColor = (value: number) => {
+    if (value <= NPS_THRESHOLDS.bad) return 'bg-red-500 hover:bg-red-600';
+    if (value <= NPS_THRESHOLDS.medium) return 'bg-orange-500 hover:bg-orange-600';
+    if (value <= NPS_THRESHOLDS.good) return 'bg-yellow-500 hover:bg-yellow-600';
+    return 'bg-green-500 hover:bg-green-600';
 }
 
 
@@ -192,6 +207,21 @@ export default function FeedbackForm({ survey }: { survey: FormStructure }) {
                                 </RadioGroup>
                             )}
 
+                            {fieldConfig.type === 'nps' && (
+                                <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-wrap items-center gap-2">
+                                    {Array.from({ length: 10 }, (_, i) => i + 1).map(val => (
+                                        <FormItem key={val} className="flex items-center space-x-2 space-y-0">
+                                            <FormControl>
+                                                <RadioGroupItem value={String(val)} id={`${fieldConfig.id}-${val}`} className="sr-only" />
+                                            </FormControl>
+                                            <FormLabel htmlFor={`${fieldConfig.id}-${val}`} className={cn("cursor-pointer rounded-md p-3 w-10 h-10 flex items-center justify-center text-white font-bold text-lg transition-all duration-200 ease-in-out", field.value === String(val) ? 'ring-2 ring-offset-2 ring-primary' : 'ring-0', getNPSColor(val))}>
+                                                {val}
+                                            </FormLabel>
+                                        </FormItem>
+                                    ))}
+                                </RadioGroup>
+                            )}
+
                             {fieldConfig.type === 'checkbox' && (
                                 <div className="space-y-2">
                                 {fieldConfig.options?.map((item) => (
@@ -204,7 +234,7 @@ export default function FeedbackForm({ survey }: { survey: FormStructure }) {
                                         <FormControl>
                                             <Checkbox
                                             checked={checkField.value?.includes(item.value)}
-                                            onCheckedChange={(checked) => {
+                                            onCheckedChange={(checked: boolean) => {
                                                 const currentValue = checkField.value || [];
                                                 return checked
                                                 ? checkField.onChange([...currentValue, item.value])
@@ -268,7 +298,7 @@ export default function FeedbackForm({ survey }: { survey: FormStructure }) {
                 {section.fields.map(fieldConfig => {
                     if (fieldConfig.type === 'group') {
                         return (
-                             <div key={fieldConfig.id} className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2">
+                             <div key={fieldConfig.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-8">
                                 {fieldConfig.fields?.map(renderField)}
                             </div>
                         )

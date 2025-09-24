@@ -3,10 +3,44 @@ import { nanoid } from 'nanoid';
 // NOTE: The 'id' of each field must match the camelCase property name
 // in the FeedbackSubmission interface (src/app/dashboard/types.ts)
 
+const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(String);
+const months = [
+  'January', 'February', 'March', 'April', 'May', 'June', 
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 export const defaultSurvey = {
   title: 'Patient Feedback Survey',
   description: 'The following information will help us understand the scope of the situation. Kindly provide as much information as you can.',
   sections: [
+    {
+        id: 'contact-information-section',
+        title: 'Contact Information',
+        fields: [
+            {
+                id: 'name-group',
+                type: 'group',
+                fields: [
+                    { id: 'firstName', type: 'text', label: 'First name' },
+                    { id: 'lastName', type: 'text', label: 'Last name' },
+                ]
+            },
+            {
+                id: 'contact-group',
+                type: 'group',
+                fields: [
+                    { id: 'email', type: 'email', label: 'Email' },
+                    { id: 'phone', type: 'text', label: 'Phone' },
+                    { id: 'city', type: 'text', label: 'City' },
+                ]
+            },
+            {
+                id: 'province',
+                type: 'text',
+                label: 'Province',
+            }
+        ]
+    },
     {
       id: 'quality-of-care-section',
       title: 'Section 1: Perception Around Quality of Care',
@@ -15,7 +49,7 @@ export const defaultSurvey = {
         {
           id: 'patientOrCaregiver',
           label: 'Are you a patient or a caregiver?',
-          type: 'radio',
+          type: 'select',
           options: [
             { id: nanoid(), label: 'Patient', value: 'patient' },
             { id: nanoid(), label: 'Caregiver', value: 'caregiver' },
@@ -59,17 +93,15 @@ export const defaultSurvey = {
           ],
         },
         {
-          id: 'admittedToWard',
-          label: 'Were you admitted to inpatient ward?',
-          type: 'radio',
-          options: [
-            { id: nanoid(), label: 'Yes', value: 'yes' },
-            { id: nanoid(), label: 'No', value: 'no' },
-          ],
+          id: 'timeToAnalgesia',
+          label: 'If for pain crisis, how long before the first analgesia was administered?',
+          type: 'text',
+          conditionField: 'inPainCrisis',
+          conditionValue: 'yes',
         },
         {
-          id: 'timelyMedications',
-          label: 'Did you receive timely medications while in the hospital?',
+          id: 'admittedToWard',
+          label: 'Were you admitted to inpatient ward?',
           type: 'radio',
           options: [
             { id: nanoid(), label: 'Yes', value: 'yes' },
@@ -88,7 +120,7 @@ export const defaultSurvey = {
           options: [
             { id: nanoid(), label: 'Very Familiar', value: 'very-familiar' },
             { id: nanoid(), label: 'Somewhat Familiar', value: 'somewhat-familiar' },
-            { id: nanoid(), label: 'Not Familiar', value: 'not-familiar' },
+            { id: nanoid(), label: 'Not at all Familiar', value: 'not-at-all-familiar' },
           ],
         },
         {
@@ -99,7 +131,7 @@ export const defaultSurvey = {
         {
           id: 'experienced',
           label: 'Did you experience any of the following AS A RESULT of you seeking treatment during this interaction?',
-          type: 'checkbox',
+          type: 'radio',
           options: [
             { id: nanoid(), label: 'Stigmatization or stereotyping', value: 'stigmatization-stereotyping' },
             { id: nanoid(), label: 'Anxiety', value: 'anxiety' },
@@ -107,21 +139,67 @@ export const defaultSurvey = {
             { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
+        {
+            id: 'experiencedOther',
+            label: 'If other, please specify:',
+            type: 'text',
+            conditionField: 'experienced',
+            conditionValue: 'other',
+        }
       ],
     },
     {
-      id: 'action-follow-up-section',
-      title: 'Section 2: Action and Follow-up',
-      description: 'This section helps us understand what actions were taken after your interaction.',
+      id: 'hospital-experience-section',
+      title: 'Section 2: Hospital Experience in Detail',
+      description: 'Please provide details about your hospital experience.',
       fields: [
         {
-          id: 'investigationConducted',
-          label: 'If an investigation was conducted, what were the results?',
-          type: 'textarea',
+            id: 'interaction-date-group',
+            type: 'group',
+            fields: [
+                {
+                  id: 'interactionMonth',
+                  label: 'Month of Interaction',
+                  type: 'select',
+                  options: months.map(m => ({ id: nanoid(), label: m, value: m.toLowerCase() })),
+                },
+                {
+                  id: 'interactionYear',
+                  label: 'Year of Interaction',
+                  type: 'select',
+                  options: years.map(y => ({ id: nanoid(), label: y, value: y })),
+                },
+            ]
         },
         {
-          id: 'concernsAddressed',
-          label: 'Were your concerns adequately addressed?',
+            id: 'hospitalName',
+            label: 'Hospital Name',
+            type: 'text',
+        },
+        {
+            id: 'hospitalUnit',
+            label: 'Unit or Department',
+            type: 'select',
+            options: [
+                { id: nanoid(), label: 'Emergency Room', value: 'emergency-room' },
+                { id: nanoid(), label: 'Outpatient', value: 'outpatient' },
+                { id: nanoid(), label: 'On admission', value: 'on-admission' },
+                { id: nanoid(), label: 'Other', value: 'other' },
+            ]
+        },
+        {
+            id: 'clinicianNames',
+            label: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
+            type: 'textarea',
+        },
+        {
+            id: 'hospitalInteraction',
+            label: 'Your Experience',
+            type: 'textarea',
+        },
+        {
+          id: 'timelyMedications',
+          label: 'Did you receive timely medications while in the hospital?',
           type: 'radio',
           options: [
             { id: nanoid(), label: 'Yes', value: 'yes' },
@@ -129,9 +207,41 @@ export const defaultSurvey = {
           ],
         },
         {
+            id: 'rightInvestigationConducted',
+            label: 'Did you feel the right investigation/tests were conducted?',
+            type: 'select',
+            options: [
+                { id: nanoid(), label: 'Yes', value: 'yes' },
+                { id: nanoid(), label: 'No', value: 'no' },
+                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+            ]
+        },
+        {
+            id: 'concernsAddressed',
+            label: 'Did you feel your concerns were well addressed?',
+            type: 'select',
+            options: [
+                { id: nanoid(), label: 'Yes', value: 'yes' },
+                { id: nanoid(), label: 'No', value: 'no' },
+                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+            ]
+        },
+        {
+            id: 'optimalTime',
+            label: 'Did you feel that you had an optimal amount of time?',
+            type: 'select',
+            options: [
+                { id: nanoid(), label: 'Yes', value: 'yes' },
+                { id: nanoid(), label: 'No', value: 'no' },
+                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+            ]
+        },
+        {
           id: 'reportedToHospital',
-          label: 'Was this reported to the hospital Patient Relations/Ombudsman?',
-          type: 'radio',
+          label: 'Did you report this situation to the hospital?',
+          type: 'select',
+          conditionField: 'concernsAddressed',
+          conditionValue: 'no',
           options: [
             { id: nanoid(), label: 'Yes', value: 'yes' },
             { id: nanoid(), label: 'No', value: 'no' },
@@ -139,67 +249,39 @@ export const defaultSurvey = {
         },
         {
           id: 'reportOutcome',
-          label: 'If yes, what was the outcome?',
+          label: 'If “Yes”, what was the outcome of your report?',
           type: 'textarea',
           conditionField: 'reportedToHospital',
           conditionValue: 'yes',
         },
         {
           id: 'reportNotDoneReason',
-          label: 'If no, please select the reason why.',
-          type: 'radio',
-          options: [
-            { id: nanoid(), label: 'Did not know how to report', value: 'did-not-know' },
-            { id: nanoid(), label: 'I was afraid of repercussions', value: 'afraid' },
-            { id: nanoid(), label: 'Previous reports were not addressed', value: 'not-addressed' },
-            { id: nanoid(), label: 'Other', value: 'other' },
-          ],
+          label: 'If “No”, why not?',
+          type: 'select',
           conditionField: 'reportedToHospital',
           conditionValue: 'no',
-        },
-        {
-          id: 'interaction-date-group',
-          type: 'group',
-          label: 'Please specify month and year of interaction.',
-          fields: [
-            {
-              id: 'interactionMonth',
-              label: 'Month',
-              type: 'text',
-              placeholder: 'e.g., January',
-            },
-            {
-              id: 'interactionYear',
-              label: 'Year',
-              type: 'text',
-              placeholder: 'e.g., 2024',
-            },
+          options: [
+            { id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' },
+            { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' },
+            { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
         {
-          id: 'hospitalUnit',
-          label: 'What hospital unit/department did this interaction occur?',
-          type: 'text',
+            id: 'reportNotDoneReasonOther',
+            label: 'If other, please specify:',
+            type: 'text',
+            conditionField: 'reportNotDoneReason',
+            conditionValue: 'other',
         },
         {
-          id: 'clinicianNames',
-          label: 'Please list the names of any clinicians you remember during this interaction.',
-          type: 'textarea',
-        },
-        {
-          id: 'hospitalInteraction',
-          label: 'Please describe your hospital interaction experience.',
-          type: 'textarea',
-        },
-        {
-          id: 'contactForAdvocacy',
-          label: 'Would you like to be contacted by SCAGO for advocacy and support?',
-          type: 'boolean-checkbox',
+            id: 'anythingElseToKnow',
+            label: 'Is there anything else would you like us to know about this hospital interaction?',
+            type: 'textarea',
         },
         {
           id: 'rating',
-          label: 'Overall Experience Rating',
-          type: 'rating',
+          label: 'On a scale of 1-10, what would you rate the quality of care you received?',
+          type: 'nps',
         },
       ],
     },

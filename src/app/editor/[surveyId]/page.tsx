@@ -33,7 +33,7 @@ export default async function SurveyEditorPage({
   }
 
   return (
-    <div className="container max-w-7xl py-8 md:py-12">
+    <div className="container max-w-5xl py-8 md:py-12">
       <header className="mb-8">
         <h1 className="scroll-m-20 text-4xl font-bold tracking-tight text-primary lg:text-5xl font-headline">
           Editing: {surveyData.title}
