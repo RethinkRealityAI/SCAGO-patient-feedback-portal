@@ -17,10 +17,11 @@ export async function getSurvey(id: string) {
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      // If survey doesn't exist, return our default template.
+      // If survey doesn't exist, return our default template with the requested ID.
       // This allows the editor to create the survey from the template on first save.
-      // We return a copy to avoid potential mutation issues.
-      return JSON.parse(JSON.stringify(defaultSurvey));
+      const newSurvey = JSON.parse(JSON.stringify(defaultSurvey));
+      newSurvey.id = id;
+      return newSurvey;
     }
   } catch (e) {
     console.error('Error getting survey:', e);
@@ -36,8 +37,20 @@ export async function updateSurvey(
   data: z.infer<typeof surveyActionSchema>
 ): Promise<{ error?: string }> {
   try {
+    // Firestore requires a non-empty ID
+    if (!id) {
+        return { error: 'The survey ID is missing. Cannot save.' };
+    }
+
+    // Make a copy to avoid mutating the original form values
+    const dataToSave = { ...data };
+
+    // The survey ID is the document's name and should not be a field within the document.
+    // This defensively removes it in case it was accidentally included in the form data.
+    delete dataToSave.id;
+
     const surveyRef = doc(db, 'surveys', id);
-    await setDoc(surveyRef, data, { merge: true });
+    await setDoc(surveyRef, dataToSave, { merge: true });
 
     // Revalidate the path to ensure the survey page shows the updated form
     revalidatePath(`/survey/${id}`);
