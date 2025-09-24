@@ -1,194 +1,140 @@
-// This file contains the default structure for the main patient feedback survey.
-// It is used to seed the database if no survey document is found.
+import { nanoid } from 'nanoid';
+
+// NOTE: The 'id' of each field must match the camelCase property name
+// in the FeedbackSubmission interface (src/app/dashboard/types.ts)
 
 export const defaultSurvey = {
-  id: 'main-feedback',
-  title: 'Patient Care Feedback Form',
-  description:
-    'This form is for collecting feedback on patient experiences with the Ontario healthcare system.',
+  title: 'Patient Feedback Survey',
+  description: 'The following information will help us understand the scope of the situation. Kindly provide as much information as you can.',
   sections: [
     {
-      id: 'personal-info',
-      title: 'Personal Information',
-      description:
-        'Please provide some basic information. This section is optional.',
+      id: 'quality-of-care-section',
+      title: 'Section 1: Perception Around Quality of Care',
+      description: 'Please provide as much information as you can.',
       fields: [
-        {
-          id: 'isAnonymous',
-          label: 'I prefer to submit my feedback anonymously',
-          type: 'boolean-checkbox',
-          defaultValue: false,
-        },
-        {
-          id: 'personal-details',
-          type: 'group',
-          conditionField: 'isAnonymous',
-          conditionValue: false,
-          label: 'Personal Details',
-          fields: [
-            {
-              id: 'name',
-              label: 'Name',
-              type: 'text',
-              placeholder: 'Your Name',
-            },
-            {
-              id: 'email',
-              label: 'Email Address',
-              type: 'email',
-              placeholder: 'your.email@example.com',
-            },
-          ],
-        },
         {
           id: 'patientOrCaregiver',
           label: 'Are you a patient or a caregiver?',
           type: 'radio',
-          required: true,
           options: [
-            { label: 'Patient', value: 'patient' },
-            { label: 'Caregiver', value: 'caregiver' },
+            { id: nanoid(), label: 'Patient', value: 'patient' },
+            { id: nanoid(), label: 'Caregiver', value: 'caregiver' },
           ],
         },
-      ],
-    },
-    {
-      id: 'hospital-interaction',
-      title: 'Hospital Interaction Details',
-      description:
-        'Tell us about the specific interaction you are providing feedback on.',
-      fields: [
         {
-          id: 'location',
-          label: 'Name of Hospital / Health Centre',
-          type: 'text',
-          placeholder: 'e.g., Toronto General Hospital',
-          required: true,
+            id: 'provider-names-group',
+            type: 'group',
+            fields: [
+                {
+                  id: 'physicianName',
+                  label: 'Name of Physician',
+                  type: 'text',
+                  placeholder: 'Dr. Smith',
+                },
+                {
+                  id: 'triageNurseName',
+                  label: 'Name of Triage Nurse',
+                  type: 'text',
+                  placeholder: 'Nurse Jackie',
+                },
+            ]
         },
         {
-          id: 'interaction-date',
-          label: 'Interaction Date',
-          type: 'group',
-          fields: [
-            {
-              id: 'interactionMonth',
-              label: 'Month of Interaction',
-              type: 'select',
-              placeholder: 'Select a month',
-              options: [
-                { value: 'January', label: 'January' },
-                { value: 'February', label: 'February' },
-                { value: 'March', label: 'March' },
-                { value: 'April', label: 'April' },
-                { value: 'May', label: 'May' },
-                { value: 'June', label: 'June' },
-                { value: 'July', label: 'July' },
-                { value: 'August', label: 'August' },
-                { value: 'September', label: 'September' },
-                { value: 'October', label: 'October' },
-                { value: 'November', label: 'November' },
-                { value: 'December', label: 'December' },
-              ],
-            },
-            {
-              id: 'interactionYear',
-              label: 'Year of Interaction',
-              type: 'text',
-              placeholder: 'e.g., 2024',
-            },
-          ],
+          id: 'firstReception',
+          label: 'How was the reception with the FIRST person encountered? (Such as triage RN?)',
+          type: 'textarea',
         },
         {
           id: 'visitReason',
-          label: 'What was the primary reason for this hospital interaction?',
+          label: 'Reason for this visit? (e.g., pain, fever, surgery, regular visit)',
           type: 'text',
-          placeholder: 'e.g., Vaso-occlusive Crisis (VOC)',
         },
         {
           id: 'inPainCrisis',
-          label:
-            'Were you in a pain crisis (VOC) during this interaction?',
+          label: 'Were you in the hospital for pain crisis?',
           type: 'radio',
           options: [
-            { label: 'Yes', value: 'yes' },
-            { label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
           ],
         },
         {
-          id: 'analgesiaTime',
-          label:
-            'How long did it take to receive analgesia (pain relief) from the time you presented at triage?',
-          type: 'select',
-          conditionField: 'inPainCrisis',
-          conditionValue: 'yes',
-          placeholder: 'Select a time frame',
+          id: 'admittedToWard',
+          label: 'Were you admitted to inpatient ward?',
+          type: 'radio',
           options: [
-            { value: '0-30', label: '0-30 minutes' },
-            { value: '31-60', label: '31-60 minutes' },
-            { value: '61-90', label: '61-90 minutes' },
-            { value: '91-120', label: '91-120 minutes' },
-            { value: '120+', label: 'More than 2 hours' },
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
           ],
         },
-      ],
-    },
-    {
-      id: 'care-experience',
-      title: 'Care Experience',
-      description:
-        'Please describe the quality of care you received during your visit.',
-      fields: [
+        {
+          id: 'timelyMedications',
+          label: 'Did you receive timely medications while in the hospital?',
+          type: 'radio',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+        {
+          id: 'hospitalStayLength',
+          label: 'How long was your hospital stay? (e.g., 5 hours, 2 days):',
+          type: 'text',
+        },
         {
           id: 'hcpFamiliarity',
-          label:
-            'How familiar were the healthcare providers with Sickle Cell Disease?',
-          type: 'radio',
+          label: 'How familiar were the health care providers (HCP) with your condition?',
+          type: 'select',
           options: [
-            { label: 'Very Familiar', value: 'very_familiar' },
-            { label: 'Somewhat Familiar', value: 'somewhat_familiar' },
-            { label: 'Not Familiar', value: 'not_familiar' },
+            { id: nanoid(), label: 'Very Familiar', value: 'very-familiar' },
+            { id: nanoid(), label: 'Somewhat Familiar', value: 'somewhat-familiar' },
+            { id: nanoid(), label: 'Not Familiar', value: 'not-familiar' },
           ],
+        },
+        {
+          id: 'hcpRespectfulness',
+          label: 'How respectful were the HCPs of your needs and concerns?',
+          type: 'textarea',
         },
         {
           id: 'experienced',
-          label: 'Did you experience any of the following? (Select all that apply)',
+          label: 'Did you experience any of the following AS A RESULT of you seeking treatment during this interaction?',
           type: 'checkbox',
           options: [
-            { value: 'attentive_staff', label: 'Staff were attentive and caring' },
-            { value: 'long_wait_times', label: 'Long wait times' },
-            { value: 'clear_communication', label: 'Communication was clear and helpful' },
-            { value: 'dismissive_attitude', label: 'Staff had a dismissive or unbelieving attitude' },
-            { value: 'effective_pain_management', label: 'Pain was managed effectively' },
-            { value: 'lack_of_empathy', label: 'Lack of empathy or understanding from staff' },
+            { id: nanoid(), label: 'Stigmatization or stereotyping', value: 'stigmatization-stereotyping' },
+            { id: nanoid(), label: 'Anxiety', value: 'anxiety' },
+            { id: nanoid(), label: 'Helplessness or Isolation', value: 'helplessness-isolation' },
+            { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
-        {
-          id: 'feedbackText',
-          label: 'Please describe your experience in your own words.',
-          type: 'textarea',
-          placeholder: 'Share details about what went well and what could be improved. Your feedback is valuable.',
-        },
-        {
-            id: 'rating',
-            label: 'Overall, how would you rate your experience?',
-            type: 'rating',
-            required: true,
-        }
       ],
     },
     {
-      id: 'follow-up',
-      title: 'Reporting and Follow-Up',
-      description:
-        'Please provide information about any follow-up actions taken.',
+      id: 'action-follow-up-section',
+      title: 'Section 2: Action and Follow-up',
+      description: 'This section helps us understand what actions were taken after your interaction.',
       fields: [
         {
-          id: 'reportedToHospital',
-          label: 'Did you report this experience to the hospital leadership or Patient Ombudsman?',
+          id: 'investigationConducted',
+          label: 'If an investigation was conducted, what were the results?',
+          type: 'textarea',
+        },
+        {
+          id: 'concernsAddressed',
+          label: 'Were your concerns adequately addressed?',
           type: 'radio',
           options: [
-            { label: 'Yes', value: 'yes' },
-            { label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+        {
+          id: 'reportedToHospital',
+          label: 'Was this reported to the hospital Patient Relations/Ombudsman?',
+          type: 'radio',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
           ],
         },
         {
@@ -197,29 +143,64 @@ export const defaultSurvey = {
           type: 'textarea',
           conditionField: 'reportedToHospital',
           conditionValue: 'yes',
-          placeholder: 'Describe the response or resolution you received.',
         },
         {
           id: 'reportNotDoneReason',
-          label: 'If no, why did you not report it?',
-          type: 'select',
+          label: 'If no, please select the reason why.',
+          type: 'radio',
+          options: [
+            { id: nanoid(), label: 'Did not know how to report', value: 'did-not-know' },
+            { id: nanoid(), label: 'I was afraid of repercussions', value: 'afraid' },
+            { id: nanoid(), label: 'Previous reports were not addressed', value: 'not-addressed' },
+            { id: nanoid(), label: 'Other', value: 'other' },
+          ],
           conditionField: 'reportedToHospital',
           conditionValue: 'no',
-          placeholder: 'Select a reason',
-          options: [
-            { value: 'did_not_know_how', label: 'I did not know how to report it' },
-            { value: 'fear_of_reprisal', label: 'I was afraid of negative consequences' },
-            { value: 'effort_too_high', label: 'It seemed like too much effort' },
-            { value: 'felt_powerless', label: 'I felt it would not make a difference' },
-            { value: 'other', label: 'Other' },
+        },
+        {
+          id: 'interaction-date-group',
+          type: 'group',
+          label: 'Please specify month and year of interaction.',
+          fields: [
+            {
+              id: 'interactionMonth',
+              label: 'Month',
+              type: 'text',
+              placeholder: 'e.g., January',
+            },
+            {
+              id: 'interactionYear',
+              label: 'Year',
+              type: 'text',
+              placeholder: 'e.g., 2024',
+            },
           ],
         },
         {
-            id: 'contactForAdvocacy',
-            label: 'A SCAGO advocate may contact you for more information to support our advocacy efforts. Do you consent to be contacted?',
-            type: 'boolean-checkbox',
-            description: 'Your contact information will only be used for this purpose and will not be shared without your explicit consent.'
-        }
+          id: 'hospitalUnit',
+          label: 'What hospital unit/department did this interaction occur?',
+          type: 'text',
+        },
+        {
+          id: 'clinicianNames',
+          label: 'Please list the names of any clinicians you remember during this interaction.',
+          type: 'textarea',
+        },
+        {
+          id: 'hospitalInteraction',
+          label: 'Please describe your hospital interaction experience.',
+          type: 'textarea',
+        },
+        {
+          id: 'contactForAdvocacy',
+          label: 'Would you like to be contacted by SCAGO for advocacy and support?',
+          type: 'boolean-checkbox',
+        },
+        {
+          id: 'rating',
+          label: 'Overall Experience Rating',
+          type: 'rating',
+        },
       ],
     },
   ],
