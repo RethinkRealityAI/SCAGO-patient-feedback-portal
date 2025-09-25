@@ -1,14 +1,8 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { ReadableStream } from "node:stream/web";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
-
-// Fix Firebase ReadableStream compatibility issue
-if (typeof globalThis.ReadableStream === 'undefined') {
-  globalThis.ReadableStream = ReadableStream;
-}
 
 // Your web app's Firebase configuration
 // This is now read from environment variables to keep keys secure
