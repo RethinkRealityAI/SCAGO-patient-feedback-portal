@@ -12,7 +12,9 @@ type SurveyEditorPageProps = {
 export default async function SurveyEditorPage({
   params,
 }: SurveyEditorPageProps) {
-  const surveyData = await getSurvey(params.surveyId);
+  const { surveyId } = await params;
+  const { surveyId } = await params;
+  const surveyData = await getSurvey(surveyId);
 
   if ('error' in surveyData) {
     return (
