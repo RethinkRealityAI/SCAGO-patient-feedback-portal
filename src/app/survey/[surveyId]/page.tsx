@@ -10,7 +10,8 @@ type SurveyPageProps = {
 };
 
 export default async function SurveyPage({ params }: SurveyPageProps) {
-  const surveyData = await getSurvey(params.surveyId);
+  const { surveyId } = await params;
+  const surveyData = await getSurvey(surveyId);
 
   if ('error' in surveyData) {
     return (
