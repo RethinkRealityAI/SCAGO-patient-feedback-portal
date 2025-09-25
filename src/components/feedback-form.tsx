@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+import { useForm, useFormContext } from "react-hook-form"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,36 +35,72 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { provinces, ontarioCities } from "@/lib/location-data"
+import { ontarioHospitals } from "@/lib/hospital-names"
 
-function buildZodSchema(fields: any[]) {
-    const schema: Record<string, any> = {};
-    fields.forEach((field: any) => {
+// Define a more specific type for your field configuration
+type FieldDef = {
+    id: string;
+    type: string;
+    label: string;
+    options?: { label: string; value: string }[];
+    validation?: {
+        required?: boolean;
+        pattern?: string;
+    };
+    conditionField?: string;
+    conditionValue?: string;
+    fields?: FieldDef[];
+};
+
+
+function buildZodSchema(fields: FieldDef[]) {
+    const schema: Record<string, z.ZodTypeAny> = {};
+    fields.forEach((field) => {
       let fieldSchema: z.ZodTypeAny;
-  
+
+      // Helper to safely create a RegExp
+      const createRegExp = (pattern: string) => {
+        try {
+          return new RegExp(pattern);
+        } catch (e) {
+          try {
+            return new RegExp(JSON.parse(`"${pattern}"`));
+          } catch (e2) {
+            console.error("Invalid regex pattern:", pattern);
+            return new RegExp('(?!)');
+          }
+        }
+      }
+
       switch (field.type) {
         case 'text':
-        case 'textarea':
-          fieldSchema = z.string();
+        case 'textarea': {
+          let stringSchema = z.string();
           if (field.validation?.pattern) {
-            fieldSchema = fieldSchema.regex(new RegExp(field.validation.pattern), 'Invalid format.');
+            stringSchema = stringSchema.regex(createRegExp(field.validation.pattern), 'Invalid format.');
           }
+          fieldSchema = stringSchema;
           break;
-        case 'email':
-          fieldSchema = z.string().email('Invalid email address.');
+        }
+        case 'email': {
+          let emailSchema = z.string().email('Invalid email address.');
           if (field.validation?.pattern) {
-            fieldSchema = fieldSchema.regex(new RegExp(field.validation.pattern), 'Invalid format.');
+            emailSchema = emailSchema.regex(createRegExp(field.validation.pattern), 'Invalid format.');
           }
+          fieldSchema = emailSchema;
           break;
-        case 'phone':
-            fieldSchema = z.string();
-            // Use user-defined pattern if available, otherwise use a default
+        }
+        case 'phone': {
+            let phoneSchema = z.string();
             const phoneRegex = field.validation?.pattern
-              ? new RegExp(field.validation.pattern)
+              ? createRegExp(field.validation.pattern)
               : /^\d{10}$/;
-            fieldSchema = fieldSchema.regex(phoneRegex, 'Invalid phone number format.');
-          break;
+            phoneSchema = phoneSchema.regex(phoneRegex, 'Invalid phone number format.');
+            fieldSchema = phoneSchema;
+            break;
+        }
         case 'date':
             fieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD).');
             break;
@@ -73,9 +109,35 @@ function buildZodSchema(fields: any[]) {
             break;
         case 'select':
         case 'province-ca':
-        case 'city-on':
           fieldSchema = z.string();
           break;
+        case 'city-on':
+        case 'hospital-on':
+            fieldSchema = z.object({
+                selection: z.string(),
+                other: z.string().optional(),
+            }).refine(data => {
+                if (data.selection === 'other') {
+                    return !!data.other;
+                }
+                return true;
+            }, {
+                message: 'Please specify',
+                path: ['other'],
+            });
+            break;
+        case 'duration-hm':
+            fieldSchema = z.object({
+                hours: z.coerce.number().min(0),
+                minutes: z.coerce.number().min(0).max(59),
+            });
+            break;
+        case 'duration-dh':
+            fieldSchema = z.object({
+                days: z.coerce.number().min(0),
+                hours: z.coerce.number().min(0).max(23),
+            });
+            break;
         case 'radio':
           fieldSchema = z.string();
           break;
@@ -92,8 +154,8 @@ function buildZodSchema(fields: any[]) {
         default:
           fieldSchema = z.any();
       }
-  
-      if (field.validation?.required) {
+
+      if (field.validation?.required && !['city-on', 'hospital-on'].includes(field.type)) {
         if (fieldSchema instanceof z.ZodString) {
             fieldSchema = fieldSchema.min(1, 'This field is required.');
         } else if (fieldSchema instanceof z.ZodArray) {
@@ -102,7 +164,7 @@ function buildZodSchema(fields: any[]) {
       } else {
         fieldSchema = fieldSchema.optional();
       }
-      
+
       schema[field.id] = fieldSchema;
     });
     return z.object(schema);
@@ -131,7 +193,7 @@ function Rating({ field }: { field: any }) {
         </div>
     );
 }
-  
+
 function NpsScale({ field }: { field: any }) {
     return (
         <div className="flex flex-wrap gap-2">
@@ -153,7 +215,133 @@ function NpsScale({ field }: { field: any }) {
     );
 }
 
-function renderField(fieldConfig: any, form: any) {
+function SelectWithOtherField({ field, options, label }: { field: any; options: { label: string; value: string }[]; label: string; }) {
+    const { control, watch } = useFormContext();
+    const selection = watch(`${field.name}.selection`);
+
+    return (
+        <div className="space-y-4">
+            <FormField
+                control={control}
+                name={`${field.name}.selection`}
+                render={({ field: selectionField }) => (
+                    <FormItem>
+                        <FormLabel>{label}</FormLabel>
+                        <Select onValueChange={selectionField.onChange} defaultValue={selectionField.value ?? ''}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={`Select a ${label.toLowerCase()}`} />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+            {selection === 'other' && (
+                <FormField
+                    control={control}
+                    name={`${field.name}.other`}
+                    render={({ field: otherField }) => (
+                        <FormItem>
+                            <FormLabel>Please specify the {label.toLowerCase()}</FormLabel>
+                            <FormControl>
+                                <Input {...otherField} value={otherField.value ?? ''} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            )}
+        </div>
+    );
+}
+
+function OntarioCityField({ field }: { field: any }) {
+    return <SelectWithOtherField field={field} options={ontarioCities} label="City" />;
+}
+
+function OntarioHospitalField({ field }: { field: any }) {
+    return <SelectWithOtherField field={field} options={ontarioHospitals} label="Hospital" />;
+}
+
+function DurationHmField({ field }: { field: any }) {
+    const { control } = useFormContext();
+    return (
+        <div className="flex items-center gap-4">
+            <FormField
+                control={control}
+                name={`${field.name}.hours`}
+                render={({ field: hoursField }) => (
+                    <FormItem>
+                        <FormLabel>Hours</FormLabel>
+                        <FormControl>
+                            <Input type="number" min="0" {...hoursField} value={hoursField.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+            <FormField
+                control={control}
+                name={`${field.name}.minutes`}
+                render={({ field: minutesField }) => (
+                    <FormItem>
+                        <FormLabel>Minutes</FormLabel>
+                        <FormControl>
+                            <Input type="number" min="0" max="59" {...minutesField} value={minutesField.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+        </div>
+    );
+}
+
+function DurationDhField({ field }: { field: any }) {
+    const { control } = useFormContext();
+    return (
+        <div className="flex items-center gap-4">
+            <FormField
+                control={control}
+                name={`${field.name}.days`}
+                render={({ field: daysField }) => (
+                    <FormItem>
+                        <FormLabel>Days</FormLabel>
+                        <FormControl>
+                            <Input type="number" min="0" {...daysField} value={daysField.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+            <FormField
+                control={control}
+                name={`${field.name}.hours`}
+                render={({ field: hoursField }) => (
+                    <FormItem>
+                        <FormLabel>Hours</FormLabel>
+                        <FormControl>
+                            <Input type="number" min="0" max="23" {...hoursField} value={hoursField.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+        </div>
+    );
+}
+
+
+function renderField(fieldConfig: FieldDef, form: any) {
   const { control } = form;
 
   return (
@@ -166,26 +354,26 @@ function renderField(fieldConfig: any, form: any) {
           <FormLabel>{fieldConfig.label}</FormLabel>
           <FormControl>
             {(() => {
-              switch (fieldConfig.type) {
+                const fieldWithValue = { ...field, value: field.value ?? '' };
+                switch (fieldConfig.type) {
                 case 'text':
                 case 'email':
                 case 'phone':
                 case 'date':
                 case 'number':
-                  return <Input type={fieldConfig.type} {...field} />;
+                  return <Input type={fieldConfig.type} {...fieldWithValue} />;
                 case 'textarea':
-                  return <Textarea {...field} />;
+                  return <Textarea {...fieldWithValue} />;
                 case 'select':
                 case 'province-ca':
-                case 'city-on':
-                    const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.type === 'city-on' ? ontarioCities : fieldConfig.options;
+                    const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
                     return (
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <SelectTrigger>
                             <SelectValue placeholder="Select an option" />
                             </SelectTrigger>
                             <SelectContent>
-                            {options.map((option: any) => (
+                            {options.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                                 </SelectItem>
@@ -193,10 +381,18 @@ function renderField(fieldConfig: any, form: any) {
                             </SelectContent>
                         </Select>
                     );
+                case 'city-on':
+                    return <OntarioCityField field={field} />;
+                case 'hospital-on':
+                    return <OntarioHospitalField field={field} />;
+                case 'duration-hm':
+                    return <DurationHmField field={field} />;
+                case 'duration-dh':
+                    return <DurationDhField field={field} />;
                 case 'radio':
                   return (
                     <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                      {fieldConfig.options.map((option: any) => (
+                      {fieldConfig.options?.map((option) => (
                         <FormItem key={option.value} className="flex items-center space-x-3 space-y-0">
                           <FormControl>
                             <RadioGroupItem value={option.value} />
@@ -209,7 +405,7 @@ function renderField(fieldConfig: any, form: any) {
                 case 'checkbox':
                     return (
                         <div className="space-y-2">
-                          {fieldConfig.options.map((option: any) => (
+                          {fieldConfig.options?.map((option) => (
                             <FormItem key={option.value} className="flex flex-row items-start space-x-3 space-y-0">
                                 <FormControl>
                                     <Checkbox
@@ -236,7 +432,7 @@ function renderField(fieldConfig: any, form: any) {
                 case 'nps':
                     return <NpsScale field={field} />;
                 default:
-                  return <Input {...field} />;
+                  return <Input {...fieldWithValue} />;
               }
             })()}
           </FormControl>
@@ -250,10 +446,10 @@ function renderField(fieldConfig: any, form: any) {
 export default function FeedbackForm({ survey }: { survey: any }) {
     const { toast } = useToast();
     const [isSubmitted, setIsSubmitted] = useState(false);
-  
+
     // Flatten all fields from all sections
-    const allFields = survey.sections.flatMap((section: any) => section.fields);
-  
+    const allFields: FieldDef[] = survey.sections.flatMap((section: any) => section.fields);
+
     const formSchema = buildZodSchema(allFields);
     const form = useForm<z.infer<typeof formSchema>>({
       resolver: zodResolver(formSchema),
@@ -262,11 +458,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const { isSubmitting } = formState;
 
     // A map to quickly look up field definitions
-    const fieldMap = new Map(allFields.map((f: any) => [f.id, f]));
+    const fieldMap = new Map(allFields.map((f) => [f.id, f]));
 
     // Watch all form values to evaluate conditional logic
     const watchedValues = watch();
-  
+
     async function onSubmit(values: z.infer<typeof formSchema>) {
         const result = await submitFeedback(survey.id, values);
         if (result.error) {
@@ -291,7 +487,29 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             </Card>
         );
     }
-  
+
+    const shouldShowField = (fieldDef: FieldDef) => {
+        if (!fieldDef.conditionField) {
+            return true;
+        }
+    
+        const conditionFieldId = fieldDef.conditionField;
+        const expectedValue = fieldDef.conditionValue;
+        const actualValue = watchedValues[conditionFieldId];
+    
+        const conditionField = fieldMap.get(conditionFieldId);
+        if (!conditionField) {
+            return true; 
+        }
+    
+        if (conditionField.type === 'boolean-checkbox') {
+            const expectedBoolean = expectedValue === 'true';
+            return actualValue === expectedBoolean;
+        }
+    
+        return actualValue === expectedValue;
+    };
+
     return (
       <Card className="w-full max-w-2xl mx-auto">
         <CardHeader>
@@ -308,15 +526,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             {section.description && <p className="text-sm text-muted-foreground">{section.description}</p>}
                         </div>
 
-                        {section.fields.map((field: any) => {
+                        {section.fields.map((field: FieldDef) => {
                             if (field.type === 'group') {
                                 return (
                                     <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {field.fields.map((subField: any) => {
+                                        {field.fields?.map((subField) => {
                                              const subFieldDef = fieldMap.get(subField.id);
-                                             if (!subFieldDef) return null;
-                                             // Check conditional logic
-                                             if (subFieldDef.conditionField && watchedValues[subFieldDef.conditionField] !== subFieldDef.conditionValue) {
+                                             if (!subFieldDef || !shouldShowField(subFieldDef)) {
                                                 return null;
                                             }
                                             return renderField(subFieldDef, form);
@@ -325,13 +541,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                                 )
                             }
                             const fieldDef = fieldMap.get(field.id);
-                            if (!fieldDef) return null;
-                            
-                            // Check conditional logic
-                            if (fieldDef.conditionField && watchedValues[fieldDef.conditionField] !== fieldDef.conditionValue) {
+                            if (!fieldDef || !shouldShowField(fieldDef)) {
                                 return null;
                             }
-                            
+
                             return renderField(fieldDef, form);
                         })}
                     </div>

@@ -13,8 +13,20 @@ import {
 import { revalidatePath } from 'next/cache';
 import { defaultSurvey } from '@/lib/survey-template';
 
-// We just need a Zod schema to represent the data object coming from the form.
 const surveyActionSchema = z.record(z.any());
+
+export async function createSurvey() {
+  const newSurveyRef = doc(collection(db, 'surveys'));
+  const newSurvey = {
+    ...defaultSurvey,
+    name: 'Untitled Survey',
+  };
+
+  await setDoc(newSurveyRef, newSurvey);
+
+  revalidatePath('/editor');
+  return { id: newSurveyRef.id };
+}
 
 export async function listSurveys() {
   try {
@@ -42,8 +54,6 @@ export async function getSurvey(id: string) {
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      // If survey doesn't exist, return our default template with the requested ID.
-      // This allows the editor to create the survey from the template on first save.
       const newSurvey = JSON.parse(JSON.stringify(defaultSurvey));
       newSurvey.id = id;
       return newSurvey;
@@ -65,22 +75,16 @@ export async function updateSurvey(
   data: z.infer<typeof surveyActionSchema>
 ): Promise<{ error?: string }> {
   try {
-    // Firestore requires a non-empty ID
     if (!id) {
       return { error: 'The survey ID is missing. Cannot save.' };
     }
 
-    // Make a copy to avoid mutating the original form values
     const dataToSave = { ...data };
-
-    // The survey ID is the document's name and should not be a field within the document.
-    // This defensively removes it in case it was accidentally included in the form data.
     delete dataToSave.id;
 
     const surveyRef = doc(db, 'surveys', id);
     await setDoc(surveyRef, dataToSave, { merge: true });
 
-    // Revalidate the path to ensure the survey page shows the updated form
     revalidatePath(`/survey/${id}`);
     revalidatePath(`/editor/${id}`);
     revalidatePath('/editor');
@@ -111,7 +115,6 @@ export async function deleteSurvey(id: string): Promise<{ error?: string }> {
     const surveyRef = doc(db, 'surveys', id);
     await deleteDoc(surveyRef);
 
-    // Revalidate paths to reflect the deletion
     revalidatePath('/editor');
     revalidatePath('/');
 
