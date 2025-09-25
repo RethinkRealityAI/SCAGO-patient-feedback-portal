@@ -1,33 +1,51 @@
-"use server";
+'use server';
 
-import { z } from 'zod';
 import { db } from '@/lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 
-// We just need a Zod schema to represent the data object coming from the form.
-// We aren't doing any strict validation here as the form has its own client-side validation.
-const feedbackActionSchema = z.record(z.any());
+export async function getSurveys() {
+  try {
+    const surveysCollection = collection(db, 'surveys');
+    const snapshot = await getDocs(surveysCollection);
+    if (snapshot.empty) {
+      return [];
+    }
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      title: doc.data().title || 'Untitled Survey',
+      description: doc.data().description || 'No description.',
+    }));
+  } catch (e) {
+    console.error('Error listing surveys:', e);
+    return [];
+  }
+}
 
 export async function submitFeedback(
-  data: z.infer<typeof feedbackActionSchema>
+  surveyId: string,
+  formData: Record<string, any>
 ): Promise<{ error?: string }> {
-  
   try {
-    // Save the full feedback to Firestore
-    await addDoc(collection(db, "feedback"), {
-      ...data,
-      submittedAt: new Date(),
-    });
-
-    // Return an empty object on success
+    if (!surveyId) {
+      return { error: 'Survey ID is missing.' };
+    }
+    const submissionData = {
+      ...formData,
+      surveyId,
+      submittedAt: serverTimestamp(),
+    };
+    await addDoc(collection(db, 'submissions'), submissionData);
     return {};
   } catch (e) {
-    console.error(e);
-    // Provide a more specific error message if it's a Firestore permission issue.
+    console.error('Error submitting feedback:', e);
     if (e instanceof Error && e.message.includes('permission-denied')) {
-        return { error: 'Submission failed due to a permission error. Please check your Firestore security rules.' };
+      return {
+        error: 'Could not submit feedback due to a permission error.',
+      };
     }
-    // Return a generic error for other issues.
-    return { error: 'An unexpected error occurred while saving your feedback. Please try again later.' };
+    return {
+      error:
+        'An unexpected error occurred while submitting your feedback.',
+    };
   }
 }

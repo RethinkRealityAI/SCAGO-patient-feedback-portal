@@ -23,15 +23,28 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
+import { regexPresets } from '@/lib/regex-presets';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
-const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({ id: z.string(), label: z.string().min(1, 'Question label is required.'), type: z.enum(['text', 'textarea', 'email', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox']), options: z.array(optionSchema).optional(), fields: z.array(fieldSchema).optional(), conditionField: z.string().optional(), conditionValue: z.string().optional() }));
+const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
+  id: z.string(),
+  label: z.string().min(1, 'Question label is required.'),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'province-ca', 'city-on']),
+  options: z.array(optionSchema).optional(),
+  fields: z.array(fieldSchema).optional(),
+  conditionField: z.string().optional(),
+  conditionValue: z.string().optional(),
+  validation: z.object({
+    required: z.boolean().optional(),
+    pattern: z.string().optional(),
+  }).optional(),
+}));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), fields: z.array(fieldSchema) });
 const surveySchema = z.object({ title: z.string().min(1, 'Survey title is required.'), description: z.string().optional(), sections: z.array(sectionSchema) });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
-interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; conditionField?: string; conditionValue?: any; }
+interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; conditionField?: string; conditionValue?: any; validation?: { required?: boolean; pattern?: string; }; }
 
 // Event handler to prevent dnd-kit from capturing clicks on interactive elements
 const stopPropagation = (e: React.PointerEvent) => e.stopPropagation();
@@ -49,7 +62,10 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
   const field = watch(fieldPath);
   const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({ control, name: `${fieldPath}.options` });
 
-  const handleTypeChange = (newType: string) => setValue(fieldPath, { ...field, type: newType, options: [] });
+  const handleTypeChange = (newType: string) => {
+    setValue(`${fieldPath}.type`, newType as any);
+    setValue(`${fieldPath}.options`, []);
+  };
 
   const availableConditionalFields = useMemo(() => {
     const allFields: { label: string; value: string }[] = [];
@@ -57,7 +73,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
     sections.forEach(section => {
         section.fields.forEach(f => {
             if (f.id === field.id) return;
-            if (['radio', 'select', 'boolean-checkbox'].includes(f.type)) {
+            if (['radio', 'select', 'boolean-checkbox', 'province-ca', 'city-on'].includes(f.type)) {
                 allFields.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
             }
         })
@@ -77,11 +93,13 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
     }
     return null;
   }, [conditionalFieldId, getValues]);
-  
+
   const clearConditionalLogic = () => {
     setValue(`${fieldPath}.conditionField`, '');
     setValue(`${fieldPath}.conditionValue`, '');
   };
+
+  const showOptions = ['select', 'radio', 'checkbox'].includes(field.type);
 
   return (
     <Card className="bg-muted/30 relative">
@@ -114,18 +132,24 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
               <SelectContent>
                 <SelectItem value="text">Text</SelectItem>
                 <SelectItem value="textarea">Text Area</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+                <SelectItem value="phone">Phone</SelectItem>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="number">Number</SelectItem>
                 <SelectItem value="rating">Rating (1-5 Stars)</SelectItem>
                 <SelectItem value="nps">NPS Scale (1-10)</SelectItem>
                 <SelectItem value="select">Select</SelectItem>
                 <SelectItem value="radio">Radio</SelectItem>
                 <SelectItem value="checkbox">Checkbox</SelectItem>
                 <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
+                <SelectItem value="province-ca">Province (Canada)</SelectItem>
+                <SelectItem value="city-on">City (Ontario)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
           </FormItem>
         )} />
-        {(['select', 'radio', 'checkbox'].includes(field.type)) && (
+        {showOptions && (
           <div className="space-y-2">
             <Label>Options</Label>
             {options.map((option, optionIndex) => (
@@ -139,6 +163,51 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
           </div>
         )}
         <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="validation">
+                <AccordionTrigger onPointerDown={stopPropagation}>Validation</AccordionTrigger>
+                <AccordionContent className="p-4 space-y-4">
+                  <FormField control={control} name={`${fieldPath}.validation.required`} render={({ field: formField }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Required</FormLabel><FormDescription>Is this question mandatory?</FormDescription></div><FormControl><Switch checked={formField.value} onCheckedChange={formField.onChange} onPointerDown={stopPropagation} /></FormControl></FormItem>)} />
+                  {['text', 'textarea', 'email', 'phone'].includes(field.type) && (
+                    <>
+                        <FormField control={control} name={`${fieldPath}.validation.pattern`} render={({ field: { onChange, ...formField } }) => (
+                            <FormItem>
+                            <FormLabel>Pattern (Regex)</FormLabel>
+                            <FormControl>
+                                <Input
+                                {...formField}
+                                onChange={onChange}
+                                value={formField.value ?? ''}
+                                onPointerDown={stopPropagation}
+                                />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )} />
+
+                        <FormField control={control} name={`${fieldPath}.validation.pattern`} render={({ field: { onChange, ...formField } }) => (
+                            <FormItem>
+                            <FormLabel>Regex Presets</FormLabel>
+                            <Select onValueChange={(value) => onChange(value)} value={formField.value ?? ''}>
+                                <FormControl>
+                                <SelectTrigger onPointerDown={stopPropagation}>
+                                    <SelectValue placeholder="Select a preset..." />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                {regexPresets.map((preset) => (
+                                    <SelectItem key={preset.label} value={preset.value}>
+                                    {preset.label}
+                                    </SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )} />
+                    </>
+                  )}
+                </AccordionContent>
+            </AccordionItem>
             <AccordionItem value="conditional-logic">
                 <AccordionTrigger onPointerDown={stopPropagation}>Conditional Logic</AccordionTrigger>
                 <AccordionContent className="p-4 space-y-4">
@@ -187,7 +256,7 @@ const SortableSection = ({ section, sectionIndex, removeSection, registerMoveFie
           <div {...attributes} {...listeners} className="cursor-grab p-2" onPointerDown={stopPropagation}><GripVertical /></div>
           <FormField control={control} name={`sections.${sectionIndex}.title`} render={({ field }) => <Input {...field} value={field.value ?? ''} onPointerDown={stopPropagation} className="text-xl font-semibold tracking-tight text-primary border-0 bg-transparent p-0 h-auto focus-visible:ring-0" />} />
         </AccordionTrigger>
-        <AccordionContent forceMount className="p-6 space-y-6 border-t">
+        <AccordionContent className="p-6 space-y-6 border-t">
           <SortableContext items={fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-4">
               {fields.map((field, fieldIndex) => (<SortableField key={field.id} {...{ field, sectionIndex, fieldIndex, remove, move, totalFields: fields.length, overId }} />))}
@@ -213,8 +282,8 @@ const SortableField = ({ field, sectionIndex, fieldIndex, remove, move, totalFie
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id, data: { type: 'field', sectionIndex } });
   const isOver = overId === field.id;
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "bg-blue-100 dark:bg-blue-900/20", "rounded-lg")}>
-      <FieldEditor {...{ fieldPath: `sections.${sectionIndex}.fields.${fieldIndex}`, fieldIndex, remove, move, totalFields, listeners, attributes }} />
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "bg-blue-100 dark:bg-blue-900/20", "rounded-lg")} {...attributes}>
+      <FieldEditor {...{ fieldPath: `sections.${sectionIndex}.fields.${fieldIndex}`, fieldIndex, remove, move, totalFields, listeners }} />
     </div>
   );
 };
@@ -232,7 +301,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   const registerMoveField = useCallback((index: number, moveFn: (from: number, to: number) => void) => { moveFieldFns.current[index] = moveFn; }, []);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(CustomKeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   useEffect(() => { setIsMounted(true); }, []);
-  
+
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const item = sections.find(s => s.id === active.id);
@@ -244,7 +313,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   };
 
   const handleDragOver = (event: DragOverEvent) => setOverId(event.over ? String(event.over.id) : null);
-  
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveItem(null); setOverId(null);
     const { active, over } = event;

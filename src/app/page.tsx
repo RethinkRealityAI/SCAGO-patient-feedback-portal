@@ -1,54 +1,73 @@
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import {
   Card,
-  CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+} from '@/components/ui/card';
+import { getSurveys } from './actions';
+import { ArrowRight, FileText } from 'lucide-react';
 
-const surveys = [
-  {
-    id: 'main-feedback',
-    title: 'Patient Care Feedback',
-    description: 'Share your experience with the Ontario healthcare system to help us advocate for better care for individuals with Sickle Cell Disease.',
-  },
-  // New surveys will appear here in the future
-];
+export default async function SurveysPage() {
+  const surveys = await getSurveys();
 
-export default function Home() {
   return (
-    <div className="container max-w-4xl py-8 md:py-12">
-      <section className="text-center mb-12">
-        <h1 className="scroll-m-20 text-4xl font-bold tracking-tight text-primary lg:text-5xl font-headline">
-          Share Your Feedback
-        </h1>
-        <p className="mt-4 max-w-3xl mx-auto text-lg text-muted-foreground">
-          Your voice matters. The information collected on this portal will be used to advance advocacy and education in improving the quality of care delivered to peers with SCD in Ontario.
-        </p>
-      </section>
+    <div className="bg-muted/20 flex-1">
+      <div className="container max-w-5xl py-8 md:py-12">
+        <header className="mb-8 flex items-center justify-between">
+          <div className="flex-1">
+            <h1 className="scroll-m-20 text-4xl font-bold tracking-tight text-primary lg:text-5xl font-headline">
+              Available Surveys
+            </h1>
+            <p className="mt-2 text-lg text-muted-foreground">
+              Select a survey to provide your feedback.
+            </p>
+          </div>
+        </header>
 
-      <section className="grid gap-8 md:grid-cols-1">
-        {surveys.map((survey) => (
-          <Card key={survey.id} className="flex flex-col">
-            <CardHeader>
-              <CardTitle>{survey.title}</CardTitle>
-              <CardDescription>{survey.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow"></CardContent>
-            <CardFooter>
-              <Button asChild className="w-full sm:w-auto">
-                <Link href={`/survey/${survey.id}`}>
-                  Go to Survey <ArrowRight className="ml-2" />
+        <div className="grid gap-4 md:gap-8">
+          {surveys.length > 0 ? (
+            surveys.map((survey) => (
+              <Card
+                key={survey.id}
+                className="transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1"
+              >
+                <Link
+                  href={`/survey/${survey.id}`}
+                  className="block p-6"
+                  title={`Begin ${survey.title}`}
+                >
+                  <CardHeader className="p-0">
+                    <CardTitle className="flex items-center gap-3">
+                      <FileText className="h-6 w-6 text-primary" />
+                      {survey.title}
+                    </CardTitle>
+                    <CardDescription className="pt-2 pl-[36px]">
+                      {survey.description}
+                    </CardDescription>
+                  </CardHeader>
+                </Link>
+              </Card>
+            ))
+          ) : (
+            <Card className="flex flex-col items-center justify-center p-12 text-center">
+              <CardTitle className="text-2xl font-bold">
+                No Surveys Available
+              </CardTitle>
+              <CardDescription className="mt-2">
+                There are currently no surveys to display. Please check back
+                later.
+              </CardDescription>
+              <Button asChild className="mt-6">
+                <Link href="/editor">
+                  Go to Editor <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </section>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
