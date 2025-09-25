@@ -30,7 +30,7 @@ const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'province-ca', 'city-on']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'province-ca', 'city-on', 'hospital-on', 'duration-hm', 'duration-dh']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -65,6 +65,19 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
   const handleTypeChange = (newType: string) => {
     setValue(`${fieldPath}.type`, newType as any);
     setValue(`${fieldPath}.options`, []);
+
+    // Automatically apply regex for email and phone types
+    if (newType === 'email') {
+        const emailPreset = regexPresets.find(p => p.label === 'Email');
+        if (emailPreset) {
+            setValue(`${fieldPath}.validation.pattern`, emailPreset.value);
+        }
+    } else if (newType === 'phone') {
+        const phonePreset = regexPresets.find(p => p.label === 'Phone (North America)');
+        if (phonePreset) {
+            setValue(`${fieldPath}.validation.pattern`, phonePreset.value);
+        }
+    }
   };
 
   const availableConditionalFields = useMemo(() => {
@@ -144,6 +157,9 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
                 <SelectItem value="province-ca">Province (Canada)</SelectItem>
                 <SelectItem value="city-on">City (Ontario)</SelectItem>
+                <SelectItem value="hospital-on">Hospital (Ontario)</SelectItem>
+                <SelectItem value="duration-hm">Duration (Hours/Minutes)</SelectItem>
+                <SelectItem value="duration-dh">Duration (Days/Hours)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />

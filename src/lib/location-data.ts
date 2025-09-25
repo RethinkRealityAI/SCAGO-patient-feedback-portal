@@ -15,6 +15,7 @@ export const provinces = [
 ];
 
 export const ontarioCities = [
+    { label: "Other", value: "other" },
     { label: "Toronto", value: "toronto" },
     { label: "Ottawa", value: "ottawa" },
     { label: "Mississauga", value: "mississauga" },
@@ -40,4 +41,5 @@ export const ontarioCities = [
     { label: "Ajax", value: "ajax" },
     { label: "Pickering", value: "pickering" },
     { label: "Niagara Falls", value: "niagara-falls" },
+    
 ];

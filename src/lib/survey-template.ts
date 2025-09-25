@@ -31,12 +31,12 @@ export const defaultSurvey = {
                 fields: [
                     { id: 'email', type: 'email', label: 'Email' },
                     { id: 'phone', type: 'text', label: 'Phone' },
-                    { id: 'city', type: 'text', label: 'City' },
+                    { id: 'city', type: 'city-on', label: 'City' },
                 ]
             },
             {
                 id: 'province',
-                type: 'text',
+                type: 'province-ca',
                 label: 'Province',
             }
         ]
@@ -95,7 +95,7 @@ export const defaultSurvey = {
         {
           id: 'timeToAnalgesia',
           label: 'If for pain crisis, how long before the first analgesia was administered?',
-          type: 'text',
+          type: 'duration-hm',
           conditionField: 'inPainCrisis',
           conditionValue: 'yes',
         },
@@ -110,8 +110,8 @@ export const defaultSurvey = {
         },
         {
           id: 'hospitalStayLength',
-          label: 'How long was your hospital stay? (e.g., 5 hours, 2 days):',
-          type: 'text',
+          label: 'How long was your hospital stay?',
+          type: 'duration-dh',
         },
         {
           id: 'hcpFamiliarity',
@@ -174,7 +174,7 @@ export const defaultSurvey = {
         {
             id: 'hospitalName',
             label: 'Hospital Name',
-            type: 'text',
+            type: 'hospital-on',
         },
         {
             id: 'hospitalUnit',
