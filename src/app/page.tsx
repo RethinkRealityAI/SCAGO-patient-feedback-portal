@@ -13,55 +13,70 @@ export default async function SurveysPage() {
   const surveys = await getSurveys();
 
   return (
-    <div className="bg-muted/20 flex-1">
-      <div className="container max-w-5xl py-8 md:py-12">
-        <header className="mb-8 flex items-center justify-between">
-          <div className="flex-1">
-            <h1 className="scroll-m-20 text-4xl font-bold tracking-tight text-primary lg:text-5xl font-headline">
+    <div className="flex-1 min-h-screen">
+      <div className="container max-w-6xl py-6 px-4 sm:py-8 sm:px-6 lg:py-12">
+        <header className="mb-8 sm:mb-12">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-primary/10 backdrop-blur-sm border border-primary/20 mb-6">
+              <FileText className="h-8 w-8 text-primary" />
+            </div>
+            <h1 className="scroll-m-20 text-3xl font-bold tracking-tight text-primary sm:text-4xl lg:text-5xl font-headline">
               Available Surveys
             </h1>
-            <p className="mt-2 text-lg text-muted-foreground">
-              Select a survey to provide your feedback.
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Select a survey to provide your feedback and help us improve healthcare services.
             </p>
           </div>
         </header>
 
-        <div className="grid gap-4 md:gap-8">
+        <div className="grid gap-4 sm:gap-6 lg:gap-8">
           {surveys.length > 0 ? (
-            surveys.map((survey) => (
+            surveys.map((survey, index) => (
               <Card
                 key={survey.id}
-                className="transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1"
+                className="group hover:-translate-y-2 hover:scale-[1.02] transition-all duration-500 ease-out animate-float"
+                style={{ animationDelay: `${index * 0.1}s` }}
               >
                 <Link
                   href={`/survey/${survey.id}`}
-                  className="block p-6"
+                  className="block p-6 sm:p-8"
                   title={`Begin ${survey.title}`}
                 >
                   <CardHeader className="p-0">
-                    <CardTitle className="flex items-center gap-3">
-                      <FileText className="h-6 w-6 text-primary" />
-                      {survey.title}
+                    <CardTitle className="flex items-start gap-4 text-lg sm:text-xl lg:text-2xl group-hover:text-primary transition-colors duration-300">
+                      <div className="p-3 rounded-xl bg-primary/10 backdrop-blur-sm border border-primary/20 group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300 shrink-0">
+                        <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold leading-tight break-words">
+                          {survey.title}
+                        </div>
+                        <CardDescription className="mt-3 text-sm sm:text-base leading-relaxed">
+                          {survey.description}
+                        </CardDescription>
+                      </div>
+                      <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-300 shrink-0 mt-1" />
                     </CardTitle>
-                    <CardDescription className="pt-2 pl-[36px]">
-                      {survey.description}
-                    </CardDescription>
                   </CardHeader>
                 </Link>
               </Card>
             ))
           ) : (
-            <Card className="flex flex-col items-center justify-center p-12 text-center">
-              <CardTitle className="text-2xl font-bold">
+            <Card className="flex flex-col items-center justify-center p-8 sm:p-12 lg:p-16 text-center animate-float">
+              <div className="p-4 rounded-2xl bg-muted/20 backdrop-blur-sm border border-muted/30 mb-6">
+                <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground" />
+              </div>
+              <CardTitle className="text-xl sm:text-2xl lg:text-3xl font-bold mb-4">
                 No Surveys Available
               </CardTitle>
-              <CardDescription className="mt-2">
+              <CardDescription className="text-base sm:text-lg mb-8 max-w-md">
                 There are currently no surveys to display. Please check back
-                later.
+                later or create a new survey.
               </CardDescription>
-              <Button asChild className="mt-6">
+              <Button asChild size="lg" className="group">
                 <Link href="/editor">
-                  Go to Editor <ArrowRight className="ml-2 h-4 w-4" />
+                  Go to Editor 
+                  <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform duration-300" />
                 </Link>
               </Button>
             </Card>

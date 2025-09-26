@@ -14,26 +14,40 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
   const hideNav = HIDDEN_NAV_PATHS.some(path => pathname.startsWith(path));
 
   if (hideNav) {
-    return <main className="flex-1">{children}</main>;
+    return (
+      <main className="flex-1 min-h-screen">
+        <div className="relative">
+          {children}
+        </div>
+      </main>
+    );
   }
 
   if (isMobile) {
     return (
-      <>
+      <div className="flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
-      </>
+        <main className="flex-1 relative">
+          <div className="p-4 sm:p-6">
+            {children}
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-4 sm:p-8">
-        <div className="mx-auto max-w-7xl w-full">
-          {children}
-        </div>
-      </main>
+      <div className="flex-1 flex flex-col">
+        <main className="flex-1 relative">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="mx-auto max-w-7xl w-full">
+              {children}
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
