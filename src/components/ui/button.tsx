@@ -5,18 +5,18 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-95",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_theme(colors.primary/50%)]",
+        default: "glass-button bg-primary/90 text-primary-foreground hover:bg-primary hover:shadow-glass-lg backdrop-blur-md border border-primary/20",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "glass-button bg-destructive/90 text-destructive-foreground hover:bg-destructive border border-destructive/20",
         outline:
-          "border border-input bg-background/60 hover:bg-accent/60 hover:text-accent-foreground backdrop-blur-sm",
+          "glass-button border border-input/50 bg-background/30 hover:bg-accent/40 hover:text-accent-foreground hover:border-accent/30",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+          "glass-button bg-secondary/90 text-secondary-foreground hover:bg-secondary border border-secondary/20",
+        ghost: "hover:bg-accent/20 hover:text-accent-foreground backdrop-blur-sm rounded-lg transition-all duration-300",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
