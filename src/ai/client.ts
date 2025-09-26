@@ -1,15 +1,16 @@
-import { defineFlow } from 'genkit/flow';
+import { ai } from './genkit';
 import { gemini15Flash } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
-export const virtualAssistant = defineFlow(
+export const virtualAssistant = ai.defineFlow(
   {
     name: 'virtualAssistant',
     inputSchema: z.string(),
     outputSchema: z.string(),
   },
   async (prompt: string) => {
-    const llmResponse = await gemini15Flash.generate({
+    const llmResponse = await ai.generate({
+      model: gemini15Flash,
       prompt: `
     You are a virtual assistant for a survey application.
     Your goal is to help users understand their survey data.
@@ -18,9 +19,8 @@ export const virtualAssistant = defineFlow(
     
     The user's question is: ${prompt}
   `,
-      model: gemini15Flash,
     });
 
-    return llmResponse.text();
+    return llmResponse.text;
   }
 );

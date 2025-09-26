@@ -4,7 +4,7 @@ import { initializeApp, getApps, App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createAI, getMutableAIState, streamUI } from '@/lib/ai/rsc';
 import { z } from 'zod';
-import { ai as virtualAssistant } from '../ai/genkit';
+import { google } from '@ai-sdk/google';
 import { ReactNode } from 'react';
 import { nanoid } from 'nanoid';
 import { BotMessage } from '@/components/bot-message';
@@ -94,8 +94,8 @@ async function submitUserMessage(content: string): Promise<ClientMessage> {
     },
   ]);
 
-  const ui = streamUI({
-    model: virtualAssistant,
+  const ui = await streamUI({
+    model: google('gemini-1.5-flash'),
     prompt: content,
     text: ({ content, done }: { content: string; done: boolean; }) => {
       if (done) {
