@@ -3,4 +3,5 @@ export interface FeedbackSubmission {
   rating: number;
   hospitalInteraction: string;
   submittedAt: Date;
+  surveyId: string;
 }

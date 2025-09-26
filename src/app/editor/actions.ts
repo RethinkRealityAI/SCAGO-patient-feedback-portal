@@ -19,7 +19,7 @@ export async function createSurvey() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {
     ...defaultSurvey,
-    name: 'Untitled Survey',
+    title: 'Untitled Survey',
   };
 
   await setDoc(newSurveyRef, newSurvey);

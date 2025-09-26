@@ -25,7 +25,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper, Check, ChevronsUpDown } from "lucide-react"
+import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2 } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -542,6 +542,7 @@ function renderField(fieldConfig: FieldDef, form: any) {
 export default function FeedbackForm({ survey }: { survey: any }) {
     const { toast } = useToast();
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const appearance = survey.appearance || {};
 
     // Flatten all fields (including groups) from all sections for schema
     const allFields: FieldDef[] = survey.sections.flatMap((section: any) =>
@@ -551,6 +552,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const formSchema = buildZodSchema(allFields);
     const form = useForm<z.infer<typeof formSchema>>({
       resolver: zodResolver(formSchema),
+      defaultValues: {},
     });
     const { formState, watch } = form;
     const { isSubmitting } = formState;
@@ -560,6 +562,36 @@ export default function FeedbackForm({ survey }: { survey: any }) {
 
     // Watch all form values to evaluate conditional logic
     const watchedValues = watch();
+
+    // Local draft save/restore
+    const draftKey = useMemo(() => `survey-draft:${survey.id}`, [survey.id]);
+
+    useEffect(() => {
+        if (survey.saveProgressEnabled) {
+            try {
+                const saved = localStorage.getItem(draftKey);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    form.reset(parsed);
+                }
+            } catch {}
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [draftKey, survey.saveProgressEnabled]);
+
+    useEffect(() => {
+        if (!survey.saveProgressEnabled) return;
+        const subscription = form.watch((value) => {
+            try {
+                localStorage.setItem(draftKey, JSON.stringify(value));
+            } catch {}
+        });
+        return () => subscription.unsubscribe();
+    }, [draftKey, form, survey.saveProgressEnabled]);
+
+    const clearDraft = () => {
+        try { localStorage.removeItem(draftKey); } catch {}
+    };
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         const result = await submitFeedback(survey.id, values);
@@ -571,6 +603,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             });
         } else {
             setIsSubmitted(true);
+            clearDraft();
         }
     }
 
@@ -608,11 +641,43 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         return actualValue === expectedValue;
     };
 
+    const cardShadowClass = appearance.cardShadow === 'none' ? '' : appearance.cardShadow === 'lg' ? 'shadow-2xl' : appearance.cardShadow === 'md' ? 'shadow-xl' : 'shadow-lg';
+    const titleSizeClass = appearance.cardTitleSize === 'xl' ? 'text-3xl' : appearance.cardTitleSize === 'md' ? 'text-xl' : appearance.cardTitleSize === 'sm' ? 'text-lg' : 'text-2xl';
+    const sectionTitleSizeClass = appearance.sectionTitleSize === 'xl' ? 'text-2xl' : appearance.sectionTitleSize === 'md' ? 'text-lg' : appearance.sectionTitleSize === 'sm' ? 'text-base' : 'text-xl';
+    const labelSizeClass = appearance.labelSize === 'xs' ? 'text-xs' : appearance.labelSize === 'md' ? 'text-sm' : 'text-xs';
+
     return (
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
+      <Card className={`w-full max-w-4xl mx-auto ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
         <CardHeader>
-          <CardTitle>{survey.title}</CardTitle>
-          <CardDescription>{survey.description}</CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle className={`${titleSizeClass} text-primary`}>{survey.title}</CardTitle>
+              <CardDescription>{survey.description}</CardDescription>
+            </div>
+            {survey.shareButtonEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+                    const title = survey.shareTitle || 'Share this survey';
+                    const text = survey.shareText || "I’d like your feedback—please fill out this survey.";
+                    try {
+                        if (navigator.share) {
+                            await navigator.share({ title, text, url: shareUrl });
+                        } else if (navigator.clipboard) {
+                            await navigator.clipboard.writeText(shareUrl);
+                            toast({ title: 'Link Copied', description: 'Survey link copied to clipboard.' });
+                        }
+                    } catch {}
+                }}
+                className="shrink-0"
+                title={survey.shareTitle || 'Share this survey'}
+              >
+                <Share2 className="h-4 w-4 mr-2" /> Share
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-8">
           <Form {...form}>
@@ -620,7 +685,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 {survey.sections.map((section: any) => (
                   <Card key={section.id} className="shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-base md:text-lg font-semibold">{section.title}</CardTitle>
+                      <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{section.title}</CardTitle>
                       {section.description && (
                         <CardDescription>{section.description}</CardDescription>
                       )}
@@ -641,7 +706,9 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                           }
                           const fieldDef = fieldMap.get(field.id);
                           if (!fieldDef || !shouldShowField(fieldDef)) return null;
-                          return renderField(fieldDef, form);
+                          return (
+                            <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                          );
                         })}
                       </div>
                     </CardContent>
@@ -649,10 +716,15 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 ))}
 
               <CardFooter className="px-8 pt-8 flex justify-center">
-                <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Submit
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {survey.submitButtonLabel || 'Submit'}
+                  </Button>
+                  {survey.saveProgressEnabled && (
+                    <Button type="button" variant="secondary" onClick={clearDraft}>Clear Saved Progress</Button>
+                  )}
+                </div>
               </CardFooter>
             </form>
           </Form>

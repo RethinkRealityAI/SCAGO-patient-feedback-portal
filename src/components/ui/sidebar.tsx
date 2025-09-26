@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -18,7 +19,6 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -41,7 +41,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="relative flex h-screen min-h-screen w-fit flex-col border-r bg-background p-4">
+    <aside className="sticky top-0 flex h-screen w-fit flex-col border-r bg-background p-4 overflow-y-auto">
       <div className="flex flex-1 flex-col gap-y-2">
         <SidebarLink
           href="/"
