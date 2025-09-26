@@ -47,6 +47,9 @@ async function SurveyList() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/dashboard/${survey.id}`}>Dashboard</Link>
+            </Button>
             <Button asChild size="sm" variant="secondary">
               <Link href={`/survey/${survey.id}`}>View</Link>
             </Button>

@@ -10,8 +10,22 @@ const months = [
 ];
 
 export const defaultSurvey = {
+  appearance: {
+    themeColor: '#C8262A',
+    cardShadow: 'sm',
+    cardTitleSize: 'lg',
+    sectionTitleSize: 'lg',
+    labelSize: 'sm',
+    gradient: true,
+  },
   title: 'Patient Feedback Survey',
   description: 'The following information will help us understand the scope of the situation. Kindly provide as much information as you can.',
+  // New: submission and sharing defaults
+  submitButtonLabel: 'Submit',
+  saveProgressEnabled: true,
+  shareButtonEnabled: true,
+  shareTitle: 'Share this survey',
+  shareText: 'I’d like your feedback—please fill out this survey.',
   sections: [
     {
         id: 'contact-information-section',

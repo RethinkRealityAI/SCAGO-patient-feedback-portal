@@ -24,6 +24,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { regexPresets } from '@/lib/regex-presets';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
@@ -41,7 +42,27 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   }).optional(),
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), fields: z.array(fieldSchema) });
-const surveySchema = z.object({ title: z.string().min(1, 'Survey title is required.'), description: z.string().optional(), sections: z.array(sectionSchema) });
+const appearanceSchema = z.object({
+  themeColor: z.string().default('#C8262A').optional(),
+  cardShadow: z.enum(['none', 'sm', 'md', 'lg']).default('sm').optional(),
+  cardTitleSize: z.enum(['sm', 'md', 'lg', 'xl']).default('lg').optional(),
+  sectionTitleSize: z.enum(['sm', 'md', 'lg', 'xl']).default('lg').optional(),
+  labelSize: z.enum(['xs', 'sm', 'md']).default('sm').optional(),
+  gradient: z.boolean().default(true).optional(),
+}).optional();
+
+const surveySchema = z.object({
+  title: z.string().min(1, 'Survey title is required.'),
+  description: z.string().optional(),
+  appearance: appearanceSchema,
+  // New: submission and sharing controls
+  submitButtonLabel: z.string().default('Submit').optional(),
+  saveProgressEnabled: z.boolean().default(true).optional(),
+  shareButtonEnabled: z.boolean().default(true).optional(),
+  shareTitle: z.string().default('Share this survey').optional(),
+  shareText: z.string().default("I’d like your feedback—please fill out this survey.").optional(),
+  sections: z.array(sectionSchema),
+});
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
 interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; conditionField?: string; conditionValue?: any; validation?: { required?: boolean; pattern?: string; }; }
@@ -267,11 +288,20 @@ const SortableSection = ({ section, sectionIndex, removeSection, registerMoveFie
   const isOver = overId === section.id;
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "ring-2 ring-blue-500/50 ring-offset-2 ring-offset-background", "rounded-lg")}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "ring-1 ring-primary/30 ring-offset-1 ring-offset-background", "rounded-lg")}>
       <AccordionItem value={`section-${sectionIndex}`} className="border rounded-lg bg-card/80">
-        <AccordionTrigger className="p-6 text-xl hover:no-underline">
+        <AccordionTrigger className="p-6 hover:no-underline gap-3">
           <div {...attributes} {...listeners} className="cursor-grab p-2" onPointerDown={stopPropagation}><GripVertical /></div>
-          <FormField control={control} name={`sections.${sectionIndex}.title`} render={({ field }) => <Input {...field} value={field.value ?? ''} onPointerDown={stopPropagation} className="text-xl font-semibold tracking-tight text-primary border-0 bg-transparent p-0 h-auto focus-visible:ring-0" />} />
+          <div className="flex-1 min-w-0">
+            <FormField control={control} name={`sections.${sectionIndex}.title`} render={({ field }) => (
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                onPointerDown={stopPropagation}
+                className="w-full text-lg md:text-xl font-semibold tracking-tight text-primary border-0 bg-transparent px-2 py-1 h-auto focus-visible:ring-0 focus-visible:outline-none"
+              />
+            )} />
+          </div>
         </AccordionTrigger>
         <AccordionContent className="p-6 space-y-6 border-t">
           <SortableContext items={fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
@@ -299,7 +329,7 @@ const SortableField = ({ field, sectionIndex, fieldIndex, remove, move, totalFie
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id, data: { type: 'field', sectionIndex } });
   const isOver = overId === field.id;
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "bg-blue-100 dark:bg-blue-900/20", "rounded-lg")} {...attributes}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={cn(isOver && "bg-primary/10 dark:bg-primary/15", "rounded-lg")} {...attributes}>
       <FieldEditor {...{ fieldPath: `sections.${sectionIndex}.fields.${fieldIndex}`, fieldIndex, remove, move, totalFields, listeners }} />
     </div>
   );
@@ -361,25 +391,139 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   return (
     <FormProvider {...form}>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <Card><CardHeader><CardTitle>Survey Details</CardTitle></CardHeader><CardContent className="space-y-4"><FormField control={form.control} name="title" render={({ field }) => <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="description" render={({ field }) => <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} /></CardContent></Card>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Sections</h2><Button type="button" variant="outline" onClick={() => append({ id: nanoid(), title: 'New Section', fields: [] })}><PlusCircle className="mr-2" /> Add Section</Button></div>
-              <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                <Accordion type="multiple" className="space-y-4" defaultValue={[`section-0`]}>
-                  {sections.map((section, index) => (<SortableSection key={section.id} {...{ section, sectionIndex: index, removeSection: remove, registerMoveField, overId }} />))}
-                </Accordion>
-              </SortableContext>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Tabs defaultValue="sections" className="w-full">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <TabsList>
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="appearance">Appearance</TabsTrigger>
+                <TabsTrigger value="sections">Sections</TabsTrigger>
+              </TabsList>
+              <Button type="submit" size="sm" disabled={isSubmitting} className="shadow-2xl md:hidden">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button>
             </div>
-            <DragOverlay>
-                <div className="shadow-2xl shadow-blue-500/50 rounded-lg">
-                    {activeItem?.type === 'section' && <SortableSection section={activeItem} sectionIndex={-1} removeSection={() => {}} registerMoveField={() => {}} />}
-                    {activeItem?.type === 'field' && <SortableField field={activeItem} sectionIndex={activeItem.sectionIndex} fieldIndex={-1} remove={() => {}} move={() => {}} totalFields={0} />}
+
+            <TabsContent value="details" className="space-y-6">
+              <Card>
+                <CardHeader><CardTitle>Survey Details</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField control={form.control} name="title" render={({ field }) => <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="description" render={({ field }) => <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="submitButtonLabel" render={({ field }) => <FormItem><FormLabel>Submit Button Label</FormLabel><FormControl><Input {...field} value={field.value ?? 'Submit'} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="saveProgressEnabled" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5"><FormLabel>Enable Save Progress</FormLabel><FormDescription>Allow respondents to save progress in their browser.</FormDescription></div>
+                        <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="shareButtonEnabled" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5"><FormLabel>Show Share Button</FormLabel><FormDescription>Display a share button on the survey page.</FormDescription></div>
+                        <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="shareTitle" render={({ field }) => <FormItem><FormLabel>Share Dialog Title</FormLabel><FormControl><Input {...field} value={field.value ?? 'Share this survey'} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="shareText" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>Share Text</FormLabel><FormControl><Textarea {...field} value={field.value ?? "I’d like your feedback—please fill out this survey."} /></FormControl><FormMessage /></FormItem>} />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="appearance" className="space-y-6">
+              <Card>
+                <CardHeader><CardTitle>Appearance</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="appearance.themeColor" render={({ field }) => <FormItem><FormLabel>Theme Color</FormLabel><FormControl><Input type="color" {...field} value={field.value ?? '#C8262A'} /></FormControl><FormDescription>Applies to titles, buttons, and focus ring.</FormDescription><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="appearance.cardShadow" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Card Shadow</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? 'sm'}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="sm">Subtle</SelectItem>
+                          <SelectItem value="md">Medium</SelectItem>
+                          <SelectItem value="lg">Large</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="appearance.cardTitleSize" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Card Title Size</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? 'lg'}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="sm">Small</SelectItem>
+                          <SelectItem value="md">Medium</SelectItem>
+                          <SelectItem value="lg">Large</SelectItem>
+                          <SelectItem value="xl">XL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="appearance.sectionTitleSize" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Section Title Size</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? 'lg'}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="sm">Small</SelectItem>
+                          <SelectItem value="md">Medium</SelectItem>
+                          <SelectItem value="lg">Large</SelectItem>
+                          <SelectItem value="xl">XL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="appearance.labelSize" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Label Size</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? 'sm'}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="xs">XS</SelectItem>
+                          <SelectItem value="sm">SM</SelectItem>
+                          <SelectItem value="md">MD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="appearance.gradient" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5"><FormLabel>Background Gradient</FormLabel><FormDescription>Enable/disable page background gradient glow.</FormDescription></div>
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="sections" className="space-y-6">
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Sections</h2><Button type="button" variant="outline" onClick={() => append({ id: nanoid(), title: 'New Section', fields: [] })}><PlusCircle className="mr-2" /> Add Section</Button></div>
+                  <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                    <Accordion type="multiple" className="space-y-4" defaultValue={[`section-0`]}>
+                      {sections.map((section, index) => (<SortableSection key={section.id} {...{ section, sectionIndex: index, removeSection: remove, registerMoveField, overId }} />))}
+                    </Accordion>
+                  </SortableContext>
                 </div>
-            </DragOverlay>
-          </DndContext>
-          <div className="sticky bottom-4 z-10 flex justify-end"><Button type="submit" size="lg" disabled={isSubmitting} className="shadow-2xl">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button></div>
+                <DragOverlay>
+                    <div className="shadow-xl shadow-primary/25 rounded-lg">
+                        {activeItem?.type === 'section' && <SortableSection section={activeItem} sectionIndex={-1} removeSection={() => {}} registerMoveField={() => {}} />}
+                        {activeItem?.type === 'field' && <SortableField field={activeItem} sectionIndex={activeItem.sectionIndex} fieldIndex={-1} remove={() => {}} move={() => {}} totalFields={0} />}
+                    </div>
+                </DragOverlay>
+              </DndContext>
+            </TabsContent>
+          </Tabs>
+
+          <div className="sticky bottom-4 z-10 hidden md:flex justify-end"><Button type="submit" size="lg" disabled={isSubmitting} className="shadow-2xl">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button></div>
         </form>
       </Form>
     </FormProvider>

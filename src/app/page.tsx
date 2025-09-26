@@ -34,8 +34,7 @@ export default async function SurveysPage() {
             surveys.map((survey, index) => (
               <Card
                 key={survey.id}
-                className="group hover:-translate-y-2 hover:scale-[1.02] transition-all duration-500 ease-out animate-float"
-                style={{ animationDelay: `${index * 0.1}s` }}
+                className="group hover:-translate-y-2 hover:scale-[1.02] transition-all duration-500 ease-out"
               >
                 <Link
                   href={`/survey/${survey.id}`}
@@ -59,7 +58,7 @@ export default async function SurveysPage() {
               </Card>
             ))
           ) : (
-            <Card className="flex flex-col items-center justify-center p-8 sm:p-12 lg:p-16 text-center animate-float">
+            <Card className="flex flex-col items-center justify-center p-8 sm:p-12 lg:p-16 text-center">
               <div className="p-4 rounded-2xl bg-muted/20 backdrop-blur-sm border border-muted/30 mb-6">
                 <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground" />
               </div>
