@@ -4,35 +4,35 @@
 
 @layer base {
   :root {
-    /* Light theme glassmorphism colors */
-    --background: 220 30% 96%;
-    --background-secondary: 220 20% 92%;
-    --foreground: 220 15% 15%;
+    /* Light theme glassmorphism colors - Cream and Red */
+    --background: 45 50% 94%;  /* Cream background #F0E7CC equivalent */
+    --background-secondary: 45 40% 90%;
+    --foreground: 0 0% 0%;  /* Black text */
     
-    --card: 0 0% 100% / 0.7;
-    --card-foreground: 220 15% 15%;
+    --card: 0 0% 100% / 0.7;  /* White with transparency */
+    --card-foreground: 0 0% 0%;
     
     --popover: 0 0% 100% / 0.8;
-    --popover-foreground: 220 15% 15%;
+    --popover-foreground: 0 0% 0%;
     
-    --primary: 220 15% 15%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 0 0% 0%;  /* Black primary */
+    --primary-foreground: 0 0% 100%;
     
-    --secondary: 355 78% 46%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 355 78% 46%;  /* Red #C8262A */
+    --secondary-foreground: 0 0% 100%;
     
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 8% 46%;
+    --muted: 45 30% 88%;  /* Muted cream */
+    --muted-foreground: 0 0% 45%;
     
-    --accent: 355 78% 46%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 355 78% 46%;  /* Red accent */
+    --accent-foreground: 0 0% 100%;
     
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
     
-    --border: 220 13% 91% / 0.3;
-    --input: 220 13% 91% / 0.5;
-    --ring: 220 15% 15%;
+    --border: 45 20% 85% / 0.4;  /* Cream border with transparency */
+    --input: 45 20% 85% / 0.6;
+    --ring: 0 0% 0%;
     
     --radius: 0.75rem;
     
@@ -45,55 +45,55 @@
     
     /* Sidebar colors */
     --sidebar-background: 0 0% 98% / 0.6;
-    --sidebar-foreground: 220 15% 15%;
-    --sidebar-primary: 220 15% 15%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 14% 96% / 0.5;
-    --sidebar-accent-foreground: 220 15% 15%;
-    --sidebar-border: 220 13% 91% / 0.3;
-    --sidebar-ring: 220 15% 15%;
+    --sidebar-accent: 45 30% 88% / 0.5;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 45 20% 85% / 0.3;
+    --sidebar-ring: 0 0% 0%;
   }
 
   .dark {
-    /* Dark theme glassmorphism colors */
-    --background: 220 15% 8%;
-    --background-secondary: 220 15% 12%;
-    --foreground: 0 0% 95%;
+    /* Dark theme glassmorphism colors - Dark cream and red */
+    --background: 45 15% 8%;  /* Dark cream */
+    --background-secondary: 45 15% 12%;
+    --foreground: 45 50% 95%;  /* Light cream text */
     
-    --card: 220 15% 12% / 0.7;
-    --card-foreground: 0 0% 95%;
+    --card: 45 15% 12% / 0.7;
+    --card-foreground: 45 50% 95%;
     
-    --popover: 220 15% 12% / 0.8;
-    --popover-foreground: 0 0% 95%;
+    --popover: 45 15% 12% / 0.8;
+    --popover-foreground: 45 50% 95%;
     
-    --primary: 0 0% 95%;
-    --primary-foreground: 220 15% 8%;
+    --primary: 45 50% 95%;  /* Light cream primary */
+    --primary-foreground: 45 15% 8%;
     
-    --secondary: 355 78% 56%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 355 78% 56%;  /* Brighter red for dark mode */
+    --secondary-foreground: 45 50% 95%;
     
-    --muted: 220 15% 15%;
-    --muted-foreground: 220 5% 65%;
+    --muted: 45 15% 15%;
+    --muted-foreground: 45 20% 65%;
     
     --accent: 355 78% 56%;
-    --accent-foreground: 0 0% 95%;
+    --accent-foreground: 45 50% 95%;
     
     --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 95%;
+    --destructive-foreground: 45 50% 95%;
     
-    --border: 220 15% 20% / 0.3;
-    --input: 220 15% 20% / 0.5;
-    --ring: 0 0% 95%;
+    --border: 45 15% 20% / 0.3;
+    --input: 45 15% 20% / 0.5;
+    --ring: 45 50% 95%;
     
     /* Sidebar colors */
-    --sidebar-background: 220 15% 8% / 0.6;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 0 0% 95%;
-    --sidebar-primary-foreground: 220 15% 8%;
-    --sidebar-accent: 220 15% 15% / 0.5;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 220 15% 20% / 0.3;
-    --sidebar-ring: 0 0% 95%;
+    --sidebar-background: 45 15% 8% / 0.6;
+    --sidebar-foreground: 45 50% 95%;
+    --sidebar-primary: 45 50% 95%;
+    --sidebar-primary-foreground: 45 15% 8%;
+    --sidebar-accent: 45 15% 15% / 0.5;
+    --sidebar-accent-foreground: 45 50% 95%;
+    --sidebar-border: 45 15% 20% / 0.3;
+    --sidebar-ring: 45 50% 95%;
   }
 
   * {
@@ -111,7 +111,7 @@
     position: relative;
   }
   
-  /* Glassmorphism background pattern */
+  /* Glassmorphism background pattern - Cream and Red theme */
   body::before {
     content: '';
     position: fixed;
@@ -120,9 +120,9 @@
     right: 0;
     bottom: 0;
     background: 
-      radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.3) 0%, transparent 50%);
+      radial-gradient(circle at 20% 80%, rgba(200, 38, 42, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(240, 231, 204, 0.4) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(200, 38, 42, 0.08) 0%, transparent 50%);
     pointer-events: none;
     z-index: -1;
   }
