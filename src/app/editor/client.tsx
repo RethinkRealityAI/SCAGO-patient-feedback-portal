@@ -14,9 +14,7 @@ export function CreateSurveyButton() {
 
   const handleCreateSurvey = () => {
     startTransition(async () => {
-      // Note: The `createSurvey` server action needs to be implemented.
-      // For now, we'll simulate its behavior.
-      const survey = { id: `new-survey-${Date.now()}` }; // Example ID
+      const survey = await createSurvey();
       router.push(`/editor/${survey.id}`);
     });
   };

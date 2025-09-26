@@ -31,13 +31,15 @@ export const defaultSurvey = {
                 fields: [
                     { id: 'email', type: 'email', label: 'Email' },
                     { id: 'phone', type: 'text', label: 'Phone' },
-                    { id: 'city', type: 'city-on', label: 'City' },
                 ]
             },
             {
-                id: 'province',
-                type: 'province-ca',
-                label: 'Province',
+                id: 'location-group',
+                type: 'group',
+                fields: [
+                    { id: 'city', type: 'city-on', label: 'City' },
+                    { id: 'province', type: 'province-ca', label: 'Province' },
+                ]
             }
         ]
     },

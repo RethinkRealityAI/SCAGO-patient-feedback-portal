@@ -155,6 +155,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="radio">Radio</SelectItem>
                 <SelectItem value="checkbox">Checkbox</SelectItem>
                 <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
+                <SelectItem value="group">Group (Side-by-side fields)</SelectItem>
                 <SelectItem value="province-ca">Province (Canada)</SelectItem>
                 <SelectItem value="city-on">City (Ontario)</SelectItem>
                 <SelectItem value="hospital-on">Hospital (Ontario)</SelectItem>

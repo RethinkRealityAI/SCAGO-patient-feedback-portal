@@ -5,8 +5,8 @@ import {
   ChevronsRight,
   ClipboardList,
   Home,
-  Bot,
-  Wand2,
+  Book,
+  FileText,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -15,45 +15,40 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useState, useTransition } from 'react';
-import { analyzeFeedback } from '@/app/dashboard/actions';
-import { useToast } from '@/hooks/use-toast';
+import { useEffect, useState } from 'react';
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
 
-  const handleAnalyze = () => {
-    startTransition(async () => {
-        const result = await analyzeFeedback();
-        if (result.error) {
-            toast({
-                variant: 'destructive',
-                title: 'Analysis Failed',
-                description: result.error,
-            });
-        } else {
-            toast({
-                title: 'Analysis Complete',
-                description: 'The AI-powered analysis of the latest feedback is complete.',
-            });
-        }
-    });
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('sidebarCollapsed');
+      if (stored !== null) {
+        setIsCollapsed(stored === 'true');
+      }
+    } catch {}
+  }, []);
+
+  const toggleCollapsed = () => {
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    try {
+      localStorage.setItem('sidebarCollapsed', String(next));
+    } catch {}
   };
 
   return (
     <aside className="relative flex h-screen min-h-screen w-fit flex-col border-r bg-background p-4">
       <div className="flex flex-1 flex-col gap-y-2">
+        <SidebarLink
+          href="/"
+          icon={<FileText />}
+          label="Surveys"
+          isCollapsed={isCollapsed}
+        />
         <SidebarLink
           href="/dashboard"
           icon={<Home />}
@@ -63,36 +58,22 @@ export function Sidebar() {
         <SidebarLink
           href="/editor"
           icon={<ClipboardList />}
-          label="Survey Editor"
+          label="My Surveys"
           isCollapsed={isCollapsed}
         />
-        <Accordion type="single" collapsible>
-          <AccordionItem value="ai-tools" className="border-b-0">
-            <AccordionTrigger
-              className={cn(
-                buttonVariants({ variant: 'ghost' }),
-                'justify-between'
-              )}
-            >
-              <div className="flex items-center">
-                <Bot /> {!isCollapsed && <span className="ml-4">AI Tools</span>}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-                <Button variant="ghost" className="w-full justify-start" onClick={handleAnalyze} disabled={isPending}>
-                    <Wand2 />
-                    {!isCollapsed && <span className="ml-4">Analyze Feedback</span>}
-                </Button>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <SidebarLink
+          href="/resources"
+          icon={<Book />}
+          label="Resources"
+          isCollapsed={isCollapsed}
+        />
       </div>
 
       <div className="mt-auto">
         <Button
           variant="ghost"
           className="w-full justify-start"
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={toggleCollapsed}
         >
           {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
         </Button>
@@ -113,7 +94,7 @@ const SidebarLink = ({
   isCollapsed: boolean;
 }) => {
   const pathname = usePathname();
-  const isActive = pathname === href;
+  const isActive = pathname === href || pathname.startsWith(href + '/');
 
   if (isCollapsed) {
     return (

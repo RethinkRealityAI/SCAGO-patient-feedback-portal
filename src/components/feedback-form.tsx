@@ -22,9 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper } from "lucide-react"
+import { Loader2, Star, PartyPopper, Check, ChevronsUpDown } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -35,7 +36,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { provinces, ontarioCities } from "@/lib/location-data"
 import { ontarioHospitals } from "@/lib/hospital-names"
 
@@ -196,7 +197,7 @@ function Rating({ field }: { field: any }) {
 
 function NpsScale({ field }: { field: any }) {
     return (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
             {[...Array(10)].map((_, index) => {
                 const value = index + 1;
                 return (
@@ -205,7 +206,7 @@ function NpsScale({ field }: { field: any }) {
                         type="button"
                         variant={field.value === value ? "default" : "outline"}
                         onClick={() => field.onChange(value)}
-                        className="w-10 h-10 rounded-full"
+                        className="w-10 h-10 rounded-full text-sm"
                     >
                         {value}
                     </Button>
@@ -226,10 +227,10 @@ function SelectWithOtherField({ field, options, label }: { field: any; options: 
                 name={`${field.name}.selection`}
                 render={({ field: selectionField }) => (
                     <FormItem>
-                        <FormLabel>{label}</FormLabel>
+                        {/* label suppressed to avoid redundancy; placeholder covers */}
                         <Select onValueChange={selectionField.onChange} defaultValue={selectionField.value ?? ''}>
                             <FormControl>
-                                <SelectTrigger>
+                                <SelectTrigger className="max-w-md">
                                     <SelectValue placeholder={`Select a ${label.toLowerCase()}`} />
                                 </SelectTrigger>
                             </FormControl>
@@ -251,9 +252,104 @@ function SelectWithOtherField({ field, options, label }: { field: any; options: 
                     name={`${field.name}.other`}
                     render={({ field: otherField }) => (
                         <FormItem>
-                            <FormLabel>Please specify the {label.toLowerCase()}</FormLabel>
                             <FormControl>
-                                <Input {...otherField} value={otherField.value ?? ''} />
+                                <Input {...otherField} value={otherField.value ?? ''} placeholder={`Please specify the ${label.toLowerCase()}`} className="max-w-md" />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            )}
+        </div>
+    );
+}
+
+function SearchableSelectWithOtherField({ field, options, label }: { field: any; options: { label: string; value: string }[]; label: string; }) {
+    const { control, watch } = useFormContext();
+    const selection = watch(`${field.name}.selection`);
+    const [open, setOpen] = useState(false);
+    const [searchValue, setSearchValue] = useState('');
+
+    const filteredOptions = useMemo(() => {
+        if (!searchValue) return options;
+        return options.filter(option =>
+            option.label.toLowerCase().includes(searchValue.toLowerCase())
+        );
+    }, [options, searchValue]);
+
+    const selectedOption = options.find(option => option.value === selection);
+
+    return (
+        <div className="space-y-4">
+            <FormField
+                control={control}
+                name={`${field.name}.selection`}
+                render={({ field: selectionField }) => (
+                    <FormItem>
+                        {/* label suppressed to avoid redundancy; button text covers */}
+                        <Popover open={open} onOpenChange={setOpen}>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={open}
+                                        className="w-full max-w-md justify-between font-normal"
+                                    >
+                                        {selectedOption ? selectedOption.label : `Select a ${label.toLowerCase()}...`}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-full p-0" align="start">
+                                <div className="p-2">
+                                    <Input
+                                        placeholder={`Search ${label.toLowerCase()}...`}
+                                        value={searchValue}
+                                        onChange={(e) => setSearchValue(e.target.value)}
+                                        className="mb-2"
+                                    />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto">
+                                    {filteredOptions.length === 0 ? (
+                                        <div className="p-2 text-sm text-muted-foreground">
+                                            No {label.toLowerCase()} found.
+                                        </div>
+                                    ) : (
+                                        filteredOptions.map((option) => (
+                                            <div
+                                                key={option.value}
+                                                className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    selectionField.onChange(option.value);
+                                                    setOpen(false);
+                                                    setSearchValue('');
+                                                }}
+                                            >
+                                                <Check
+                                                    className={`mr-2 h-4 w-4 ${
+                                                        selection === option.value ? "opacity-100" : "opacity-0"
+                                                    }`}
+                                                />
+                                                {option.label}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+            {selection === 'other' && (
+                <FormField
+                    control={control}
+                    name={`${field.name}.other`}
+                    render={({ field: otherField }) => (
+                        <FormItem>
+                            <FormControl>
+                                <Input {...otherField} value={otherField.value ?? ''} placeholder={`Please specify the ${label.toLowerCase()}`} className="max-w-md" />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -269,21 +365,21 @@ function OntarioCityField({ field }: { field: any }) {
 }
 
 function OntarioHospitalField({ field }: { field: any }) {
-    return <SelectWithOtherField field={field} options={ontarioHospitals} label="Hospital" />;
+    return <SearchableSelectWithOtherField field={field} options={ontarioHospitals} label="Hospital" />;
 }
 
 function DurationHmField({ field }: { field: any }) {
     const { control } = useFormContext();
     return (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <FormField
                 control={control}
                 name={`${field.name}.hours`}
                 render={({ field: hoursField }) => (
-                    <FormItem>
+                    <FormItem className="flex-1">
                         <FormLabel>Hours</FormLabel>
                         <FormControl>
-                            <Input type="number" min="0" {...hoursField} value={hoursField.value ?? ''} />
+                            <Input type="number" min="0" {...hoursField} value={hoursField.value ?? ''} className="max-w-24" />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -293,10 +389,10 @@ function DurationHmField({ field }: { field: any }) {
                 control={control}
                 name={`${field.name}.minutes`}
                 render={({ field: minutesField }) => (
-                    <FormItem>
+                    <FormItem className="flex-1">
                         <FormLabel>Minutes</FormLabel>
                         <FormControl>
-                            <Input type="number" min="0" max="59" {...minutesField} value={minutesField.value ?? ''} />
+                            <Input type="number" min="0" max="59" {...minutesField} value={minutesField.value ?? ''} className="max-w-24" />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -309,15 +405,15 @@ function DurationHmField({ field }: { field: any }) {
 function DurationDhField({ field }: { field: any }) {
     const { control } = useFormContext();
     return (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <FormField
                 control={control}
                 name={`${field.name}.days`}
                 render={({ field: daysField }) => (
-                    <FormItem>
+                    <FormItem className="flex-1">
                         <FormLabel>Days</FormLabel>
                         <FormControl>
-                            <Input type="number" min="0" {...daysField} value={daysField.value ?? ''} />
+                            <Input type="number" min="0" {...daysField} value={daysField.value ?? ''} className="max-w-24" />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -327,10 +423,10 @@ function DurationDhField({ field }: { field: any }) {
                 control={control}
                 name={`${field.name}.hours`}
                 render={({ field: hoursField }) => (
-                    <FormItem>
+                    <FormItem className="flex-1">
                         <FormLabel>Hours</FormLabel>
                         <FormControl>
-                            <Input type="number" min="0" max="23" {...hoursField} value={hoursField.value ?? ''} />
+                            <Input type="number" min="0" max="23" {...hoursField} value={hoursField.value ?? ''} className="max-w-24" />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -361,15 +457,15 @@ function renderField(fieldConfig: FieldDef, form: any) {
                 case 'phone':
                 case 'date':
                 case 'number':
-                  return <Input type={fieldConfig.type} {...fieldWithValue} />;
+                  return <Input type={fieldConfig.type} {...fieldWithValue} className="max-w-md" />;
                 case 'textarea':
-                  return <Textarea {...fieldWithValue} />;
+                  return <Textarea {...fieldWithValue} className="max-w-2xl" />;
                 case 'select':
                 case 'province-ca':
                     const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
                     return (
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <SelectTrigger>
+                            <SelectTrigger className="max-w-md">
                             <SelectValue placeholder="Select an option" />
                             </SelectTrigger>
                             <SelectContent>
@@ -432,7 +528,7 @@ function renderField(fieldConfig: FieldDef, form: any) {
                 case 'nps':
                     return <NpsScale field={field} />;
                 default:
-                  return <Input {...fieldWithValue} />;
+                  return <Input {...fieldWithValue} className="max-w-md" />;
               }
             })()}
           </FormControl>
@@ -447,8 +543,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const { toast } = useToast();
     const [isSubmitted, setIsSubmitted] = useState(false);
 
-    // Flatten all fields from all sections
-    const allFields: FieldDef[] = survey.sections.flatMap((section: any) => section.fields);
+    // Flatten all fields (including groups) from all sections for schema
+    const allFields: FieldDef[] = survey.sections.flatMap((section: any) =>
+      section.fields.flatMap((f: FieldDef) => (f.type === 'group' ? (f.fields || []) : [f]))
+    );
 
     const formSchema = buildZodSchema(allFields);
     const form = useForm<z.infer<typeof formSchema>>({
@@ -478,11 +576,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
 
     if (isSubmitted) {
         return (
-            <Card className="w-full max-w-2xl mx-auto">
-                <CardHeader className="text-center">
-                    <PartyPopper className="w-16 h-16 mx-auto text-green-500" />
-                    <CardTitle className="text-2xl mt-4">Thank You!</CardTitle>
-                    <CardDescription>Your feedback has been successfully submitted.</CardDescription>
+            <Card className="w-full max-w-4xl mx-auto shadow-lg">
+                <CardHeader className="text-center py-12">
+                    <PartyPopper className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                    <CardTitle className="text-2xl lg:text-3xl">Thank You!</CardTitle>
+                    <CardDescription className="text-base lg:text-lg mt-2">Your feedback has been successfully submitted.</CardDescription>
                 </CardHeader>
             </Card>
         );
@@ -511,47 +609,47 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     };
 
     return (
-      <Card className="w-full max-w-2xl mx-auto">
+      <Card className="w-full max-w-4xl mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>{survey.title}</CardTitle>
           <CardDescription>{survey.description}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-8">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                 {survey.sections.map((section: any) => (
-                    <div key={section.id} className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold">{section.title}</h3>
-                            {section.description && <p className="text-sm text-muted-foreground">{section.description}</p>}
-                        </div>
-
+                  <Card key={section.id} className="shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-base md:text-lg font-semibold">{section.title}</CardTitle>
+                      {section.description && (
+                        <CardDescription>{section.description}</CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-6">
                         {section.fields.map((field: FieldDef) => {
-                            if (field.type === 'group') {
-                                return (
-                                    <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {field.fields?.map((subField) => {
-                                             const subFieldDef = fieldMap.get(subField.id);
-                                             if (!subFieldDef || !shouldShowField(subFieldDef)) {
-                                                return null;
-                                            }
-                                            return renderField(subFieldDef, form);
-                                        })}
-                                    </div>
-                                )
-                            }
-                            const fieldDef = fieldMap.get(field.id);
-                            if (!fieldDef || !shouldShowField(fieldDef)) {
-                                return null;
-                            }
-
-                            return renderField(fieldDef, form);
+                          if (field.type === 'group') {
+                            return (
+                              <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                                {field.fields?.map((subField) => {
+                                  const subFieldDef = fieldMap.get(subField.id);
+                                  if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
+                                  return renderField(subFieldDef, form);
+                                })}
+                              </div>
+                            );
+                          }
+                          const fieldDef = fieldMap.get(field.id);
+                          if (!fieldDef || !shouldShowField(fieldDef)) return null;
+                          return renderField(fieldDef, form);
                         })}
-                    </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
 
-              <CardFooter className="px-0">
-                <Button type="submit" disabled={isSubmitting}>
+              <CardFooter className="px-8 pt-8 flex justify-center">
+                <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Submit
                 </Button>
