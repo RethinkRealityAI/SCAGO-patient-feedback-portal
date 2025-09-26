@@ -18,7 +18,11 @@ function initializeFirebaseAdmin(): App {
   if (apps.length > 0) {
     return apps[0] as App;
   }
-  return initializeApp();
+  
+  // Initialize Firebase Admin with project ID from environment
+  return initializeApp({
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  });
 }
 
 // Initialize Firebase and Firestore.
