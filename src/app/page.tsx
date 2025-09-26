@@ -14,7 +14,7 @@ export default async function SurveysPage() {
 
   return (
     <div className="flex-1 min-h-screen">
-      <div className="container max-w-6xl py-6 px-4 sm:py-8 sm:px-6 lg:py-12">
+      <div className="container max-w-4xl py-6 px-4 sm:py-8 sm:px-6 lg:py-12 mx-auto">
         <header className="mb-8 sm:mb-12">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-primary/10 backdrop-blur-sm border border-primary/20 mb-6">
@@ -29,7 +29,7 @@ export default async function SurveysPage() {
           </div>
         </header>
 
-        <div className="grid gap-4 sm:gap-6 lg:gap-8">
+        <div className="space-y-4 sm:space-y-6">
           {surveys.length > 0 ? (
             surveys.map((survey, index) => (
               <Card
@@ -43,7 +43,7 @@ export default async function SurveysPage() {
                   title={`Begin ${survey.title}`}
                 >
                   <CardHeader className="p-0">
-                    <CardTitle className="flex items-start gap-4 text-lg sm:text-xl lg:text-2xl group-hover:text-primary transition-colors duration-300">
+                    <CardTitle className="flex items-center gap-4 text-lg sm:text-xl lg:text-2xl group-hover:text-primary transition-colors duration-300">
                       <div className="p-3 rounded-xl bg-primary/10 backdrop-blur-sm border border-primary/20 group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300 shrink-0">
                         <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                       </div>
@@ -51,11 +51,8 @@ export default async function SurveysPage() {
                         <div className="font-semibold leading-tight break-words">
                           {survey.title}
                         </div>
-                        <CardDescription className="mt-3 text-sm sm:text-base leading-relaxed">
-                          {survey.description}
-                        </CardDescription>
                       </div>
-                      <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-300 shrink-0 mt-1" />
+                      <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-300 shrink-0" />
                     </CardTitle>
                   </CardHeader>
                 </Link>

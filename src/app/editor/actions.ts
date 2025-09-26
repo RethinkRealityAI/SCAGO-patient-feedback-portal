@@ -35,11 +35,28 @@ export async function listSurveys() {
     if (snapshot.empty) {
       return [];
     }
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      title: doc.data().title || 'Untitled Survey',
-      description: doc.data().description || 'No description.',
-    }));
+    return snapshot.docs.map((doc) => {
+      const data = doc.data() as any;
+      const sections = data.sections || [];
+      const questionCount = sections.reduce((total: number, section: any) => {
+        const fields = section.fields || [];
+        const sectionCount = fields.reduce((count: number, field: any) => {
+          if (field?.type === 'group') {
+            return count + (field.fields?.length || 0);
+          }
+          return count + 1;
+        }, 0);
+        return total + sectionCount;
+      }, 0);
+
+      return {
+        id: doc.id,
+        title: data.title || 'Untitled Survey',
+        description: data.description || 'No description.',
+        sections,
+        questionCount,
+      };
+    });
   } catch (e) {
     console.error('Error listing surveys:', e);
     return [];

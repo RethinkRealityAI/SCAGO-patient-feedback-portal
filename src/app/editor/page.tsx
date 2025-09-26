@@ -43,10 +43,13 @@ async function SurveyList() {
               {survey.name || survey.title || 'Untitled Survey'}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {survey.questions?.length || 0} questions
+              {(survey.sections?.reduce((sum: number, section: any) => sum + (section.fields?.length || 0), 0)) ?? 0} questions
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/survey/${survey.id}`}>View</Link>
+            </Button>
             <Button asChild size="sm">
               <Link href={`/editor/${survey.id}`}>Edit</Link>
             </Button>
