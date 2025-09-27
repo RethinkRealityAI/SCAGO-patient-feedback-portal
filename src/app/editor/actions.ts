@@ -11,7 +11,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
-import { defaultSurvey } from '@/lib/survey-template';
+import { defaultSurvey, surveyV2 } from '@/lib/survey-template';
 
 const surveyActionSchema = z.record(z.any());
 
@@ -21,6 +21,19 @@ export async function createSurvey() {
     ...defaultSurvey,
     title: 'Untitled Survey',
   };
+
+  await setDoc(newSurveyRef, newSurvey);
+
+  revalidatePath('/editor');
+  return { id: newSurveyRef.id };
+}
+
+export async function createSurveyV2() {
+  const newSurveyRef = doc(collection(db, 'surveys'));
+  const newSurvey = {
+    ...surveyV2,
+    title: 'Untitled Survey (V2)',
+  } as any;
 
   await setDoc(newSurveyRef, newSurvey);
 

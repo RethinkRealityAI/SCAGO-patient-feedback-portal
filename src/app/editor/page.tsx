@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { CreateSurveyButton, DeleteSurveyButton } from './client';
+import { CreateSurveyButton, CreateSurveyV2Button, DeleteSurveyButton } from './client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Trash2 } from 'lucide-react';
 import { listSurveys } from './actions';
@@ -81,7 +81,10 @@ export default function EditorPage() {
           <h1 className="text-3xl font-bold tracking-tight text-primary">My Surveys</h1>
           <p className="text-muted-foreground mt-2">Create and manage your surveys</p>
         </div>
-        <CreateSurveyButton />
+        <div className="flex gap-2">
+          <CreateSurveyButton />
+          <CreateSurveyV2Button />
+        </div>
       </div>
       <React.Suspense fallback={<SurveyListSkeleton />}>
         <SurveyList />

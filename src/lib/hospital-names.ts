@@ -259,10 +259,13 @@ const hospitalNamesList: string[] = [
 
   const toSlug = (str: string) => str.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
 
-  export const ontarioHospitals = hospitalNamesList.map(name => ({
+  const mappedHospitals = hospitalNamesList.map(name => ({
       label: name,
       value: toSlug(name)
   }));
-  ontarioHospitals.push({ label: "Other", value: "other" });
+  export const ontarioHospitals = [
+      { label: "Other", value: "other" },
+      ...mappedHospitals
+  ];
   
   export default hospitalNamesList;

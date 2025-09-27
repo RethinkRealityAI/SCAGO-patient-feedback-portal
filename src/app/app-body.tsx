@@ -16,8 +16,10 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
   if (hideNav) {
     return (
       <main className="flex-1 min-h-screen">
-        <div className="relative">
-          {children}
+        <div className="relative py-6 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-6xl">
+            {children}
+          </div>
         </div>
       </main>
     );

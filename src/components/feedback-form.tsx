@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Slider as UiSlider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
@@ -38,10 +39,12 @@ import {
 } from "@/components/ui/card"
 import { useState, useEffect, useMemo } from "react"
 import { provinces, ontarioCities } from "@/lib/location-data"
+import { hospitalDepartments } from "@/lib/hospital-departments"
 import { ontarioHospitals } from "@/lib/hospital-names"
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+// removed top-of-form alert; now we show a card under the submit area
 
 // Define a more specific type for your field configuration
 type FieldDef = {
@@ -49,6 +52,9 @@ type FieldDef = {
     type: string;
     label: string;
     options?: { label: string; value: string }[];
+    min?: number;
+    max?: number;
+    step?: number;
     validation?: {
         required?: boolean;
         pattern?: string;
@@ -61,6 +67,7 @@ type FieldDef = {
 
 function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
     const schema: Record<string, z.ZodTypeAny> = {};
+    const fieldMapById = new Map(fields.map((f) => [f.id, f]));
     fields.forEach((field) => {
       let fieldSchema: z.ZodTypeAny;
 
@@ -80,6 +87,17 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
 
       switch (field.type) {
         case 'text':
+        case 'url': {
+          let stringSchema = z.string();
+          if (field.type === 'url') {
+            stringSchema = stringSchema.url('Invalid URL.');
+          }
+          if (field.validation?.pattern) {
+            stringSchema = stringSchema.regex(createRegExp(field.validation.pattern), 'Invalid format.');
+          }
+          fieldSchema = stringSchema;
+          break;
+        }
         case 'textarea': {
           let stringSchema = z.string();
           if (field.validation?.pattern) {
@@ -108,6 +126,9 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         case 'date':
             fieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD).');
             break;
+        case 'time':
+            fieldSchema = z.string().regex(/^\d{2}:\d{2}$/, 'Invalid time format (HH:MM).');
+            break;
         case 'time-amount':
             fieldSchema = z.object({
                 value: z.coerce.number().min(0),
@@ -123,6 +144,7 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
           break;
         case 'city-on':
         case 'hospital-on':
+        case 'department-on':
             fieldSchema = z.object({
                 selection: z.string(),
                 other: z.string().optional(),
@@ -154,6 +176,9 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         case 'checkbox':
           fieldSchema = z.array(z.string());
           break;
+        case 'slider':
+          fieldSchema = z.coerce.number();
+          break;
         case 'boolean-checkbox':
             fieldSchema = z.boolean().default(false);
             break;
@@ -168,20 +193,52 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
           fieldSchema = z.any();
       }
 
-      const isRequired = (field.validation?.required || requiredOverrides.has(field.id)) && !['city-on', 'hospital-on', 'anonymous-toggle'].includes(field.type);
-      if (isRequired) {
-        if (fieldSchema instanceof z.ZodString) {
-            fieldSchema = fieldSchema.min(1, 'This field is required.');
-        } else if (fieldSchema instanceof z.ZodArray) {
-            fieldSchema = fieldSchema.nonempty('Please select at least one option.');
-        }
-      } else {
-        fieldSchema = fieldSchema.optional();
-      }
-
-      schema[field.id] = fieldSchema;
+      // Make base fields optional; we'll enforce conditional required in superRefine
+      schema[field.id] = fieldSchema.optional();
     });
-    return z.object(schema);
+    const base = z.object(schema);
+    return base.superRefine((values: Record<string, any>, ctx) => {
+        const isEmpty = (f: FieldDef, v: any): boolean => {
+            switch (f.type) {
+                case 'checkbox':
+                    return !Array.isArray(v) || v.length === 0;
+                case 'city-on':
+                case 'hospital-on':
+                case 'department-on':
+                    return !v || !v.selection || (v.selection === 'other' && !v.other);
+                case 'duration-hm':
+                case 'duration-dh':
+                case 'time-amount':
+                    return v == null;
+                case 'boolean-checkbox':
+                case 'anonymous-toggle':
+                    return v == null;
+                default:
+                    return v == null || (typeof v === 'string' && v.trim() === '');
+            }
+        };
+
+        const isVisible = (f: FieldDef): boolean => {
+            if (!f.conditionField) return true;
+            const controlling = fieldMapById.get(f.conditionField);
+            const actual = values[f.conditionField];
+            const expected = f.conditionValue;
+            if (controlling && (controlling.type === 'boolean-checkbox' || controlling.type === 'anonymous-toggle')) {
+                return String(actual) === String(expected);
+            }
+            return actual === expected;
+        };
+
+        for (const f of fields) {
+            const must = (f.validation?.required || requiredOverrides.has(f.id)) && f.type !== 'anonymous-toggle';
+            if (!must) continue;
+            if (!isVisible(f)) continue; // skip hidden questions
+            const v = values[f.id];
+            if (isEmpty(f, v)) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'This field is required.', path: [f.id] });
+            }
+        }
+    });
   }
 
 function Rating({ field }: { field: any }) {
@@ -513,12 +570,16 @@ function renderField(fieldConfig: FieldDef, form: any) {
                 switch (fieldConfig.type) {
                 case 'text':
                   return <Input {...fieldWithValue} className="max-w-md" />;
+                case 'url':
+                  return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder="https://example.com" />;
                 case 'email':
                   return <Input type="email" {...fieldWithValue} className="max-w-md" />;
                 case 'phone':
                   return <Input type="tel" {...fieldWithValue} className="max-w-md" />;
                 case 'date':
                   return <DateField field={field} />;
+                case 'time':
+                  return <Input type="time" {...fieldWithValue} className="max-w-md" />;
                 case 'number':
                   return <Input type="number" {...fieldWithValue} className="max-w-md" />;
                 case 'textarea':
@@ -540,6 +601,8 @@ function renderField(fieldConfig: FieldDef, form: any) {
                             </SelectContent>
                         </Select>
                     );
+                case 'department-on':
+                    return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" />;
                 case 'city-on':
                     return <OntarioCityField field={field} />;
                 case 'hospital-on':
@@ -586,6 +649,24 @@ function renderField(fieldConfig: FieldDef, form: any) {
                           ))}
                         </div>
                       );
+                case 'slider': {
+                    const min = fieldConfig.min ?? 0;
+                    const max = fieldConfig.max ?? 100;
+                    const step = fieldConfig.step ?? 1;
+                    const value = typeof field.value === 'number' ? field.value : (min + max) / 2;
+                    return (
+                        <div className="space-y-2 max-w-lg">
+                            <UiSlider
+                                value={[value]}
+                                min={min}
+                                max={max}
+                                step={step}
+                                onValueChange={(vals) => field.onChange(vals[0])}
+                            />
+                            <div className="text-sm text-muted-foreground">{value}</div>
+                        </div>
+                    );
+                }
                 case 'boolean-checkbox':
                     return <Checkbox checked={field.value} onCheckedChange={field.onChange} />;
                 case 'anonymous-toggle':
@@ -616,6 +697,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [resumeOpen, setResumeOpen] = useState(false);
     const [pendingDraft, setPendingDraft] = useState<any | null>(null);
+    const [submitErrors, setSubmitErrors] = useState<{ id: string; label: string }[]>([]);
+    const [showAllMissing, setShowAllMissing] = useState(false);
     const appearance = survey.appearance || {};
 
     // Flatten all fields (including groups) from all sections for schema
@@ -694,6 +777,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     };
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        setSubmitErrors([]);
         const result = await submitFeedback(survey.id, values);
         if (result.error) {
             toast({
@@ -705,6 +789,26 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             setIsSubmitted(true);
             clearDraft();
         }
+    }
+
+    function onInvalid(errors: any) {
+        try {
+            const ids = Object.keys(errors || {});
+            if (ids.length > 0) {
+                const items = ids.map((id) => ({ id, label: (fieldMap.get(id) as any)?.label || id }));
+                setSubmitErrors(items);
+                const firstId = ids[0];
+                const el = document.getElementById(`field-${firstId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                toast({
+                    title: 'Please complete required fields',
+                    description: `${ids.length} field${ids.length > 1 ? 's' : ''} need${ids.length > 1 ? '' : 's'} your attention.`,
+                    variant: 'destructive'
+                });
+            }
+        } catch {}
     }
 
     if (isSubmitted) {
@@ -760,12 +864,14 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const labelSizeClass = appearance.labelSize === 'xs' ? 'text-xs' : appearance.labelSize === 'md' ? 'text-sm' : 'text-xs';
 
     return (
-      <Card className={`w-full max-w-4xl mx-auto ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
-        <CardHeader>
+      <Card className={`w-full max-w-5xl mx-auto rounded-lg border p-6 shadow-sm ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
+        <CardHeader className="p-0">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle className={`${titleSizeClass} text-primary`}>{survey.title}</CardTitle>
-              <CardDescription>{survey.description}</CardDescription>
+              {appearance.showTitle && (
+                <CardTitle className={`${titleSizeClass} text-primary`}>{survey.title}</CardTitle>
+              )}
+              <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description}</CardDescription>
             </div>
             {survey.shareButtonEnabled && (
               <Button
@@ -792,33 +898,45 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             )}
           </div>
         </CardHeader>
-        <CardContent className="px-8">
+        <CardContent className="px-4 sm:px-6 lg:px-8 mt-6">
           {survey.saveProgressEnabled && (
-            <div className="mb-4 text-xs text-muted-foreground">
+            <div className="mb-6 text-sm text-muted-foreground">
               Your progress is saved locally and will resume automatically on return.
             </div>
           )}
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-10">
                 {survey.sections.map((section: any) => {
                   const anonField = (section.fields || []).find((f: any) => f.type === 'anonymous-toggle');
                   const isAnonymous = anonField ? !!(watchedValues as any)[anonField.id] : false;
+                  // Engagement gating: if this is the V2 engagement section, hide all except visitType until selected
+                  const isEngagementSection = section.id === 'v2-hospital-engagement-section';
+                  const hideUntilVisitType = isEngagementSection && !(watchedValues as any)['visitType'];
                   return (
-                    <Card key={section.id} className="shadow-sm">
-                      <CardHeader>
+                    <Card key={section.id} className="rounded-lg border p-5 shadow-sm">
+                      <CardHeader className="p-0">
                         <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{section.title}</CardTitle>
                         {section.description && (
-                          <CardDescription>{section.description}</CardDescription>
+                          <CardDescription className="mt-2">{section.description}</CardDescription>
                         )}
                       </CardHeader>
-                      <CardContent>
-                        <div className="space-y-6">
+                      <CardContent className="px-4 sm:px-6 lg:px-8 mt-6">
+                        <div className="space-y-8">
+                          {hideUntilVisitType && (
+                            <div className="text-sm text-muted-foreground">
+                              Please select your hospital encounter type to continue.
+                            </div>
+                          )}
                           {(section.fields || []).map((field: FieldDef) => {
+                            // In engagement section: only show visitType until a selection is made
+                            if (isEngagementSection && hideUntilVisitType && field.id !== 'visitType') {
+                              return null;
+                            }
                             // Always show the anonymous toggle itself
                             if (field.type === 'anonymous-toggle') {
                               const fieldDef = fieldMap.get(field.id);
                               return fieldDef ? (
-                                <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                                <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
                               ) : null;
                             }
                             if (isAnonymous) {
@@ -830,7 +948,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                                   {field.fields?.map((subField) => {
                                     const subFieldDef = fieldMap.get(subField.id);
                                     if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
-                                    return renderField(subFieldDef, form);
+                                    return (
+                                      <div key={subFieldDef.id} id={`field-${subFieldDef.id}`} className={labelSizeClass}>
+                                        {renderField(subFieldDef, form)}
+                                      </div>
+                                    );
                                   })}
                                 </div>
                               );
@@ -838,7 +960,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             const fieldDef = fieldMap.get(field.id);
                             if (!fieldDef || !shouldShowField(fieldDef)) return null;
                             return (
-                              <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                              <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
                             );
                           })}
                         </div>
@@ -847,7 +969,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   );
                 })}
 
-              <CardFooter className="px-8 pt-8 flex justify-center">
+              <CardFooter className="px-4 sm:px-6 lg:px-8 pt-8 flex justify-center">
                 <div className="flex items-center gap-3">
                   <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -858,6 +980,42 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   )}
                 </div>
               </CardFooter>
+
+              {submitErrors.length > 0 && (
+                <div className="px-4 sm:px-6 lg:px-8">
+                  <Card className="mt-4 border-destructive/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-destructive">Missing information</CardTitle>
+                      <CardDescription>Please complete the following field{submitErrors.length > 1 ? 's' : ''}.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {(showAllMissing ? submitErrors : submitErrors.slice(0, 10)).map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(`field-${e.id}`);
+                            if (el) {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                          }}
+                          className="block text-left underline underline-offset-2"
+                          aria-label={`Scroll to ${e.label}`}
+                        >
+                          {e.label}
+                        </button>
+                      ))}
+                      {submitErrors.length > 10 && (
+                        <div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setShowAllMissing((v) => !v)}>
+                            {showAllMissing ? 'Show less' : `Show all (${submitErrors.length})`}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </form>
           </Form>
         </CardContent>

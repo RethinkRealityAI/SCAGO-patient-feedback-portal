@@ -31,7 +31,7 @@ const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'time-amount', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'duration-hm', 'duration-dh']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -40,6 +40,9 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
     required: z.boolean().optional(),
     pattern: z.string().optional(),
   }).optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
 const appearanceSchema = z.object({
@@ -90,7 +93,7 @@ class CustomKeyboardSensor extends DndKeyboardSensor {
 function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listeners }: { fieldPath: FieldTypePath; fieldIndex: number; remove: (index: number) => void; move: (from: number, to: number) => void; totalFields: number; listeners?: any }) {
   const { control, watch, getValues, setValue } = useFormContext<SurveyFormData>();
   const field = watch(fieldPath);
-  const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({ control, name: `${fieldPath}.options` });
+  const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({ control, name: `${fieldPath}.options` as any });
   // Determine which section this field belongs to
   const sectionIndexMatch = String(fieldPath).match(/^sections\.(\d+)\./);
   const sectionIndexFromPath = sectionIndexMatch ? Number(sectionIndexMatch[1]) : -1;
@@ -115,28 +118,36 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
   };
 
   const availableConditionalFields = useMemo(() => {
-    const allFields: { label: string; value: string }[] = [];
+    const collected: { label: string; value: string }[] = [];
     const sections = getValues('sections');
-    sections.forEach(section => {
-        section.fields.forEach(f => {
-            if (f.id === field.id) return;
-            if (['radio', 'select', 'boolean-checkbox', 'province-ca', 'city-on'].includes(f.type)) {
-                allFields.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
-            }
-        })
-    })
-    return allFields;
-  }, [getValues, field.id]);
+    const visit = (items: any[]) => {
+      for (const f of items) {
+        if (f.id !== field.id && ['radio', 'select', 'checkbox', 'boolean-checkbox', 'province-ca', 'city-on', 'hospital-on'].includes(f.type)) {
+          collected.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
+        }
+        if (f.type === 'group' && Array.isArray(f.fields)) visit(f.fields);
+      }
+    };
+    (sections || []).forEach((s: any) => visit(s.fields || []));
+    return collected;
+  }, [getValues, field?.id]);
 
-  const conditionalFieldId = watch(`${fieldPath}.conditionField`);
+  const conditionalFieldId = watch(`${fieldPath}.conditionField` as any);
   const conditionalFieldType = useMemo(() => {
     const sections = getValues('sections');
-    for (const section of sections) {
-        for (const f of section.fields) {
-            if (f.id === conditionalFieldId) {
-                return f.type;
-            }
+    const findType = (items: any[]): string | null => {
+      for (const f of items) {
+        if (f.id === conditionalFieldId) return f.type;
+        if (f.type === 'group' && Array.isArray(f.fields)) {
+          const t = findType(f.fields);
+          if (t) return t;
         }
+      }
+      return null;
+    };
+    for (const section of sections) {
+      const t = findType(section.fields || []);
+      if (t) return t;
     }
     return null;
   }, [conditionalFieldId, getValues]);
@@ -153,7 +164,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <div {...listeners} className="cursor-grab p-2"><GripVertical /></div>
+            <div {...(listeners || {})} className="cursor-grab p-2"><GripVertical /></div>
             <CardTitle className="text-lg">Question</CardTitle>
           </div>
           <div className="flex items-center gap-2">
@@ -170,8 +181,8 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <FormField control={control} name={`${fieldPath}.label`} render={({ field: formField }) => (<FormItem><FormLabel>Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
-        <FormField control={control} name={`${fieldPath}.type`} render={({ field: formField }) => (
+        <FormField control={control} name={`${fieldPath}.label` as any} render={({ field: formField }) => (<FormItem><FormLabel>Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
+        <FormField control={control} name={`${fieldPath}.type` as any} render={({ field: formField }) => (
           <FormItem>
             <FormLabel>Type</FormLabel>
             <Select onValueChange={handleTypeChange} defaultValue={formField.value}>
@@ -180,20 +191,24 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="text">Text</SelectItem>
                 <SelectItem value="textarea">Text Area</SelectItem>
                 <SelectItem value="email">Email</SelectItem>
+                <SelectItem value="url">URL</SelectItem>
                 <SelectItem value="phone">Phone</SelectItem>
                 <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="time">Time</SelectItem>
                 <SelectItem value="number">Number</SelectItem>
                 <SelectItem value="rating">Rating (1-5 Stars)</SelectItem>
                 <SelectItem value="nps">NPS Scale (1-10)</SelectItem>
                 <SelectItem value="select">Select</SelectItem>
                 <SelectItem value="radio">Radio</SelectItem>
                 <SelectItem value="checkbox">Checkbox</SelectItem>
+                <SelectItem value="slider">Slider</SelectItem>
                 <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
                 <SelectItem value="anonymous-toggle">Anonymous Toggle</SelectItem>
                 <SelectItem value="group">Group (Side-by-side fields)</SelectItem>
                 <SelectItem value="province-ca">Province (Canada)</SelectItem>
                 <SelectItem value="city-on">City (Ontario)</SelectItem>
                 <SelectItem value="hospital-on">Hospital (Ontario)</SelectItem>
+                <SelectItem value="department-on">Department (Ontario - popular)</SelectItem>
                 <SelectItem value="duration-hm">Duration (Hours/Minutes)</SelectItem>
                 <SelectItem value="duration-dh">Duration (Days/Hours)</SelectItem>
                 <SelectItem value="time-amount">Time Amount (Days/Hours)</SelectItem>
@@ -207,17 +222,20 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
             <Label>Options</Label>
             {options.map((option, optionIndex) => (
               <div key={option.id} className="flex flex-col md:flex-row items-center gap-2">
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label`} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value`} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Value</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label` as any} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value` as any} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Value</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
                 <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => removeOption(optionIndex)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
             ))}
             <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => appendOption({ id: nanoid(), label: '', value: '' })}>Add Option</Button>
           </div>
         )}
+        {field?.type === 'group' && (
+          <GroupChildrenEditor parentFieldPath={fieldPath} />
+        )}
         {!(field?.type === 'group' || field?.type === 'anonymous-toggle') && (
           <div className="flex items-center justify-between">
-            <FormField control={control} name={`${fieldPath}.validation.required`} render={({ field: formField }) => (
+            <FormField control={control} name={`${fieldPath}.validation.required` as any} render={({ field: formField }) => (
               <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 pr-3 shadow-sm">
                 <div className="space-y-0.5 px-3"><FormLabel className="text-xs">Required</FormLabel></div>
                 <FormControl><Switch checked={!!formField.value} onCheckedChange={formField.onChange} onPointerDown={stopPropagation} disabled={sectionAllRequired} /></FormControl>
@@ -236,7 +254,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                     {field?.conditionField && field?.conditionField === (getValues(fieldPath as any) as any)?.id && (
                       <div className="text-xs text-destructive">A field cannot depend on itself.</div>
                     )}
-                    <FormField control={control} name={`${fieldPath}.conditionField`} render={({ field: formField }) => (
+                    <FormField control={control} name={`${fieldPath}.conditionField` as any} render={({ field: formField }) => (
                         <FormItem><FormLabel>Show when</FormLabel>
                             <div className="flex items-center gap-2">
                                 <Select onValueChange={formField.onChange} value={formField.value ?? ''}>
@@ -248,7 +266,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                         <FormMessage /></FormItem>
                     )} />
                     {conditionalFieldId && (
-                         <FormField control={control} name={`${fieldPath}.conditionValue`} render={({ field: formField }) => (
+                         <FormField control={control} name={`${fieldPath}.conditionValue` as any} render={({ field: formField }) => (
                             <FormItem><FormLabel>Has the value</FormLabel>
                                 <FormControl>
                                     {conditionalFieldType === 'boolean-checkbox' ? (<Switch checked={formField.value === 'true'} onCheckedChange={(checked: boolean) => formField.onChange(String(checked))} />) : (<Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="Enter the required value" />)}
@@ -262,6 +280,26 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
         </Accordion>
       </CardContent>
     </Card>
+  );
+}
+
+function GroupChildrenEditor({ parentFieldPath }: { parentFieldPath: FieldTypePath }) {
+  const { control } = useFormContext<SurveyFormData>();
+  const { fields, append, remove, move } = useFieldArray({ control, name: `${parentFieldPath}.fields` });
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label>Group Items</Label>
+        <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => append({ id: nanoid(), label: 'New Item', type: 'text' } as any)}>Add Item</Button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {fields.map((child, idx) => (
+          <div key={child.id} className="rounded-md border p-3">
+            <FieldEditor fieldPath={`${parentFieldPath}.fields.${idx}` as any} fieldIndex={idx} remove={remove} move={move} totalFields={fields.length} listeners={{}} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
