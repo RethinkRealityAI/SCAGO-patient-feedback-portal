@@ -4,15 +4,15 @@ import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type SurveyEditorPageProps = {
-  params: {
+  params: Promise<{
     surveyId: string;
-  };
+  }>;
 };
 
 export default async function SurveyEditorPage({
   params,
 }: SurveyEditorPageProps) {
-  const { surveyId } = params;
+  const { surveyId } = await params;
   const surveyData = await getSurvey(surveyId);
 
   if ('error' in surveyData) {

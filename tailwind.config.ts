@@ -78,9 +78,9 @@ export default {
         xs: '2px',
       },
       boxShadow: {
-        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+        'glass': '0 4px 16px 0 rgba(31, 38, 135, 0.15)',
         'glass-inset': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
-        'glass-lg': '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        'glass-lg': '0 8px 24px -4px rgba(0, 0, 0, 0.12)',
       },
       keyframes: {
         'accordion-down': {

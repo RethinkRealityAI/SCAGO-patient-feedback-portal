@@ -105,13 +105,13 @@
   }
   
   body {
-    @apply bg-gradient-to-br from-background via-background-secondary to-background text-foreground;
+    @apply bg-white text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
     min-height: 100vh;
     position: relative;
   }
   
-  /* Glassmorphism background pattern - White and Red theme */
+  /* Clean white background */
   body::before {
     content: '';
     position: fixed;
@@ -119,11 +119,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: 
-      radial-gradient(circle at 20% 80%, rgba(200, 38, 42, 0.18) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.7) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(200, 38, 42, 0.12) 0%, transparent 50%),
-      radial-gradient(circle at 60% 60%, rgba(220, 50, 54, 0.08) 0%, transparent 40%);
+    background: white;
     pointer-events: none;
     z-index: -1;
   }
@@ -133,7 +129,7 @@
   /* Glass morphism utilities */
   .glass {
     @apply bg-white/10 backdrop-blur-md border border-white/20;
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.15);
   }
   
   .glass-card {
