@@ -31,6 +31,7 @@ export const defaultSurvey = {
         id: 'contact-information-section',
         title: 'Contact Information',
         fields: [
+            { id: 'submitAnonymously', type: 'anonymous-toggle', label: 'Submit anonymously' },
             {
                 id: 'name-group',
                 type: 'group',
@@ -127,7 +128,7 @@ export const defaultSurvey = {
         {
           id: 'hospitalStayLength',
           label: 'How long was your hospital stay?',
-          type: 'duration-dh',
+          type: 'time-amount',
         },
         {
           id: 'hcpFamiliarity',
@@ -174,16 +175,9 @@ export const defaultSurvey = {
             type: 'group',
             fields: [
                 {
-                  id: 'interactionMonth',
-                  label: 'Month of Interaction',
-                  type: 'select',
-                  options: months.map(m => ({ id: nanoid(), label: m, value: m.toLowerCase() })),
-                },
-                {
-                  id: 'interactionYear',
-                  label: 'Year of Interaction',
-                  type: 'select',
-                  options: years.map(y => ({ id: nanoid(), label: y, value: y })),
+                  id: 'interactionDate',
+                  label: 'Date of Interaction',
+                  type: 'date',
                 },
             ]
         },

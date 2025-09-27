@@ -36,29 +36,36 @@ async function SurveyList() {
       {surveys.map((survey: any) => (
         <div
           key={survey.id}
-          className="flex items-center justify-between glass-card p-4 group hover:-translate-y-1 transition-all duration-300"
+          className="glass-card p-6 group hover:-translate-y-1 transition-all duration-300 hover:shadow-lg"
         >
-          <div>
-            <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">
-              {survey.name || survey.title || 'Untitled Survey'}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {(survey.sections?.reduce((sum: number, section: any) => sum + (section.fields?.length || 0), 0)) ?? 0} questions
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/dashboard/${survey.id}`}>Dashboard</Link>
-            </Button>
-            <Button asChild size="sm" variant="secondary">
-              <Link href={`/survey/${survey.id}`}>View</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href={`/editor/${survey.id}`}>Edit</Link>
-            </Button>
-            <DeleteSurveyButton surveyId={survey.id}>
-              <Trash2 className="h-4 w-4" />
-            </DeleteSurveyButton>
+          <div className="flex flex-col space-y-4">
+            {/* Header with title and subtitle */}
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold group-hover:text-primary transition-colors leading-tight">
+                {survey.name || survey.title || 'Untitled Survey'}
+              </h2>
+              <p className="text-sm text-muted-foreground font-medium">
+                {(survey.sections?.reduce((sum: number, section: any) => sum + (section.fields?.length || 0), 0)) ?? 0} questions
+              </p>
+            </div>
+            
+            {/* Action buttons - organized in a clean row */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <div className="flex items-center gap-2">
+                <Button asChild size="sm" variant="outline" className="h-8">
+                  <Link href={`/dashboard/${survey.id}`}>Dashboard</Link>
+                </Button>
+                <Button asChild size="sm" variant="secondary" className="h-8">
+                  <Link href={`/survey/${survey.id}`}>View</Link>
+                </Button>
+                <Button asChild size="sm" className="h-8">
+                  <Link href={`/editor/${survey.id}`}>Edit</Link>
+                </Button>
+              </div>
+              <DeleteSurveyButton surveyId={survey.id}>
+                <Trash2 className="h-4 w-4" />
+              </DeleteSurveyButton>
+            </div>
           </div>
         </div>
       ))}

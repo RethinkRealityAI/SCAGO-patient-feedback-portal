@@ -39,6 +39,9 @@ import {
 import { useState, useEffect, useMemo } from "react"
 import { provinces, ontarioCities } from "@/lib/location-data"
 import { ontarioHospitals } from "@/lib/hospital-names"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // Define a more specific type for your field configuration
 type FieldDef = {
@@ -56,7 +59,7 @@ type FieldDef = {
 };
 
 
-function buildZodSchema(fields: FieldDef[]) {
+function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
     const schema: Record<string, z.ZodTypeAny> = {};
     fields.forEach((field) => {
       let fieldSchema: z.ZodTypeAny;
@@ -105,6 +108,12 @@ function buildZodSchema(fields: FieldDef[]) {
         case 'date':
             fieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD).');
             break;
+        case 'time-amount':
+            fieldSchema = z.object({
+                value: z.coerce.number().min(0),
+                unit: z.enum(['days', 'hours'])
+            });
+            break;
         case 'number':
             fieldSchema = z.coerce.number();
             break;
@@ -148,6 +157,9 @@ function buildZodSchema(fields: FieldDef[]) {
         case 'boolean-checkbox':
             fieldSchema = z.boolean().default(false);
             break;
+        case 'anonymous-toggle':
+            fieldSchema = z.boolean().default(false);
+            break;
         case 'rating':
         case 'nps':
           fieldSchema = z.number().min(1, 'A rating is required.');
@@ -156,7 +168,8 @@ function buildZodSchema(fields: FieldDef[]) {
           fieldSchema = z.any();
       }
 
-      if (field.validation?.required && !['city-on', 'hospital-on'].includes(field.type)) {
+      const isRequired = (field.validation?.required || requiredOverrides.has(field.id)) && !['city-on', 'hospital-on', 'anonymous-toggle'].includes(field.type);
+      if (isRequired) {
         if (fieldSchema instanceof z.ZodString) {
             fieldSchema = fieldSchema.min(1, 'This field is required.');
         } else if (fieldSchema instanceof z.ZodArray) {
@@ -436,6 +449,52 @@ function DurationDhField({ field }: { field: any }) {
     );
 }
 
+function DateField({ field }: { field: any }) {
+    const selected = field.value ? new Date(field.value) : undefined;
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button type="button" variant="outline" className="w-[240px] justify-start text-left font-normal">
+                    {selected ? format(selected, 'yyyy-MM-dd') : 'Pick a date'}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0" align="start">
+                <Calendar
+                    mode="single"
+                    selected={selected}
+                    onSelect={(d) => field.onChange(d ? format(d, 'yyyy-MM-dd') : '')}
+                    initialFocus
+                />
+            </PopoverContent>
+        </Popover>
+    );
+}
+
+function TimeAmountField({ field }: { field: any }) {
+    const value = field.value?.value ?? '';
+    const unit = field.value?.unit ?? 'hours';
+    return (
+        <div className="flex items-center gap-3">
+            <Input
+                type="number"
+                min="0"
+                value={value}
+                onChange={(e) => field.onChange({ value: Number(e.target.value || 0), unit })}
+                className="w-28"
+            />
+            <Select onValueChange={(u) => field.onChange({ value: Number(value || 0), unit: u })} defaultValue={unit}>
+                <SelectTrigger className="w-36">
+                    <SelectValue placeholder="Unit" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+    );
+}
+
 
 function renderField(fieldConfig: FieldDef, form: any) {
   const { control } = form;
@@ -453,11 +512,15 @@ function renderField(fieldConfig: FieldDef, form: any) {
                 const fieldWithValue = { ...field, value: field.value ?? '' };
                 switch (fieldConfig.type) {
                 case 'text':
+                  return <Input {...fieldWithValue} className="max-w-md" />;
                 case 'email':
+                  return <Input type="email" {...fieldWithValue} className="max-w-md" />;
                 case 'phone':
+                  return <Input type="tel" {...fieldWithValue} className="max-w-md" />;
                 case 'date':
+                  return <DateField field={field} />;
                 case 'number':
-                  return <Input type={fieldConfig.type} {...fieldWithValue} className="max-w-md" />;
+                  return <Input type="number" {...fieldWithValue} className="max-w-md" />;
                 case 'textarea':
                   return <Textarea {...fieldWithValue} className="max-w-2xl" />;
                 case 'select':
@@ -485,6 +548,8 @@ function renderField(fieldConfig: FieldDef, form: any) {
                     return <DurationHmField field={field} />;
                 case 'duration-dh':
                     return <DurationDhField field={field} />;
+                case 'time-amount':
+                    return <TimeAmountField field={field} />;
                 case 'radio':
                   return (
                     <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
@@ -523,6 +588,13 @@ function renderField(fieldConfig: FieldDef, form: any) {
                       );
                 case 'boolean-checkbox':
                     return <Checkbox checked={field.value} onCheckedChange={field.onChange} />;
+                case 'anonymous-toggle':
+                    return (
+                        <div className="flex items-center gap-3">
+                            <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
+                            <span className="text-sm">Submit anonymously</span>
+                        </div>
+                    );
                 case 'rating':
                     return <Rating field={field} />;
                 case 'nps':
@@ -542,6 +614,8 @@ function renderField(fieldConfig: FieldDef, form: any) {
 export default function FeedbackForm({ survey }: { survey: any }) {
     const { toast } = useToast();
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [resumeOpen, setResumeOpen] = useState(false);
+    const [pendingDraft, setPendingDraft] = useState<any | null>(null);
     const appearance = survey.appearance || {};
 
     // Flatten all fields (including groups) from all sections for schema
@@ -549,10 +623,28 @@ export default function FeedbackForm({ survey }: { survey: any }) {
       section.fields.flatMap((f: FieldDef) => (f.type === 'group' ? (f.fields || []) : [f]))
     );
 
-    const formSchema = buildZodSchema(allFields);
+    // Section-level required overrides (allRequired)
+    const requiredOverrides = useMemo(() => {
+        const ids = new Set<string>();
+        (survey.sections || []).forEach((section: any) => {
+            if (section.allRequired) {
+                (section.fields || []).forEach((f: any) => {
+                    if (f.type === 'group') {
+                        (f.fields || []).forEach((sf: any) => ids.add(sf.id));
+                    } else {
+                        ids.add(f.id);
+                    }
+                });
+            }
+        });
+        return ids;
+    }, [survey.sections]);
+
+    const formSchema = useMemo(() => buildZodSchema(allFields, requiredOverrides), [allFields, requiredOverrides]);
     const form = useForm<z.infer<typeof formSchema>>({
       resolver: zodResolver(formSchema),
       defaultValues: {},
+      shouldUnregister: true,
     });
     const { formState, watch } = form;
     const { isSubmitting } = formState;
@@ -567,17 +659,23 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const draftKey = useMemo(() => `survey-draft:${survey.id}`, [survey.id]);
 
     useEffect(() => {
-        if (survey.saveProgressEnabled) {
-            try {
-                const saved = localStorage.getItem(draftKey);
-                if (saved) {
-                    const parsed = JSON.parse(saved);
+        if (!survey.saveProgressEnabled) return;
+        try {
+            const saved = localStorage.getItem(draftKey);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                const showModal = survey.resumeSettings?.showResumeModal !== false; // default true
+                if (showModal) {
+                    setPendingDraft(parsed);
+                    setResumeOpen(true);
+                } else {
                     form.reset(parsed);
+                    toast({ title: 'Resume where you left off?', description: 'We restored your saved progress. You can continue or clear to start over.' });
                 }
-            } catch {}
-        }
+            }
+        } catch {}
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [draftKey, survey.saveProgressEnabled]);
+    }, [draftKey, survey.saveProgressEnabled, survey.resumeSettings]);
 
     useEffect(() => {
         if (!survey.saveProgressEnabled) return;
@@ -591,6 +689,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
 
     const clearDraft = () => {
         try { localStorage.removeItem(draftKey); } catch {}
+        try { form.reset({} as any); } catch {}
+        toast({ title: 'Cleared saved progress', description: 'You can start fresh now.' })
     };
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -615,6 +715,19 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     <CardTitle className="text-2xl lg:text-3xl">Thank You!</CardTitle>
                     <CardDescription className="text-base lg:text-lg mt-2">Your feedback has been successfully submitted.</CardDescription>
                 </CardHeader>
+                <CardContent className="flex justify-center pb-8">
+                    <Button
+                        type="button"
+                        onClick={() => {
+                            clearDraft();
+                            setIsSubmitted(false);
+                            try { (form as any)?.reset({}); } catch {}
+                        }}
+                        size="lg"
+                    >
+                        Submit another response
+                    </Button>
+                </CardContent>
             </Card>
         );
     }
@@ -633,7 +746,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             return true; 
         }
     
-        if (conditionField.type === 'boolean-checkbox') {
+        if (conditionField.type === 'boolean-checkbox' || conditionField.type === 'anonymous-toggle') {
             const expectedBoolean = expectedValue === 'true';
             return actualValue === expectedBoolean;
         }
@@ -680,40 +793,59 @@ export default function FeedbackForm({ survey }: { survey: any }) {
           </div>
         </CardHeader>
         <CardContent className="px-8">
+          {survey.saveProgressEnabled && (
+            <div className="mb-4 text-xs text-muted-foreground">
+              Your progress is saved locally and will resume automatically on return.
+            </div>
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                {survey.sections.map((section: any) => (
-                  <Card key={section.id} className="shadow-sm">
-                    <CardHeader>
-                      <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{section.title}</CardTitle>
-                      {section.description && (
-                        <CardDescription>{section.description}</CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-6">
-                        {section.fields.map((field: FieldDef) => {
-                          if (field.type === 'group') {
+                {survey.sections.map((section: any) => {
+                  const anonField = (section.fields || []).find((f: any) => f.type === 'anonymous-toggle');
+                  const isAnonymous = anonField ? !!(watchedValues as any)[anonField.id] : false;
+                  return (
+                    <Card key={section.id} className="shadow-sm">
+                      <CardHeader>
+                        <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{section.title}</CardTitle>
+                        {section.description && (
+                          <CardDescription>{section.description}</CardDescription>
+                        )}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-6">
+                          {(section.fields || []).map((field: FieldDef) => {
+                            // Always show the anonymous toggle itself
+                            if (field.type === 'anonymous-toggle') {
+                              const fieldDef = fieldMap.get(field.id);
+                              return fieldDef ? (
+                                <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                              ) : null;
+                            }
+                            if (isAnonymous) {
+                              return null;
+                            }
+                            if (field.type === 'group') {
+                              return (
+                                <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                                  {field.fields?.map((subField) => {
+                                    const subFieldDef = fieldMap.get(subField.id);
+                                    if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
+                                    return renderField(subFieldDef, form);
+                                  })}
+                                </div>
+                              );
+                            }
+                            const fieldDef = fieldMap.get(field.id);
+                            if (!fieldDef || !shouldShowField(fieldDef)) return null;
                             return (
-                              <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                {field.fields?.map((subField) => {
-                                  const subFieldDef = fieldMap.get(subField.id);
-                                  if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
-                                  return renderField(subFieldDef, form);
-                                })}
-                              </div>
+                              <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
                             );
-                          }
-                          const fieldDef = fieldMap.get(field.id);
-                          if (!fieldDef || !shouldShowField(fieldDef)) return null;
-                          return (
-                            <div key={fieldDef.id} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
 
               <CardFooter className="px-8 pt-8 flex justify-center">
                 <div className="flex items-center gap-3">
@@ -729,6 +861,62 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             </form>
           </Form>
         </CardContent>
+        <Dialog open={resumeOpen} onOpenChange={setResumeOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{survey.resumeSettings?.resumeTitle || 'Resume your saved progress?'}</DialogTitle>
+              <DialogDescription>
+                {survey.resumeSettings?.resumeDescription || 'We found a saved draft. Continue where you left off or start over.'}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              {survey.resumeSettings?.showStartOver !== false && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setResumeOpen(false);
+                    clearDraft();
+                    setPendingDraft(null);
+                    toast({ title: survey.resumeSettings?.startOverLabel || 'Start over', description: 'Saved draft cleared.' });
+                  }}
+                >
+                  {survey.resumeSettings?.startOverLabel || 'Start over'}
+                </Button>
+              )}
+              {survey.resumeSettings?.showContinue !== false && (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setResumeOpen(false);
+                    if (pendingDraft) {
+                      form.reset(pendingDraft);
+                      setPendingDraft(null);
+                    }
+                    toast({ title: survey.resumeSettings?.continueLabel || 'Continue', description: 'Your progress has been restored.' });
+                  }}
+                >
+                  {survey.resumeSettings?.continueLabel || 'Continue'}
+                </Button>
+              )}
+              {survey.resumeSettings?.showStartOver === false && survey.resumeSettings?.showContinue === false && (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setResumeOpen(false);
+                    if (pendingDraft) {
+                      form.reset(pendingDraft);
+                      setPendingDraft(null);
+                    }
+                    toast({ title: 'Continue', description: 'Your progress has been restored.' });
+                  }}
+                >
+                  Continue
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Card>
     );
   }

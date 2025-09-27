@@ -58,7 +58,7 @@ export function Sidebar() {
         <SidebarLink
           href="/editor"
           icon={<ClipboardList />}
-          label="My Surveys"
+          label="Survey Editor"
           isCollapsed={isCollapsed}
         />
         <SidebarLink
