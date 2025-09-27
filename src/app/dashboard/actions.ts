@@ -208,32 +208,140 @@ export async function getSubmissionsForSurvey(surveyId: string): Promise<Feedbac
   }
 }
 
-export async function generateAnalysisPdf(params: { title: string; surveyId: string; analysisMarkdown: string }): Promise<{ error?: string; pdfBase64?: string }> {
+export async function generateAnalysisPdf(params: { 
+  title: string; 
+  surveyId: string; 
+  analysisMarkdown: string;
+  includeSubmissions?: boolean;
+}): Promise<{ error?: string; pdfBase64?: string }> {
   try {
     const doc = await PDFDocument.create();
-    const page = doc.addPage([612, 792]); // US Letter portrait
+    let currentPage = doc.addPage([612, 792]); // US Letter portrait
     const font = await doc.embedFont(StandardFonts.Helvetica);
-    const { width, height } = page.getSize();
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const { width, height } = currentPage.getSize();
     const margin = 50;
 
+    // Title
     const title = `${params.title} — Survey ${params.surveyId}`;
-    page.drawText(title, { x: margin, y: height - margin - 24, size: 18, font, color: rgb(0.2, 0.2, 0.2) });
+    currentPage.drawText(title, { 
+      x: margin, 
+      y: height - margin - 24, 
+      size: 20, 
+      font: boldFont, 
+      color: rgb(0.2, 0.2, 0.2) 
+    });
 
+    // Date
+    currentPage.drawText(`Generated: ${new Date().toLocaleString()}`, { 
+      x: margin, 
+      y: height - margin - 45, 
+      size: 10, 
+      font, 
+      color: rgb(0.5, 0.5, 0.5) 
+    });
+
+    // AI Analysis Section
     const lines = params.analysisMarkdown.split('\n');
-    let cursorY = height - margin - 50;
+    let cursorY = height - margin - 70;
     const lineHeight = 14;
 
     for (const raw of lines) {
-      const text = raw.replace(/^#+\s*/,'');
-      if (cursorY < margin) {
-        doc.addPage([612, 792]);
-        const newPage = doc.getPage(doc.getPageCount() - 1);
-        cursorY = 792 - margin;
-        newPage.drawText(text, { x: margin, y: cursorY, size: 12, font, color: rgb(0,0,0) });
-        cursorY -= lineHeight;
+      const isHeader = raw.startsWith('#');
+      const text = raw.replace(/^#+\s*/,'').replace(/^\*\s*/,'• ');
+      const textFont = isHeader ? boldFont : font;
+      const textSize = isHeader ? 14 : 11;
+      
+      // Check if we need a new page
+      if (cursorY < margin + lineHeight) {
+        currentPage = doc.addPage([612, 792]);
+        cursorY = height - margin;
+      }
+      
+      // Draw text with proper formatting
+      if (text.trim()) {
+        currentPage.drawText(text, { 
+          x: text.startsWith('• ') ? margin + 15 : margin, 
+          y: cursorY, 
+          size: textSize, 
+          font: textFont, 
+          color: rgb(0, 0, 0) 
+        });
+        cursorY -= lineHeight * (isHeader ? 1.5 : 1);
       } else {
-        page.drawText(text, { x: margin, y: cursorY, size: 12, font, color: rgb(0,0,0) });
-        cursorY -= lineHeight;
+        cursorY -= lineHeight * 0.5; // Half spacing for empty lines
+      }
+    }
+
+    // Include submissions data if requested
+    if (params.includeSubmissions) {
+      // Add a new page for submissions
+      currentPage = doc.addPage([612, 792]);
+      cursorY = height - margin;
+      
+      currentPage.drawText('Submission Data', { 
+        x: margin, 
+        y: cursorY, 
+        size: 16, 
+        font: boldFont, 
+        color: rgb(0.2, 0.2, 0.2) 
+      });
+      cursorY -= 30;
+
+      // Fetch submissions for the survey
+      const feedbackCol = collection(db, 'feedback');
+      const feedbackSnapshot = await getDocs(feedbackCol);
+      const submissions = feedbackSnapshot.docs
+        .map(doc => doc.data() as FeedbackSubmission)
+        .filter(f => params.surveyId === 'all' || (f as any).surveyId === params.surveyId)
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+      // Add submission summary
+      currentPage.drawText(`Total Submissions: ${submissions.length}`, { 
+        x: margin, 
+        y: cursorY, 
+        size: 12, 
+        font, 
+        color: rgb(0, 0, 0) 
+      });
+      cursorY -= 20;
+
+      // Add each submission
+      for (const [idx, submission] of submissions.entries()) {
+        if (cursorY < margin + 100) {
+          currentPage = doc.addPage([612, 792]);
+          cursorY = height - margin;
+        }
+
+        // Submission header
+        currentPage.drawText(`Submission #${idx + 1}`, { 
+          x: margin, 
+          y: cursorY, 
+          size: 12, 
+          font: boldFont, 
+          color: rgb(0.3, 0.3, 0.3) 
+        });
+        cursorY -= 15;
+
+        // Submission details
+        const details = [
+          `Date: ${new Date(submission.submittedAt).toLocaleString()}`,
+          `Rating: ${submission.rating}/10`,
+          `Experience: ${(submission.hospitalInteraction || '').substring(0, 100)}${(submission.hospitalInteraction || '').length > 100 ? '...' : ''}`
+        ];
+
+        for (const detail of details) {
+          currentPage.drawText(detail, { 
+            x: margin + 10, 
+            y: cursorY, 
+            size: 10, 
+            font, 
+            color: rgb(0.4, 0.4, 0.4) 
+          });
+          cursorY -= 12;
+        }
+        
+        cursorY -= 10; // Extra spacing between submissions
       }
     }
 

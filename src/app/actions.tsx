@@ -1,33 +1,16 @@
 'use server';
-
-import { initializeApp, getApps, App } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 import { createAI, getMutableAIState, streamUI } from '@/lib/ai/rsc';
 import { z } from 'zod';
 import { google } from '@ai-sdk/google';
 import { ReactNode } from 'react';
 import { nanoid } from 'nanoid';
 import { BotMessage } from '@/components/bot-message';
-import { collection, getDocs, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, addDoc, DocumentData } from 'firebase/firestore';
 import { db as clientDb } from '@/lib/firebase';
 
-// Helper function to initialize Firebase Admin SDK.
-// It ensures that the SDK is initialized only once.
-function initializeFirebaseAdmin(): App {
-  const apps = getApps();
-  if (apps.length > 0) {
-    return apps[0] as App;
-  }
-  
-  // Initialize Firebase Admin with project ID from environment
-  return initializeApp({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  });
-}
-
-// Initialize Firebase and Firestore.
-const app = initializeFirebaseAdmin();
-const db = getFirestore(app);
+// Note: We intentionally use the Web Firestore client on the server for writes
+// to respect Firestore security rules and avoid admin credential requirements
+// in local/dev and serverless environments.
 
 // Existing functions
 export async function getSurveys() {
@@ -61,7 +44,7 @@ export async function submitFeedback(
       surveyId,
       submittedAt: new Date(),
     };
-    await db.collection('feedback').add(submissionData);
+    await addDoc(collection(clientDb, 'feedback'), submissionData);
     return {};
   } catch (e) {
     console.error('Error submitting feedback:', e);

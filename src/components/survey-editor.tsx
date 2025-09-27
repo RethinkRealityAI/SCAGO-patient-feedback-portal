@@ -31,7 +31,7 @@ const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'province-ca', 'city-on', 'hospital-on', 'duration-hm', 'duration-dh']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'date', 'time-amount', 'number', 'select', 'radio', 'checkbox', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'duration-hm', 'duration-dh']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -41,7 +41,7 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
     pattern: z.string().optional(),
   }).optional(),
 }));
-const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), fields: z.array(fieldSchema) });
+const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
 const appearanceSchema = z.object({
   themeColor: z.string().default('#C8262A').optional(),
   cardShadow: z.enum(['none', 'sm', 'md', 'lg']).default('sm').optional(),
@@ -61,6 +61,15 @@ const surveySchema = z.object({
   shareButtonEnabled: z.boolean().default(true).optional(),
   shareTitle: z.string().default('Share this survey').optional(),
   shareText: z.string().default("I’d like your feedback—please fill out this survey.").optional(),
+  resumeSettings: z.object({
+    showResumeModal: z.boolean().default(true).optional(),
+    resumeTitle: z.string().default('Resume your saved progress?').optional(),
+    resumeDescription: z.string().default('We found a saved draft. Continue where you left off or start over.').optional(),
+    continueLabel: z.string().default('Continue').optional(),
+    startOverLabel: z.string().default('Start over').optional(),
+    showContinue: z.boolean().default(true).optional(),
+    showStartOver: z.boolean().default(true).optional(),
+  }).optional(),
   sections: z.array(sectionSchema),
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
@@ -82,6 +91,10 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
   const { control, watch, getValues, setValue } = useFormContext<SurveyFormData>();
   const field = watch(fieldPath);
   const { fields: options, append: appendOption, remove: removeOption } = useFieldArray({ control, name: `${fieldPath}.options` });
+  // Determine which section this field belongs to
+  const sectionIndexMatch = String(fieldPath).match(/^sections\.(\d+)\./);
+  const sectionIndexFromPath = sectionIndexMatch ? Number(sectionIndexMatch[1]) : -1;
+  const sectionAllRequired = sectionIndexFromPath >= 0 ? !!getValues(`sections.${sectionIndexFromPath}.allRequired` as any) : false;
 
   const handleTypeChange = (newType: string) => {
     setValue(`${fieldPath}.type`, newType as any);
@@ -176,12 +189,14 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="radio">Radio</SelectItem>
                 <SelectItem value="checkbox">Checkbox</SelectItem>
                 <SelectItem value="boolean-checkbox">Yes/No</SelectItem>
+                <SelectItem value="anonymous-toggle">Anonymous Toggle</SelectItem>
                 <SelectItem value="group">Group (Side-by-side fields)</SelectItem>
                 <SelectItem value="province-ca">Province (Canada)</SelectItem>
                 <SelectItem value="city-on">City (Ontario)</SelectItem>
                 <SelectItem value="hospital-on">Hospital (Ontario)</SelectItem>
                 <SelectItem value="duration-hm">Duration (Hours/Minutes)</SelectItem>
                 <SelectItem value="duration-dh">Duration (Days/Hours)</SelectItem>
+                <SelectItem value="time-amount">Time Amount (Days/Hours)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -200,56 +215,27 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
             <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => appendOption({ id: nanoid(), label: '', value: '' })}>Add Option</Button>
           </div>
         )}
+        {!(field?.type === 'group' || field?.type === 'anonymous-toggle') && (
+          <div className="flex items-center justify-between">
+            <FormField control={control} name={`${fieldPath}.validation.required`} render={({ field: formField }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 pr-3 shadow-sm">
+                <div className="space-y-0.5 px-3"><FormLabel className="text-xs">Required</FormLabel></div>
+                <FormControl><Switch checked={!!formField.value} onCheckedChange={formField.onChange} onPointerDown={stopPropagation} disabled={sectionAllRequired} /></FormControl>
+              </FormItem>
+            )} />
+            {sectionAllRequired && (
+              <div className="text-xs text-muted-foreground ml-3">Section requires all; per-question toggle disabled.</div>
+            )}
+          </div>
+        )}
         <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="validation">
-                <AccordionTrigger onPointerDown={stopPropagation}>Validation</AccordionTrigger>
-                <AccordionContent className="p-4 space-y-4">
-                  <FormField control={control} name={`${fieldPath}.validation.required`} render={({ field: formField }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Required</FormLabel><FormDescription>Is this question mandatory?</FormDescription></div><FormControl><Switch checked={formField.value} onCheckedChange={formField.onChange} onPointerDown={stopPropagation} /></FormControl></FormItem>)} />
-                  {['text', 'textarea', 'email', 'phone'].includes(field.type) && (
-                    <>
-                        <FormField control={control} name={`${fieldPath}.validation.pattern`} render={({ field: { onChange, ...formField } }) => (
-                            <FormItem>
-                            <FormLabel>Pattern (Regex)</FormLabel>
-                            <FormControl>
-                                <Input
-                                {...formField}
-                                onChange={onChange}
-                                value={formField.value ?? ''}
-                                onPointerDown={stopPropagation}
-                                />
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )} />
-
-                        <FormField control={control} name={`${fieldPath}.validation.pattern`} render={({ field: { onChange, ...formField } }) => (
-                            <FormItem>
-                            <FormLabel>Regex Presets</FormLabel>
-                            <Select onValueChange={(value) => onChange(value)} value={formField.value ?? ''}>
-                                <FormControl>
-                                <SelectTrigger onPointerDown={stopPropagation}>
-                                    <SelectValue placeholder="Select a preset..." />
-                                </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                {regexPresets.map((preset) => (
-                                    <SelectItem key={preset.label} value={preset.value}>
-                                    {preset.label}
-                                    </SelectItem>
-                                ))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )} />
-                    </>
-                  )}
-                </AccordionContent>
-            </AccordionItem>
             <AccordionItem value="conditional-logic">
                 <AccordionTrigger onPointerDown={stopPropagation}>Conditional Logic</AccordionTrigger>
                 <AccordionContent className="p-4 space-y-4">
                     <FormDescription>Show this question only when another question has a specific answer.</FormDescription>
+                    {field?.conditionField && field?.conditionField === (getValues(fieldPath as any) as any)?.id && (
+                      <div className="text-xs text-destructive">A field cannot depend on itself.</div>
+                    )}
                     <FormField control={control} name={`${fieldPath}.conditionField`} render={({ field: formField }) => (
                         <FormItem><FormLabel>Show when</FormLabel>
                             <div className="flex items-center gap-2">
@@ -304,6 +290,16 @@ const SortableSection = ({ section, sectionIndex, removeSection, registerMoveFie
           </div>
         </AccordionTrigger>
         <AccordionContent className="p-6 space-y-6 border-t">
+          <div className="flex items-center justify-end mb-4">
+            <FormField control={control} name={`sections.${sectionIndex}.allRequired`} render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormLabel className="text-xs">Require all</FormLabel>
+                <FormControl>
+                  <Switch checked={!!field.value} onCheckedChange={field.onChange} onPointerDown={stopPropagation} />
+                </FormControl>
+              </FormItem>
+            )} />
+          </div>
           <SortableContext items={fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-4">
               {fields.map((field, fieldIndex) => (<SortableField key={field.id} {...{ field, sectionIndex, fieldIndex, remove, move, totalFields: fields.length, overId }} />))}
@@ -340,7 +336,19 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   const [activeItem, setActiveItem] = useState<any>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const { toast } = useToast();
-  const form = useForm<SurveyFormData>({ resolver: zodResolver(surveySchema), defaultValues: survey, shouldUnregister: false });
+  const defaulted: SurveyFormData = {
+    resumeSettings: {
+      showResumeModal: true,
+      resumeTitle: 'Resume your saved progress?',
+      resumeDescription: 'We found a saved draft. Continue where you left off or start over.',
+      continueLabel: 'Continue',
+      startOverLabel: 'Start over',
+      showContinue: true,
+      showStartOver: true,
+    },
+    ...survey,
+  } as any;
+  const form = useForm<SurveyFormData>({ resolver: zodResolver(surveySchema), defaultValues: defaulted, shouldUnregister: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { fields: sections, append, remove, move: moveSection } = useFieldArray({ control: form.control, name: 'sections' });
   const moveFieldFns = useRef<Record<number, (from: number, to: number) => void>>({});
@@ -398,9 +406,47 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="appearance">Appearance</TabsTrigger>
                 <TabsTrigger value="sections">Sections</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
               <Button type="submit" size="sm" disabled={isSubmitting} className="shadow-2xl md:hidden">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button>
             </div>
+            <TabsContent value="settings" className="space-y-6">
+              <Card>
+                <CardHeader><CardTitle>Resume Later Settings</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField control={form.control} name="saveProgressEnabled" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5"><FormLabel>Enable Resume Later</FormLabel><FormDescription>Save progress locally in the browser.</FormDescription></div>
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="resumeSettings.showResumeModal" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5"><FormLabel>Show Resume Modal</FormLabel><FormDescription>Ask users whether to continue or start over when a draft is found.</FormDescription></div>
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="resumeSettings.resumeTitle" render={({ field }) => <FormItem><FormLabel>Modal Title</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="resumeSettings.resumeDescription" render={({ field }) => <FormItem><FormLabel>Modal Description</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="resumeSettings.continueLabel" render={({ field }) => <FormItem><FormLabel>Continue Button Label</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="resumeSettings.startOverLabel" render={({ field }) => <FormItem><FormLabel>Start Over Button Label</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                    <FormField control={form.control} name="resumeSettings.showContinue" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5"><FormLabel>Show Continue</FormLabel></div>
+                        <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="resumeSettings.showStartOver" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5"><FormLabel>Show Start Over</FormLabel></div>
+                        <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="details" className="space-y-6">
               <Card>
