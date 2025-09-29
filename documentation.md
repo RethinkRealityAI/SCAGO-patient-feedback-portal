@@ -41,3 +41,68 @@ If you need to update an existing survey (like the main feedback survey) with th
 4.  **Delete the Script:** Once the update is complete, delete the script to keep the project clean.
 
 This process ensures that your existing surveys are always in sync with the latest version of the template.
+
+## 4. Internationalization & Translation System
+
+The application features a comprehensive bilingual system supporting English and French languages. The translation system is modular and extensible.
+
+### Translation Architecture
+
+*   **Translation Library (`src/lib/translations.ts`):** Central translation system with 60+ translations covering UI elements, form fields, medical terms, and common phrases.
+*   **Language Toggle Component (`src/components/language-toggle.tsx`):** Reusable component for switching between languages, available in multiple sizes.
+*   **Form Field Renderer (`src/components/form-field-renderer.tsx`):** Modular component for rendering form fields with built-in translation support.
+
+### Key Translation Features
+
+*   **Dynamic Field Label Translation:** Automatically translates field labels using the `translateFieldLabel()` function
+*   **Option Translation:** Translates dropdown options, radio buttons, and checkbox labels using `translateOption()`
+*   **Section Title Translation:** Translates section headers using `translateSectionTitle()`
+*   **Placeholder Translation:** Translates form placeholders and helper text
+*   **Contextual Translation:** Handles gender-specific and context-aware translations in French
+
+### Adding New Translations
+
+1. **Update Translation Interface:** Add new translation keys to the `Translation` interface in `src/lib/translations.ts`
+2. **Add Translations:** Add both English and French translations to the `translations` object
+3. **Update Mapping Functions:** Add mappings to `translateFieldLabel()`, `translateOption()`, or `translateSectionTitle()` as appropriate
+4. **Test Both Languages:** Verify translations work correctly in both English and French modes
+
+### Translation Best Practices
+
+*   **Consistent Terminology:** Use consistent medical and technical terminology across all translations
+*   **Context Awareness:** Consider gender agreements and formal/informal language in French
+*   **Fallback Handling:** Always provide fallback to original text if translation is not found
+*   **Testing:** Test all form interactions in both languages to ensure proper functionality
+
+## 5. Component Architecture & Modularity
+
+The application follows a modular component architecture to improve maintainability and reusability.
+
+### Core Components
+
+*   **FeedbackForm (`src/components/feedback-form.tsx`):** Main survey form component with translation support
+*   **SurveyList (`src/components/survey-list.tsx`):** Survey listing component with language toggle
+*   **LanguageToggle (`src/components/language-toggle.tsx`):** Reusable language switcher
+*   **FormFieldRenderer (`src/components/form-field-renderer.tsx`):** Modular field rendering with translations
+
+### Mobile Optimization
+
+*   **Responsive Design:** Components are optimized for mobile iframe embedding
+*   **Touch-Friendly:** Hover states are applied as default on mobile devices
+*   **Viewport Optimization:** Surveys take up most of the mobile landscape viewport
+*   **Container Flexibility:** Removed restrictive card containers for better mobile experience
+
+### Custom Field Components
+
+*   **SelectWithOtherField:** Dropdown with "Other" option and translation support
+*   **SearchableSelectWithOtherField:** Searchable dropdown for large option lists (hospitals, cities)
+*   **OntarioCityField:** Ontario-specific city selector with translation
+*   **OntarioHospitalField:** Ontario hospital selector with search and translation
+
+### Component Best Practices
+
+*   **Translation Props:** Pass `isFrench` parameter to all components that display text
+*   **Consistent Interfaces:** Use consistent prop interfaces across similar components
+*   **Error Handling:** Implement proper error boundaries and fallback states
+*   **Performance:** Use React.memo and useMemo for expensive operations
+*   **Accessibility:** Ensure all components meet WCAG accessibility standards

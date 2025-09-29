@@ -383,3 +383,29 @@ export async function analyzeSingleFeedback(input: { rating: number; hospitalInt
     return { error: 'Failed to analyze this submission.' };
   }
 }
+
+export async function chatWithFeedbackData(query: string, surveyId?: string): Promise<{ error?: string; response?: string }> {
+  try {
+    const feedbackCol = collection(db, 'feedback');
+    const feedbackSnapshot = await getDocs(feedbackCol);
+    let feedbackList = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
+    
+    // Filter by survey if surveyId is provided
+    if (surveyId && surveyId !== 'all') {
+      feedbackList = feedbackList.filter(f => (f as any).surveyId === surveyId);
+    }
+
+    if (feedbackList.length === 0) {
+      return { response: 'No feedback data available yet. Please collect some feedback first!' };
+    }
+
+    // Use the chat-with-data flow
+    const { chatWithData } = await import('@/ai/flows/chat-with-data-flow');
+    const response = await chatWithData(query, feedbackList);
+    
+    return { response };
+  } catch (e) {
+    console.error('Error in chat with feedback data:', e);
+    return { error: 'Failed to process your query. Please try again.' };
+  }
+}
