@@ -647,3 +647,251 @@ export const surveyV2 = {
     },
   ],
 };
+
+// SCAGO Digital Consent & Information Collection Survey
+export const consentSurvey = {
+  appearance: {
+    themeColor: '#C8262A',
+    cardShadow: 'sm',
+    cardTitleSize: 'lg',
+    sectionTitleSize: 'lg',
+    labelSize: 'sm',
+    gradient: true,
+    showTitle: true,
+  },
+  title: 'SCAGO Digital Consent & Information Collection',
+  description: 'The Sickle Cell Awareness Group of Ontario (SCAGO) is Ontario\'s largest patient support and advocacy organization. By completing this form, you are providing your information to SCAGO. We store all data securely and will never share your personal information with third parties without your consent.',
+  submitButtonLabel: 'Submit Consent Form',
+  saveProgressEnabled: true,
+  shareButtonEnabled: false,
+  sections: [
+    {
+      id: 'consent-notice-section',
+      title: 'About SCAGO & Consent to Participate',
+      description: 'SCAGO has been creating and delivering evidence-based supports and services across Ontario since 2005. SCAGO offers non-medical support services only. If you require urgent medical attention, please contact your healthcare provider or call 911. Note: This form is for individuals aged 18 or older. If you are under 18, a parent or guardian must complete this form on your behalf.',
+      fields: [
+        {
+          id: 'ageConfirmation',
+          label: 'I confirm that I am 18 years of age or older, OR I am a parent/guardian completing this form on behalf of someone under 18',
+          type: 'boolean-checkbox',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'basic-information-section',
+      title: 'Basic Information',
+      fields: [
+        {
+          id: 'title',
+          label: 'Title',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Mr', value: 'mr' },
+            { id: nanoid(), label: 'Mrs', value: 'mrs' },
+            { id: nanoid(), label: 'Ms', value: 'ms' },
+            { id: nanoid(), label: 'Mx', value: 'mx' },
+            { id: nanoid(), label: 'Dr', value: 'dr' },
+            { id: nanoid(), label: 'Other', value: 'other' },
+          ],
+        },
+        {
+          id: 'titleOther',
+          label: 'If other, please specify',
+          type: 'text',
+          conditionField: 'title',
+          conditionValue: 'other',
+          validation: { required: true },
+        },
+        {
+          id: 'consent-name-group',
+          type: 'group',
+          fields: [
+            { id: 'firstName', type: 'text', label: 'First Name', validation: { required: true } },
+            { id: 'lastName', type: 'text', label: 'Last Name', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'consent-contact-group',
+          type: 'group',
+          fields: [
+            { id: 'email', type: 'email', label: 'Email Address', validation: { required: true } },
+            { id: 'phone', type: 'phone', label: 'Phone Number (Cell)', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'streetAddress',
+          label: 'Street Address',
+          type: 'text',
+          validation: { required: true },
+        },
+        {
+          id: 'consent-location-group',
+          type: 'group',
+          fields: [
+            { id: 'city', type: 'city-on', label: 'City', validation: { required: true } },
+            { id: 'province', type: 'province-ca', label: 'Province', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'postalCode',
+          label: 'Postal Code',
+          type: 'text',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'scd-connection-section',
+      title: 'Your Connection to Sickle Cell Disease',
+      fields: [
+        {
+          id: 'scdConnection',
+          label: 'Please select all that apply',
+          type: 'checkbox',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'I have sickle cell disease', value: 'i-have-scd' },
+            { id: nanoid(), label: 'My child has sickle cell disease', value: 'my-child-has-scd' },
+            { id: nanoid(), label: 'I am a caregiver or family member', value: 'caregiver-family' },
+            { id: nanoid(), label: 'I am a healthcare provider', value: 'healthcare-provider' },
+            { id: nanoid(), label: 'Other', value: 'other' },
+          ],
+        },
+        {
+          id: 'scdConnectionOther',
+          label: 'If you selected "Other" above, please describe',
+          type: 'text',
+        },
+        {
+          id: 'individual1-group',
+          type: 'group',
+          fields: [
+            { id: 'individual1Name', type: 'text', label: 'Individual 1 - Name' },
+            { id: 'individual1DOB', type: 'date', label: 'Individual 1 - Date of Birth' },
+          ],
+        },
+        {
+          id: 'individual2-group',
+          type: 'group',
+          fields: [
+            { id: 'individual2Name', type: 'text', label: 'Individual 2 - Name' },
+            { id: 'individual2DOB', type: 'date', label: 'Individual 2 - Date of Birth' },
+          ],
+        },
+        {
+          id: 'individual3-group',
+          type: 'group',
+          fields: [
+            { id: 'individual3Name', type: 'text', label: 'Individual 3 - Name' },
+            { id: 'individual3DOB', type: 'date', label: 'Individual 3 - Date of Birth' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'care-information-section',
+      title: 'Care Information',
+      fields: [
+        {
+          id: 'primaryHospital',
+          label: 'Which hospital(s) do you/your child primarily receive care from for SCD?',
+          type: 'hospital-on',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'stay-connected-section',
+      title: 'Stay Connected',
+      fields: [
+        {
+          id: 'mayContact',
+          label: 'May we contact you about SCAGO services, programs, or events?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+        {
+          id: 'preferredContactMethod',
+          label: 'Preferred method of contact',
+          type: 'radio',
+          conditionField: 'mayContact',
+          conditionValue: 'yes',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Email', value: 'email' },
+            { id: nanoid(), label: 'Phone (Text/Phone call)', value: 'phone' },
+            { id: nanoid(), label: 'Either', value: 'either' },
+          ],
+        },
+        {
+          id: 'joinMailingList',
+          label: 'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+        {
+          id: 'joinSupportGroups',
+          label: 'Would you like to join our WhatsApp or face-to-face support groups?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+        {
+          id: 'supportGroupContactMethod',
+          label: 'How should we contact you about support groups?',
+          type: 'radio',
+          conditionField: 'joinSupportGroups',
+          conditionValue: 'yes',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Email', value: 'email' },
+            { id: nanoid(), label: 'Phone', value: 'phone' },
+            { id: nanoid(), label: 'Either', value: 'either' },
+          ],
+        },
+        {
+          id: 'consentToAdvocacy',
+          label: 'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'consent-confirmation-section',
+      title: 'Consent and Confirmation',
+      description: 'By typing your name below, you confirm that: (1) You are 18 years or older, (2) You have read and understood the information provided above, (3) You voluntarily consent to SCAGO\'s collection and use of your information as described.',
+      fields: [
+        {
+          id: 'digitalSignature',
+          label: 'Full Name (Digital Signature)',
+          type: 'text',
+          validation: { required: true },
+        },
+        {
+          id: 'signatureDate',
+          label: 'Date',
+          type: 'date',
+          validation: { required: true },
+        },
+      ],
+    },
+  ],
+};

@@ -32,6 +32,8 @@ import {
   Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   ChartContainer,
   ChartLegend,
@@ -41,11 +43,15 @@ import {
 } from '@/components/ui/chart'
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Bar, BarChart, Pie, PieChart, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { Card as UCard } from '@/components/ui/card'
-import { ClipboardList, TrendingUp, Gauge, BarChart3 } from 'lucide-react'
+import { ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare } from 'lucide-react'
 import { FeedbackSubmission } from './types'
 import { analyzeFeedback, generateAnalysisPdf } from './actions'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
+import { useNotifications, useAnalyticsNotifications } from '@/hooks/use-notifications'
+import { NotificationSystem } from '@/components/notification-system'
+import FloatingChatButton from '@/components/floating-chat-button'
+import AnalysisDisplay from '@/components/analysis-display'
 
 const SUBMISSIONS_PER_PAGE = 10
 
@@ -65,15 +71,71 @@ export default function Dashboard({
   const [singleLoading, setSingleLoading] = useState(false)
   const [showInsights, setShowInsights] = useState(false)
   const [selectedChart, setSelectedChart] = useState<'rating' | 'pain' | 'wait' | 'stay' | 'satisfaction'>('rating')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
+  const [ratingFilter, setRatingFilter] = useState<'all' | 'excellent' | 'good' | 'poor'>('all')
+  const [hospitalFilter, setHospitalFilter] = useState('all')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const surveyOptions = useMemo(() => {
     const ids = Array.from(new Set(submissions.map(s => s.surveyId)))
     return ['all', ...ids]
   }, [submissions])
 
+  const hospitalOptions = useMemo(() => {
+    const hospitals = Array.from(new Set(submissions.map(s => 
+      (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
+    )))
+    return ['all', ...hospitals]
+  }, [submissions])
+
   const filtered = useMemo(() => {
-    return selectedSurvey === 'all' ? submissions : submissions.filter(s => s.surveyId === selectedSurvey)
-  }, [submissions, selectedSurvey])
+    let result = submissions
+
+    // Filter by survey
+    if (selectedSurvey !== 'all') {
+      result = result.filter(s => s.surveyId === selectedSurvey)
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(s => 
+        (s.hospitalInteraction || '').toLowerCase().includes(query) ||
+        ((s as any).hospital || '').toLowerCase().includes(query) ||
+        (s.surveyId || '').toLowerCase().includes(query)
+      )
+    }
+
+    // Filter by date range
+    if (dateRange !== 'all') {
+      const now = new Date()
+      const daysAgo = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
+      const cutoff = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000))
+      result = result.filter(s => new Date(s.submittedAt) >= cutoff)
+    }
+
+    // Filter by rating
+    if (ratingFilter !== 'all') {
+      if (ratingFilter === 'excellent') {
+        result = result.filter(s => s.rating >= 8)
+      } else if (ratingFilter === 'good') {
+        result = result.filter(s => s.rating >= 5 && s.rating < 8)
+      } else if (ratingFilter === 'poor') {
+        result = result.filter(s => s.rating < 5)
+      }
+    }
+
+    // Filter by hospital
+    if (hospitalFilter !== 'all') {
+      result = result.filter(s => {
+        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
+        return hospital === hospitalFilter
+      })
+    }
+
+    return result
+  }, [submissions, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter])
 
   const totalPages = Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE)
 
@@ -103,10 +165,11 @@ export default function Dashboard({
 
   const metrics = useMemo(() => {
     const total = filtered.length
-    const avg = total > 0 ? (filtered.reduce((a, s) => a + (Number(s.rating) || 0), 0) / total) : 0
+    const validRatings = filtered.filter(s => s.rating != null && !isNaN(Number(s.rating)))
+    const avg = validRatings.length > 0 ? (validRatings.reduce((a, s) => a + Number(s.rating), 0) / validRatings.length) : 0
     let excellent = 0, good = 0, needsImprovement = 0
-    for (const s of filtered) {
-      const r = Number(s.rating) || 0
+    for (const s of validRatings) {
+      const r = Number(s.rating)
       if (r >= 8) excellent++
       else if (r >= 5) good++
       else needsImprovement++
@@ -115,12 +178,12 @@ export default function Dashboard({
     
     // Group ratings by hospital
     const hospitalRatings = new Map<string, { total: number; sum: number; count: number }>()
-    for (const s of filtered) {
+    for (const s of validRatings) {
       const hospital = (s as any).hospital || (s as any)['hospital-on'] || 'Unknown Hospital'
       const current = hospitalRatings.get(hospital) || { total: 0, sum: 0, count: 0 }
       hospitalRatings.set(hospital, {
         total: current.total + 1,
-        sum: current.sum + Number(s.rating || 0),
+        sum: current.sum + Number(s.rating),
         count: current.count + 1
       })
     }
@@ -311,49 +374,225 @@ export default function Dashboard({
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
   }
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    // Simulate refresh - in a real app, this would refetch data
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    setIsRefreshing(false)
+  }
+
+  const clearAllFilters = () => {
+    setSearchQuery('')
+    setDateRange('all')
+    setRatingFilter('all')
+    setHospitalFilter('all')
+    setSelectedSurvey('all')
+    setCurrentPage(1)
+  }
+
+  const activeFiltersCount = [
+    searchQuery.trim() ? 1 : 0,
+    dateRange !== 'all' ? 1 : 0,
+    ratingFilter !== 'all' ? 1 : 0,
+    hospitalFilter !== 'all' ? 1 : 0,
+    selectedSurvey !== 'all' ? 1 : 0
+  ].reduce((a, b) => a + b, 0)
+
+  // Notification system
+  const { notifications, addNotification, removeNotification, clearAllNotifications } = useNotifications()
+  
+  // Analytics notifications
+  useAnalyticsNotifications(submissions)
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid gap-6">
-        {/* Header with Filter */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Feedback Dashboard</h1>
-            <p className="text-muted-foreground">Comprehensive hospital experience analytics</p>
-          </div>
-              <div className="w-64">
-                <Select onValueChange={setSelectedSurvey} value={selectedSurvey}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filter by survey" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {surveyOptions.map(id => (
-                      <SelectItem key={id} value={id}>{id === 'all' ? 'All Surveys' : id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+    <>
+      <NotificationSystem
+        notifications={notifications}
+        onRemove={removeNotification}
+        onClearAll={clearAllNotifications}
+      />
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid gap-6">
+        {/* Header with Enhanced Filters */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Feedback Dashboard</h1>
+              <p className="text-muted-foreground">Comprehensive hospital experience analytics</p>
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              {activeFiltersCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Clear Filters ({activeFiltersCount})
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Advanced Filter Controls */}
+          <div className="flex flex-wrap gap-3 p-4 bg-muted/20 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search feedback, hospitals, surveys..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-64"
+              />
+            </div>
+            
+            <Select onValueChange={setSelectedSurvey} value={selectedSurvey}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by survey" />
+              </SelectTrigger>
+              <SelectContent>
+                {surveyOptions.map(id => (
+                  <SelectItem key={id} value={id}>{id === 'all' ? 'All Surveys' : id}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select onValueChange={(value) => setDateRange(value as 'all' | '7d' | '30d' | '90d')} value={dateRange}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Date range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="90d">Last 90 Days</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select onValueChange={(value) => setRatingFilter(value as 'all' | 'excellent' | 'good' | 'poor')} value={ratingFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Rating filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Ratings</SelectItem>
+                <SelectItem value="excellent">Excellent (8-10)</SelectItem>
+                <SelectItem value="good">Good (5-7)</SelectItem>
+                <SelectItem value="poor">Poor (0-4)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select onValueChange={setHospitalFilter} value={hospitalFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by hospital" />
+              </SelectTrigger>
+              <SelectContent>
+                {hospitalOptions.map(hospital => (
+                  <SelectItem key={hospital} value={hospital}>
+                    {hospital === 'all' ? 'All Hospitals' : hospital}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Active Filters Display */}
+          {activeFiltersCount > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {searchQuery.trim() && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Search: "{searchQuery}"
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSearchQuery('')} />
+                </Badge>
+              )}
+              {dateRange !== 'all' && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Date: {dateRange === '7d' ? 'Last 7 Days' : dateRange === '30d' ? 'Last 30 Days' : 'Last 90 Days'}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setDateRange('all')} />
+                </Badge>
+              )}
+              {ratingFilter !== 'all' && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Rating: {ratingFilter === 'excellent' ? 'Excellent' : ratingFilter === 'good' ? 'Good' : 'Poor'}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setRatingFilter('all')} />
+                </Badge>
+              )}
+              {hospitalFilter !== 'all' && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Hospital: {hospitalFilter}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setHospitalFilter('all')} />
+                </Badge>
+              )}
+              {selectedSurvey !== 'all' && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Survey: {selectedSurvey}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedSurvey('all')} />
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Key Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <UCard className="bg-card/80 backdrop-blur-sm border-primary/10">
-                <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Submissions</CardTitle><CardDescription>Total responses</CardDescription></CardHeader>
-                <CardContent className="pt-0"><div className="text-3xl font-bold">{metrics.total}</div></CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Key metrics overview">
+              <UCard className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 backdrop-blur-sm border-blue-200/50 dark:border-blue-800/50" role="article" aria-labelledby="submissions-title">
+                <CardHeader className="pb-2">
+                  <CardTitle id="submissions-title" className="text-base flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                    <ClipboardList className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" /> 
+                    Submissions
+                  </CardTitle>
+                  <CardDescription>Total responses ({filtered.length} filtered)</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-3xl font-bold text-blue-700 dark:text-blue-300" aria-live="polite">{metrics.total}</div>
+                </CardContent>
               </UCard>
-              <UCard className="bg-card/80 backdrop-blur-sm border-primary/10">
-                <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Avg Rating</CardTitle><CardDescription>Across selection</CardDescription></CardHeader>
-                <CardContent className="pt-0"><div className="text-3xl font-bold">{metrics.avg}/10</div></CardContent>
+              <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="rating-title">
+                <CardHeader className="pb-2">
+                  <CardTitle id="rating-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /> 
+                    Avg Rating
+                  </CardTitle>
+                  <CardDescription>Across selection</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">{metrics.avg}/10</div>
+                </CardContent>
               </UCard>
-              <UCard className="bg-card/80 backdrop-blur-sm border-primary/10">
-            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Gauge className="h-4 w-4" /> Top Hospital</CardTitle><CardDescription>By avg rating</CardDescription></CardHeader>
-            <CardContent className="pt-0">
-              <div className="text-lg font-bold truncate">{metrics.hospitalRatings[0]?.name || 'N/A'}</div>
-              <div className="text-sm text-muted-foreground">{metrics.hospitalRatings[0]?.avgRating || '0'}/10</div>
-            </CardContent>
+              <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="hospital-title">
+                <CardHeader className="pb-2">
+                  <CardTitle id="hospital-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                    <Gauge className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" /> 
+                    Top Hospital
+                  </CardTitle>
+                  <CardDescription>By avg rating</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">{metrics.hospitalRatings[0]?.name || 'N/A'}</div>
+                  <div className="text-sm text-muted-foreground">{metrics.hospitalRatings[0]?.avgRating || '0'}/10</div>
+                </CardContent>
               </UCard>
-              <UCard className="bg-card/80 backdrop-blur-sm border-primary/10">
-                <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Surveys</CardTitle><CardDescription>Unique surveys</CardDescription></CardHeader>
-                <CardContent className="pt-0"><div className="text-3xl font-bold">{selectedSurvey === 'all' ? metrics.surveysCount : 1}</div></CardContent>
+              <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="surveys-title">
+                <CardHeader className="pb-2">
+                  <CardTitle id="surveys-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" /> 
+                    Surveys
+                  </CardTitle>
+                  <CardDescription>Unique surveys</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{selectedSurvey === 'all' ? metrics.surveysCount : 1}</div>
+                </CardContent>
               </UCard>
             </div>
 
@@ -451,7 +690,7 @@ export default function Dashboard({
                           {submission.hospitalInteraction}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {(submission as any)?.hospital || 'Unknown'} • {submission.rating}/10 • {new Date(submission.submittedAt).toLocaleDateString()}
+                          {(submission as any)?.hospital || 'Unknown'} • {isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`} • {new Date(submission.submittedAt).toISOString().split('T')[0]}
                         </p>
                       </div>
                     </div>
@@ -705,7 +944,7 @@ export default function Dashboard({
         
         <Card>
           <CardHeader>
-            <CardTitle>AI-Powered Feedback Analysis</CardTitle>
+            <CardTitle>Feedback Analysis</CardTitle>
             <CardDescription>
               Generate comprehensive insights from all feedback submissions
             </CardDescription>
@@ -723,34 +962,26 @@ export default function Dashboard({
               )}
             </Button>
             {typeof analysis === 'string' && analysis.length > 0 && (
-                <>
-                  <Button 
-                    variant="secondary" 
-                    size="default"
-                    onClick={handleDownloadPdf}
-                  >
-                    Download Summary
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="default"
-                    onClick={async () => {
-                      const res = await generateAnalysisPdf({ 
-                        title: 'Comprehensive Feedback Report', 
-                        surveyId: selectedSurvey === 'all' ? 'all' : selectedSurvey, 
-                        analysisMarkdown: analysis,
-                        includeSubmissions: true
-                      })
-                      if (res.error || !res.pdfBase64) return
-                      const link = document.createElement('a')
-                      link.href = `data:application/pdf;base64,${res.pdfBase64}`
-                      link.download = `comprehensive-report-${selectedSurvey}.pdf`
-                      link.click()
-                    }}
-                  >
-                    Download Full Report
-                  </Button>
-                </>
+                <Button 
+                  className="bg-gradient-to-br from-[#C8262A] to-[#D34040] hover:from-[#C8262A]/90 hover:to-[#D34040]/90 text-white"
+                  size="default"
+                  onClick={async () => {
+                    const res = await generateAnalysisPdf({ 
+                      title: 'Comprehensive Feedback Report', 
+                      surveyId: selectedSurvey === 'all' ? 'all' : selectedSurvey, 
+                      analysisMarkdown: analysis,
+                      includeSubmissions: true
+                    })
+                    if (res.error || !res.pdfBase64) return
+                    const link = document.createElement('a')
+                    link.href = `data:application/pdf;base64,${res.pdfBase64}`
+                    link.download = `comprehensive-report-${selectedSurvey}.pdf`
+                    link.click()
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Report
+                </Button>
               )}
             </div>
             {error && (
@@ -761,8 +992,8 @@ export default function Dashboard({
               </Alert>
             )}
             {analysis && (
-              <div className="prose mt-4 rounded-lg border bg-gray-50 p-4">
-                <ReactMarkdown>{analysis}</ReactMarkdown>
+              <div className="mt-6">
+                <AnalysisDisplay analysisText={analysis} />
               </div>
             )}
           </CardContent>
@@ -788,9 +1019,9 @@ export default function Dashboard({
                 {paginatedSubmissions.map(submission => (
                   <TableRow key={submission.id}>
                     <TableCell>
-                      {new Date(submission.submittedAt).toLocaleDateString()}
+                      {new Date(submission.submittedAt).toISOString().split('T')[0]}
                     </TableCell>
-                    <TableCell>{submission.rating}/10</TableCell>
+                    <TableCell>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</TableCell>
                     <TableCell>{submission.hospitalInteraction}</TableCell>
                     <TableCell className="text-right">
                       <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
@@ -810,7 +1041,7 @@ export default function Dashboard({
                   <DialogDescription className="mt-2 flex items-center gap-4 text-gray-600 dark:text-gray-400">
                     <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
                       <Calendar className="h-3 w-3" />
-                      {activeSubmission && new Date(activeSubmission.submittedAt).toLocaleString()}
+                      {activeSubmission && new Date(activeSubmission.submittedAt).toISOString().replace('T', ' ').split('.')[0]}
                     </span>
                     <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
                       <Building2 className="h-3 w-3" />
@@ -1205,7 +1436,7 @@ export default function Dashboard({
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-medium">Date & Time</TableCell>
-                          <TableCell>{new Date(activeSubmission.submittedAt).toLocaleString()}</TableCell>
+                          <TableCell>{new Date(activeSubmission.submittedAt).toISOString().replace('T', ' ').split('.')[0]}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-medium">Survey ID</TableCell>
@@ -1310,7 +1541,21 @@ export default function Dashboard({
             </Pagination>
           </CardContent>
         </Card>
+        </div>
       </div>
-    </div>
+
+      {/* Floating AI Chat Button */}
+      <FloatingChatButton
+        onSendQuery={async (query: string) => {
+          const { chatWithFeedbackData } = await import('./actions');
+          const result = await chatWithFeedbackData(query, selectedSurvey);
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          return result.response || 'No response received.';
+        }}
+        surveyId={selectedSurvey}
+      />
+    </>
   )
 }

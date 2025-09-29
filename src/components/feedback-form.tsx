@@ -26,7 +26,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2 } from "lucide-react"
+import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -38,6 +38,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useState, useEffect, useMemo } from "react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { provinces, ontarioCities } from "@/lib/location-data"
 import { hospitalDepartments } from "@/lib/hospital-departments"
 import { ontarioHospitals } from "@/lib/hospital-names"
@@ -46,23 +48,12 @@ import { format } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 // removed top-of-form alert; now we show a card under the submit area
 
-// Define a more specific type for your field configuration
-type FieldDef = {
-    id: string;
-    type: string;
-    label: string;
-    options?: { label: string; value: string }[];
-    min?: number;
-    max?: number;
-    step?: number;
-    validation?: {
-        required?: boolean;
-        pattern?: string;
-    };
-    conditionField?: string;
-    conditionValue?: string;
-    fields?: FieldDef[];
-};
+// Import translation system and components
+import { useTranslation, translateFieldLabel, translateOption, translateSectionTitle } from '@/lib/translations';
+import { LanguageToggle } from '@/components/language-toggle';
+import { FormFieldRenderer, type FieldDef } from '@/components/form-field-renderer';
+
+// FieldDef type is now imported from form-field-renderer
 
 
 function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
@@ -286,7 +277,7 @@ function NpsScale({ field }: { field: any }) {
     );
 }
 
-function SelectWithOtherField({ field, options, label }: { field: any; options: { label: string; value: string }[]; label: string; }) {
+function SelectWithOtherField({ field, options, label, isFrench = false }: { field: any; options: { label: string; value: string }[]; label: string; isFrench?: boolean; }) {
     const { control, watch } = useFormContext();
     const selection = watch(`${field.name}.selection`);
 
@@ -301,13 +292,13 @@ function SelectWithOtherField({ field, options, label }: { field: any; options: 
                         <Select onValueChange={selectionField.onChange} defaultValue={selectionField.value ?? ''}>
                             <FormControl>
                                 <SelectTrigger className="max-w-md">
-                                    <SelectValue placeholder={`Select a ${label.toLowerCase()}`} />
+                                    <SelectValue placeholder={isFrench ? `Sélectionnez ${label.toLowerCase() === 'city' ? 'une ville' : label.toLowerCase() === 'department' ? 'un département' : 'une option'}` : `Select a ${label.toLowerCase()}`} />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
                                 {options.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
+                                        {translateOption(option.label, isFrench ? 'fr' : 'en')}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -334,7 +325,7 @@ function SelectWithOtherField({ field, options, label }: { field: any; options: 
     );
 }
 
-function SearchableSelectWithOtherField({ field, options, label }: { field: any; options: { label: string; value: string }[]; label: string; }) {
+function SearchableSelectWithOtherField({ field, options, label, isFrench = false }: { field: any; options: { label: string; value: string }[]; label: string; isFrench?: boolean; }) {
     const { control, watch } = useFormContext();
     const selection = watch(`${field.name}.selection`);
     const [open, setOpen] = useState(false);
@@ -366,7 +357,7 @@ function SearchableSelectWithOtherField({ field, options, label }: { field: any;
                                         aria-expanded={open}
                                         className="w-full max-w-md justify-between font-normal"
                                     >
-                                        {selectedOption ? selectedOption.label : `Select a ${label.toLowerCase()}...`}
+                                        {selectedOption ? translateOption(selectedOption.label, isFrench ? 'fr' : 'en') : (isFrench ? `Sélectionnez ${label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}...` : `Select a ${label.toLowerCase()}...`)}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
@@ -374,7 +365,7 @@ function SearchableSelectWithOtherField({ field, options, label }: { field: any;
                             <PopoverContent className="w-full p-0" align="start">
                                 <div className="p-2">
                                     <Input
-                                        placeholder={`Search ${label.toLowerCase()}...`}
+                                        placeholder={isFrench ? `Rechercher ${label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}...` : `Search ${label.toLowerCase()}...`}
                                         value={searchValue}
                                         onChange={(e) => setSearchValue(e.target.value)}
                                         className="mb-2"
@@ -383,7 +374,7 @@ function SearchableSelectWithOtherField({ field, options, label }: { field: any;
                                 <div className="max-h-60 overflow-y-auto">
                                     {filteredOptions.length === 0 ? (
                                         <div className="p-2 text-sm text-muted-foreground">
-                                            No {label.toLowerCase()} found.
+                                            {isFrench ? `Aucun${label.toLowerCase() === 'hospital' ? ' hôpital' : 'e option'} trouvé${label.toLowerCase() === 'hospital' ? '' : 'e'}.` : `No ${label.toLowerCase()} found.`}
                                         </div>
                                     ) : (
                                         filteredOptions.map((option) => (
@@ -401,7 +392,7 @@ function SearchableSelectWithOtherField({ field, options, label }: { field: any;
                                                         selection === option.value ? "opacity-100" : "opacity-0"
                                                     }`}
                                                 />
-                                                {option.label}
+                                                {translateOption(option.label, isFrench ? 'fr' : 'en')}
                                             </div>
                                         ))
                                     )}
@@ -430,12 +421,12 @@ function SearchableSelectWithOtherField({ field, options, label }: { field: any;
     );
 }
 
-function OntarioCityField({ field }: { field: any }) {
-    return <SelectWithOtherField field={field} options={ontarioCities} label="City" />;
+function OntarioCityField({ field, isFrench = false }: { field: any; isFrench?: boolean; }) {
+    return <SelectWithOtherField field={field} options={ontarioCities} label="City" isFrench={isFrench} />;
 }
 
-function OntarioHospitalField({ field }: { field: any }) {
-    return <SearchableSelectWithOtherField field={field} options={ontarioHospitals} label="Hospital" />;
+function OntarioHospitalField({ field, isFrench = false }: { field: any; isFrench?: boolean; }) {
+    return <SearchableSelectWithOtherField field={field} options={ontarioHospitals} label="Hospital" isFrench={isFrench} />;
 }
 
 function DurationHmField({ field }: { field: any }) {
@@ -553,8 +544,12 @@ function TimeAmountField({ field }: { field: any }) {
 }
 
 
-function renderField(fieldConfig: FieldDef, form: any) {
+function renderField(fieldConfig: FieldDef, form: any, isFrench: boolean = false) {
   const { control } = form;
+  const t = useTranslation(isFrench ? 'fr' : 'en');
+  
+  // Translate the field label
+  const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
 
   return (
     <FormField
@@ -563,7 +558,12 @@ function renderField(fieldConfig: FieldDef, form: any) {
       name={fieldConfig.id}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{fieldConfig.label}</FormLabel>
+          <FormLabel>
+            {translatedLabel}
+            {fieldConfig.validation?.required && (
+              <span className="text-destructive ml-1">*</span>
+            )}
+          </FormLabel>
           <FormControl>
             {(() => {
                 const fieldWithValue = { ...field, value: field.value ?? '' };
@@ -590,23 +590,23 @@ function renderField(fieldConfig: FieldDef, form: any) {
                     return (
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <SelectTrigger className="max-w-md">
-                            <SelectValue placeholder="Select an option" />
+                            <SelectValue placeholder={translateOption("Select an option", isFrench ? 'fr' : 'en')} />
                             </SelectTrigger>
                             <SelectContent>
                             {options.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
-                                {option.label}
+                                {translateOption(option.label, isFrench ? 'fr' : 'en')}
                                 </SelectItem>
                             ))}
                             </SelectContent>
                         </Select>
                     );
                 case 'department-on':
-                    return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" />;
+                    return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" isFrench={isFrench} />;
                 case 'city-on':
-                    return <OntarioCityField field={field} />;
+                    return <OntarioCityField field={field} isFrench={isFrench} />;
                 case 'hospital-on':
-                    return <OntarioHospitalField field={field} />;
+                    return <OntarioHospitalField field={field} isFrench={isFrench} />;
                 case 'duration-hm':
                     return <DurationHmField field={field} />;
                 case 'duration-dh':
@@ -621,7 +621,7 @@ function renderField(fieldConfig: FieldDef, form: any) {
                           <FormControl>
                             <RadioGroupItem value={option.value} />
                           </FormControl>
-                          <FormLabel className="font-normal">{option.label}</FormLabel>
+                          <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
                         </FormItem>
                       ))}
                     </RadioGroup>
@@ -644,7 +644,7 @@ function renderField(fieldConfig: FieldDef, form: any) {
                                         }}
                                     />
                                 </FormControl>
-                                <FormLabel className="font-normal">{option.label}</FormLabel>
+                                <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
                             </FormItem>
                           ))}
                         </div>
@@ -673,7 +673,7 @@ function renderField(fieldConfig: FieldDef, form: any) {
                     return (
                         <div className="flex items-center gap-3">
                             <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
-                            <span className="text-sm">Submit anonymously</span>
+                            <span className="text-sm">{translateFieldLabel("Submit anonymously", isFrench ? 'fr' : 'en')}</span>
                         </div>
                     );
                 case 'rating':
@@ -699,7 +699,9 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const [pendingDraft, setPendingDraft] = useState<any | null>(null);
     const [submitErrors, setSubmitErrors] = useState<{ id: string; label: string }[]>([]);
     const [showAllMissing, setShowAllMissing] = useState(false);
+    const [isFrench, setIsFrench] = useState(false);
     const appearance = survey.appearance || {};
+    const t = useTranslation(isFrench ? 'fr' : 'en');
 
     // Flatten all fields (including groups) from all sections for schema
     const allFields: FieldDef[] = survey.sections.flatMap((section: any) =>
@@ -816,8 +818,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             <Card className="w-full max-w-4xl mx-auto shadow-lg">
                 <CardHeader className="text-center py-12">
                     <PartyPopper className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                    <CardTitle className="text-2xl lg:text-3xl">Thank You!</CardTitle>
-                    <CardDescription className="text-base lg:text-lg mt-2">Your feedback has been successfully submitted.</CardDescription>
+                    <CardTitle className="text-2xl lg:text-3xl">{t.thankYou}</CardTitle>
+                    <CardDescription className="text-base lg:text-lg mt-2">{t.submissionReceived}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex justify-center pb-8">
                     <Button
@@ -829,7 +831,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                         }}
                         size="lg"
                     >
-                        Submit another response
+                        {t.submitAnother}
                     </Button>
                 </CardContent>
             </Card>
@@ -873,35 +875,42 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               )}
               <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description}</CardDescription>
             </div>
-            {survey.shareButtonEnabled && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={async () => {
-                    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-                    const title = survey.shareTitle || 'Share this survey';
-                    const text = survey.shareText || "I’d like your feedback—please fill out this survey.";
-                    try {
-                        if (navigator.share) {
-                            await navigator.share({ title, text, url: shareUrl });
-                        } else if (navigator.clipboard) {
-                            await navigator.clipboard.writeText(shareUrl);
-                            toast({ title: 'Link Copied', description: 'Survey link copied to clipboard.' });
-                        }
-                    } catch {}
-                }}
-                className="shrink-0"
-                title={survey.shareTitle || 'Share this survey'}
-              >
-                <Share2 className="h-4 w-4 mr-2" /> Share
-              </Button>
-            )}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Language Toggle */}
+              <LanguageToggle 
+                isFrench={isFrench}
+                onLanguageChange={setIsFrench}
+                size="sm"
+              />
+              {survey.shareButtonEnabled && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                      const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+                      const title = survey.shareTitle || t.shareTitle;
+                      const text = survey.shareText || "I'd like your feedback—please fill out this survey.";
+                      try {
+                          if (navigator.share) {
+                              await navigator.share({ title, text, url: shareUrl });
+                          } else if (navigator.clipboard) {
+                              await navigator.clipboard.writeText(shareUrl);
+                              toast({ title: t.linkCopied, description: t.linkCopiedDesc });
+                          }
+                      } catch {}
+                  }}
+                  title={survey.shareTitle || t.shareTitle}
+                >
+                  <Share2 className="h-4 w-4 mr-2" /> {t.share}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="px-4 sm:px-6 lg:px-8 mt-6">
           {survey.saveProgressEnabled && (
             <div className="mb-6 text-sm text-muted-foreground">
-              Your progress is saved locally and will resume automatically on return.
+              {t.progressSaved}
             </div>
           )}
           <Form {...form}>
@@ -913,9 +922,9 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   const isEngagementSection = section.id === 'v2-hospital-engagement-section';
                   const hideUntilVisitType = isEngagementSection && !(watchedValues as any)['visitType'];
                   return (
-                    <Card key={section.id} className="rounded-lg border p-5 shadow-sm">
+                    <Card key={section.id} className="rounded-lg border p-5 shadow-sm hover:shadow-md hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out md:hover:shadow-lg md:hover:-translate-y-2 md:hover:scale-[1.02] sm:shadow-md sm:-translate-y-1 sm:scale-[1.01]">
                       <CardHeader className="p-0">
-                        <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{section.title}</CardTitle>
+                        <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{translateSectionTitle(section.title, isFrench ? 'fr' : 'en')}</CardTitle>
                         {section.description && (
                           <CardDescription className="mt-2">{section.description}</CardDescription>
                         )}
@@ -924,7 +933,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                         <div className="space-y-8">
                           {hideUntilVisitType && (
                             <div className="text-sm text-muted-foreground">
-                              Please select your hospital encounter type to continue.
+                              {t.selectEncounter}
                             </div>
                           )}
                           {(section.fields || []).map((field: FieldDef) => {
@@ -936,7 +945,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             if (field.type === 'anonymous-toggle') {
                               const fieldDef = fieldMap.get(field.id);
                               return fieldDef ? (
-                                <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                                <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form, isFrench)}</div>
                               ) : null;
                             }
                             if (isAnonymous) {
@@ -950,7 +959,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                                     if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
                                     return (
                                       <div key={subFieldDef.id} id={`field-${subFieldDef.id}`} className={labelSizeClass}>
-                                        {renderField(subFieldDef, form)}
+                                        {renderField(subFieldDef, form, isFrench)}
                                       </div>
                                     );
                                   })}
@@ -960,7 +969,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             const fieldDef = fieldMap.get(field.id);
                             if (!fieldDef || !shouldShowField(fieldDef)) return null;
                             return (
-                              <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form)}</div>
+                              <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form, isFrench)}</div>
                             );
                           })}
                         </div>
@@ -973,10 +982,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 <div className="flex items-center gap-3">
                   <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {survey.submitButtonLabel || 'Submit'}
+                    {survey.submitButtonLabel || t.submit}
                   </Button>
                   {survey.saveProgressEnabled && (
-                    <Button type="button" variant="secondary" onClick={clearDraft}>Clear Saved Progress</Button>
+                    <Button type="button" variant="secondary" onClick={clearDraft}>{t.clearProgress}</Button>
                   )}
                 </div>
               </CardFooter>
@@ -985,8 +994,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 <div className="px-4 sm:px-6 lg:px-8">
                   <Card className="mt-4 border-destructive/30">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-destructive">Missing information</CardTitle>
-                      <CardDescription>Please complete the following field{submitErrors.length > 1 ? 's' : ''}.</CardDescription>
+                      <CardTitle className="text-destructive">{t.missingInfo}</CardTitle>
+                      <CardDescription>{submitErrors.length > 1 ? t.completeFieldsPlural : t.completeFields}.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {(showAllMissing ? submitErrors : submitErrors.slice(0, 10)).map((e) => (
@@ -1008,7 +1017,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                       {submitErrors.length > 10 && (
                         <div>
                           <Button type="button" variant="ghost" size="sm" onClick={() => setShowAllMissing((v) => !v)}>
-                            {showAllMissing ? 'Show less' : `Show all (${submitErrors.length})`}
+                            {showAllMissing ? t.showLess : `${t.showAll} (${submitErrors.length})`}
                           </Button>
                         </div>
                       )}
@@ -1039,7 +1048,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     toast({ title: survey.resumeSettings?.startOverLabel || 'Start over', description: 'Saved draft cleared.' });
                   }}
                 >
-                  {survey.resumeSettings?.startOverLabel || 'Start over'}
+                  {survey.resumeSettings?.startOverLabel || (isFrench ? 'Recommencer' : 'Start over')}
                 </Button>
               )}
               {survey.resumeSettings?.showContinue !== false && (
@@ -1054,7 +1063,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     toast({ title: survey.resumeSettings?.continueLabel || 'Continue', description: 'Your progress has been restored.' });
                   }}
                 >
-                  {survey.resumeSettings?.continueLabel || 'Continue'}
+                  {survey.resumeSettings?.continueLabel || (isFrench ? 'Continuer' : 'Continue')}
                 </Button>
               )}
               {survey.resumeSettings?.showStartOver === false && survey.resumeSettings?.showContinue === false && (
