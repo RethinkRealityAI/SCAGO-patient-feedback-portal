@@ -25,13 +25,15 @@ import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { regexPresets } from '@/lib/regex-presets';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SectionTemplateSelector, BlockTemplateSelector } from '@/components/template-selectors';
+import { QuestionBankSelector } from '@/components/question-bank-selector';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -196,6 +198,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="date">Date</SelectItem>
                 <SelectItem value="time">Time</SelectItem>
                 <SelectItem value="number">Number</SelectItem>
+                <SelectItem value="digital-signature">Digital Signature</SelectItem>
                 <SelectItem value="rating">Rating (1-5 Stars)</SelectItem>
                 <SelectItem value="nps">NPS Scale (1-10)</SelectItem>
                 <SelectItem value="select">Select</SelectItem>
@@ -344,7 +347,11 @@ const SortableSection = ({ section, sectionIndex, removeSection, registerMoveFie
             </div>
           </SortableContext>
           <div className="flex justify-between items-center pt-4 border-t">
-            <Button type="button" variant="outline" onPointerDown={stopPropagation} onClick={() => append({ id: nanoid(), label: 'New Question', type: 'text' })}><PlusCircle className="mr-2" /> Add Question</Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button type="button" variant="outline" onPointerDown={stopPropagation} onClick={() => append({ id: nanoid(), label: 'New Question', type: 'text' })}><PlusCircle className="mr-2" /> Add Question</Button>
+              <QuestionBankSelector onSelectQuestion={(question) => append(question)} />
+              <BlockTemplateSelector onSelectBlock={(block) => append(block)} />
+            </div>
             <AlertDialog>
                 <AlertDialogTrigger asChild><Button type="button" variant="destructive" onPointerDown={stopPropagation}><Trash2 className="mr-2" /> Delete Section</Button></AlertDialogTrigger>
                 <AlertDialogContent>
@@ -426,10 +433,157 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   const handleDragCancel = () => { setActiveItem(null); setOverId(null); };
 
   async function onSubmit(values: SurveyFormData) {
+    console.log('Form submitted with values:', values);
     setIsSubmitting(true);
-    const result = await updateSurvey(survey.id, values);
-    setIsSubmitting(false);
-    toast({ title: result.error ? 'Save Failed' : 'Survey Saved', description: result.error ? result.error : 'Your changes have been saved.' });
+    try {
+      const result = await updateSurvey(survey.id, values);
+      console.log('Update result:', result);
+      setIsSubmitting(false);
+      if (result.error) {
+        toast({ 
+          title: 'Save Failed', 
+          description: result.error,
+          variant: 'destructive'
+        });
+      } else {
+        toast({ 
+          title: 'Survey Saved', 
+          description: 'Your changes have been saved successfully.',
+        });
+      }
+    } catch (error) {
+      setIsSubmitting(false);
+      console.error('Save error:', error);
+      toast({ 
+        title: 'Save Failed', 
+        description: error instanceof Error ? error.message : 'An unexpected error occurred.',
+        variant: 'destructive'
+      });
+    }
+  }
+
+  function onInvalid(errors: any) {
+    console.error('Form validation errors:', errors);
+    
+    // Collect all validation errors with details
+    const errorDetails: Array<{ section: string; field: string; message: string; path: string }> = [];
+    
+    if (errors.sections) {
+      errors.sections.forEach((section: any, sectionIndex: number) => {
+        if (!section) return;
+        
+        const sectionTitle = form.getValues(`sections.${sectionIndex}.title`) || `Section ${sectionIndex + 1}`;
+        
+        // Check section-level errors
+        if (section.title) {
+          errorDetails.push({
+            section: sectionTitle,
+            field: 'Section Title',
+            message: section.title.message || 'Required field',
+            path: `sections.${sectionIndex}.title`
+          });
+        }
+        
+        // Check field errors
+        if (section.fields) {
+          section.fields.forEach((field: any, fieldIndex: number) => {
+            if (!field) return;
+            
+            const fieldLabel = form.getValues(`sections.${sectionIndex}.fields.${fieldIndex}.label`) || `Field ${fieldIndex + 1}`;
+            
+            if (field.label) {
+              errorDetails.push({
+                section: sectionTitle,
+                field: fieldLabel,
+                message: field.label.message || 'Required field',
+                path: `sections.${sectionIndex}.fields.${fieldIndex}.label`
+              });
+            }
+            
+            if (field.type) {
+              errorDetails.push({
+                section: sectionTitle,
+                field: fieldLabel,
+                message: field.type.message || 'Invalid field type',
+                path: `sections.${sectionIndex}.fields.${fieldIndex}.type`
+              });
+            }
+            
+            // Check nested fields in groups
+            if (field.fields) {
+              field.fields.forEach((nestedField: any, nestedIndex: number) => {
+                if (!nestedField) return;
+                
+                const nestedPath = `sections.${sectionIndex}.fields.${fieldIndex}.fields.${nestedIndex}.label` as any;
+                const nestedLabel = form.getValues(nestedPath) || `Nested Field ${nestedIndex + 1}`;
+                
+                if (nestedField.label) {
+                  errorDetails.push({
+                    section: sectionTitle,
+                    field: `${fieldLabel} → ${nestedLabel}`,
+                    message: nestedField.label.message || 'Required field',
+                    path: `sections.${sectionIndex}.fields.${fieldIndex}.fields.${nestedIndex}.label`
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+    
+    // Check top-level errors
+    if (errors.title) {
+      errorDetails.push({
+        section: 'Survey Details',
+        field: 'Survey Title',
+        message: errors.title.message || 'Required field',
+        path: 'title'
+      });
+    }
+    
+    if (errorDetails.length === 0) {
+      // Fallback for unknown errors
+      const unknownErrors = Object.entries(errors)
+        .map(([field, error]: [string, any]) => ({
+          section: 'Unknown',
+          field,
+          message: error?.message || 'Validation error',
+          path: field
+        }));
+      errorDetails.push(...unknownErrors);
+    }
+    
+    // Auto-scroll to first error
+    if (errorDetails.length > 0) {
+      const firstErrorPath = errorDetails[0].path;
+      const firstErrorElement = document.querySelector(`[name="${firstErrorPath}"]`);
+      if (firstErrorElement) {
+        firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Focus the element after a short delay
+        setTimeout(() => {
+          if (firstErrorElement instanceof HTMLElement) {
+            firstErrorElement.focus();
+          }
+        }, 300);
+      }
+    }
+    
+    // Create error message summary
+    const errorCount = errorDetails.length;
+    const errorSummary = errorDetails
+      .slice(0, 5)
+      .map(e => `• ${e.section}: ${e.field} - ${e.message}`)
+      .join('\n');
+    
+    const moreErrors = errorCount > 5 ? `\n... and ${errorCount - 5} more errors` : '';
+    
+    toast({
+      title: `${errorCount} Validation Error${errorCount !== 1 ? 's' : ''} Found`,
+      description: `Please fix the following:\n${errorSummary}${moreErrors}`,
+      variant: 'destructive',
+      duration: 10000, // Show for 10 seconds
+    });
   }
 
   if (!isMounted) return <Skeleton className="w-full h-96" />;
@@ -437,7 +591,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   return (
     <FormProvider {...form}>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
           <Tabs defaultValue="sections" className="w-full">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <TabsList>
@@ -590,7 +744,13 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
             <TabsContent value="sections" className="space-y-6">
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Sections</h2><Button type="button" variant="outline" onClick={() => append({ id: nanoid(), title: 'New Section', fields: [] })}><PlusCircle className="mr-2" /> Add Section</Button></div>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold">Sections</h2>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={() => append({ id: nanoid(), title: 'New Section', fields: [] })}><PlusCircle className="mr-2" /> Add Section</Button>
+                      <SectionTemplateSelector onSelectTemplate={(template) => append(template)} />
+                    </div>
+                  </div>
                   <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
                     <Accordion type="multiple" className="space-y-4" defaultValue={[`section-0`]}>
                       {sections.map((section, index) => (<SortableSection key={section.id} {...{ section, sectionIndex: index, removeSection: remove, registerMoveField, overId }} />))}

@@ -36,12 +36,21 @@ You have two main paths:
 
 ### Edit Sections and Fields (Editor UI)
 
+**Quick Add Options (NEW!):**
+- **From Template** - Add complete pre-built sections (Basic Information, Hospital Experience, etc.)
+- **From Question Bank** - Browse 60+ pre-configured questions by category
+- **Add Block** - Insert field groups with visual grid layouts (2x1, 3x1, 2x2, etc.)
+- **Add Question** - Create a blank question from scratch
+
+**Manual Editing:**
 - Click a section to expand it and manage its fields.
-- Use the “Add Question” button to add a new field.
+- Use the "Add Question" button to add a new field.
 - Choose the field type (text, email, phone, date, time, number, select, radio, checkbox, slider, rating, nps, group, boolean-checkbox, anonymous-toggle, province-ca, city-on, hospital-on, department-on, duration-hm, duration-dh, time-amount).
 - For select/radio/checkbox types, add `options`.
 - To arrange two questions side-by-side (e.g., `city-on` + `province-ca`), use a `group` field and add child fields inside the group. Each child has its own type and validation.
-- Conditional logic: open “Conditional Logic”, pick a controlling field (`conditionField`) and value (`conditionValue`). The question will render only when the condition matches.
+- Conditional logic: open "Conditional Logic", pick a controlling field (`conditionField`) and value (`conditionValue`). The question will render only when the condition matches.
+
+**💡 Pro Tip:** Use templates and the Question Bank to save time! See `docs/survey-builder-templates-guide.md` for details.
 
 ### Appearance and Behavior Settings
 
@@ -138,9 +147,19 @@ Use the built-in patterns for fields that need an “Other” option and free-te
 
 ### File Reference Map
 
+**Survey Creation:**
 - `src/app/editor/actions.ts`: create/list/get/update/delete surveys; `createSurveyV2()` for V2 template; `createConsentSurvey()` for consent template.
 - `src/app/editor/client.tsx`: client components for creating surveys, including `CreateSurveyDropdown` for template selection.
 - `src/components/survey-editor.tsx`: survey editor UI (sections, questions, settings, conditional logic, group editing).
+
+**Templates & Question Bank (NEW!):**
+- `src/lib/section-templates.ts`: pre-built section templates (Basic Info, Hospital Experience, etc.).
+- `src/lib/block-templates.ts`: field group blocks with grid patterns (2x1, 3x1, 2x2, etc.).
+- `src/lib/question-bank.ts`: 60+ pre-configured questions organized by category.
+- `src/components/template-selectors.tsx`: UI components for selecting section and block templates.
+- `src/components/question-bank-selector.tsx`: searchable question bank interface.
+
+**Public Form & Data:**
 - `src/components/feedback-form.tsx`: public survey form (validation, rendering, submit, draft, UX for missing fields).
 - `src/lib/survey-template.ts`: default, V2, and consent survey templates you can use or copy.
 - `src/lib/hospital-names.ts`: Ontario hospitals list (Other first; searchable in the form).
