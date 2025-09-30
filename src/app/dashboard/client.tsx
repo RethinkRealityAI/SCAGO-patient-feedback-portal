@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   Card,
   CardContent,
@@ -29,11 +29,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { 
   Loader, AlertCircle, Star, Calendar, Building2, Clock, 
-  Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet
+  Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet,
+  TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   ChartContainer,
   ChartLegend,
@@ -55,10 +57,20 @@ import AnalysisDisplay from '@/components/analysis-display'
 
 const SUBMISSIONS_PER_PAGE = 10
 
+// Helper function to detect if submissions are from consent survey
+function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
+  if (submissions.length === 0) return false
+  const sample = submissions[0] as any
+  // Check for consent-specific fields
+  return !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
+}
+
 export default function Dashboard({
   submissions,
+  surveys = [],
 }: {
   submissions: FeedbackSubmission[]
+  surveys?: Array<{ id: string; title: string; description?: string }>
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [analysis, setAnalysis] = useState<string | null>(null)
@@ -70,17 +82,30 @@ export default function Dashboard({
   const [singleAnalysis, setSingleAnalysis] = useState<string | null>(null)
   const [singleLoading, setSingleLoading] = useState(false)
   const [showInsights, setShowInsights] = useState(false)
-  const [selectedChart, setSelectedChart] = useState<'rating' | 'pain' | 'wait' | 'stay' | 'satisfaction'>('rating')
+  const [selectedChart, setSelectedChart] = useState<'rating' | 'pain' | 'wait' | 'stay' | 'satisfaction' | 'scdConnection' | 'contactPreferences' | 'geography' | 'submissions' | 'surveyBreakdown'>('rating')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
   const [ratingFilter, setRatingFilter] = useState<'all' | 'excellent' | 'good' | 'poor'>('all')
   const [hospitalFilter, setHospitalFilter] = useState('all')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [compareMode, setCompareMode] = useState(false)
+  const [compareSurvey, setCompareSurvey] = useState<string | null>(null)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid')
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
 
   const surveyOptions = useMemo(() => {
     const ids = Array.from(new Set(submissions.map(s => s.surveyId)))
     return ['all', ...ids]
   }, [submissions])
+
+  const surveyTitleMap = useMemo(() => {
+    const map = new Map<string, string>()
+    surveys.forEach(survey => {
+      map.set(survey.id, survey.title)
+    })
+    return map
+  }, [surveys])
 
   const hospitalOptions = useMemo(() => {
     const hospitals = Array.from(new Set(submissions.map(s => 
@@ -88,6 +113,30 @@ export default function Dashboard({
     )))
     return ['all', ...hospitals]
   }, [submissions])
+
+  // Detect if we're in "All Surveys" overview mode
+  const isAllSurveysMode = selectedSurvey === 'all'
+
+  // Detect if current filtered data is consent survey
+  const isConsent = useMemo(() => {
+    if (isAllSurveysMode) return false // Overview mode is neither consent nor feedback
+    return isConsentSurvey(submissions.filter(s => s.surveyId === selectedSurvey))
+  }, [submissions, selectedSurvey, isAllSurveysMode])
+
+  // Ensure the chart selection matches the survey type
+  useEffect(() => {
+    const feedbackCharts = new Set(['rating', 'pain', 'wait', 'stay', 'satisfaction'])
+    const consentCharts = new Set(['submissions', 'scdConnection', 'contactPreferences', 'geography'])
+    const overviewCharts = new Set(['submissions', 'geography', 'surveyBreakdown'])
+    
+    if (isAllSurveysMode && (feedbackCharts.has(selectedChart) || consentCharts.has(selectedChart)) && !overviewCharts.has(selectedChart)) {
+      setSelectedChart('submissions')
+    } else if (isConsent && feedbackCharts.has(selectedChart)) {
+      setSelectedChart('submissions')
+    } else if (!isConsent && !isAllSurveysMode && consentCharts.has(selectedChart)) {
+      setSelectedChart('rating')
+    }
+  }, [isConsent, selectedChart, isAllSurveysMode])
 
   const filtered = useMemo(() => {
     let result = submissions
@@ -100,11 +149,25 @@ export default function Dashboard({
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(s => 
-        (s.hospitalInteraction || '').toLowerCase().includes(query) ||
-        ((s as any).hospital || '').toLowerCase().includes(query) ||
-        (s.surveyId || '').toLowerCase().includes(query)
-      )
+      result = result.filter(s => {
+        if (isConsent) {
+          // Search consent-specific fields
+          return (
+            ((s as any).firstName || '').toLowerCase().includes(query) ||
+            ((s as any).lastName || '').toLowerCase().includes(query) ||
+            ((s as any).email || '').toLowerCase().includes(query) ||
+            ((s as any).city?.selection || '').toLowerCase().includes(query) ||
+            (s.surveyId || '').toLowerCase().includes(query)
+          )
+        } else {
+          // Search feedback-specific fields
+          return (
+            (s.hospitalInteraction || '').toLowerCase().includes(query) ||
+            ((s as any).hospital || '').toLowerCase().includes(query) ||
+            (s.surveyId || '').toLowerCase().includes(query)
+          )
+        }
+      })
     }
 
     // Filter by date range
@@ -115,8 +178,8 @@ export default function Dashboard({
       result = result.filter(s => new Date(s.submittedAt) >= cutoff)
     }
 
-    // Filter by rating
-    if (ratingFilter !== 'all') {
+    // Filter by rating (only for non-consent surveys)
+    if (!isConsent && ratingFilter !== 'all') {
       if (ratingFilter === 'excellent') {
         result = result.filter(s => s.rating >= 8)
       } else if (ratingFilter === 'good') {
@@ -129,13 +192,13 @@ export default function Dashboard({
     // Filter by hospital
     if (hospitalFilter !== 'all') {
       result = result.filter(s => {
-        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
+        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || (s as any).primaryHospital?.selection || 'Unknown Hospital'
         return hospital === hospitalFilter
       })
     }
 
     return result
-  }, [submissions, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter])
+  }, [submissions, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isConsent])
 
   const totalPages = Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE)
 
@@ -165,51 +228,166 @@ export default function Dashboard({
 
   const metrics = useMemo(() => {
     const total = filtered.length
-    const validRatings = filtered.filter(s => s.rating != null && !isNaN(Number(s.rating)))
-    const avg = validRatings.length > 0 ? (validRatings.reduce((a, s) => a + Number(s.rating), 0) / validRatings.length) : 0
-    let excellent = 0, good = 0, needsImprovement = 0
-    for (const s of validRatings) {
-      const r = Number(s.rating)
-      if (r >= 8) excellent++
-      else if (r >= 5) good++
-      else needsImprovement++
-    }
     const surveysCount = new Set(submissions.map(s => s.surveyId)).size
     
-    // Group ratings by hospital
-    const hospitalRatings = new Map<string, { total: number; sum: number; count: number }>()
-    for (const s of validRatings) {
-      const hospital = (s as any).hospital || (s as any)['hospital-on'] || 'Unknown Hospital'
-      const current = hospitalRatings.get(hospital) || { total: 0, sum: 0, count: 0 }
-      hospitalRatings.set(hospital, {
-        total: current.total + 1,
-        sum: current.sum + Number(s.rating),
-        count: current.count + 1
+    // Overview mode: High-level metrics across all surveys
+    if (isAllSurveysMode) {
+      // Count submissions by survey
+      const bySurvey = new Map<string, number>()
+      filtered.forEach(s => {
+        bySurvey.set(s.surveyId, (bySurvey.get(s.surveyId) || 0) + 1)
       })
+      
+      // Geographic distribution (works for both consent and feedback)
+      const geographicDistribution = new Map<string, number>()
+      filtered.forEach(s => {
+        const location = (s as any).city?.selection || 
+                        (s as any).primaryHospital?.selection || 
+                        (s as any).hospital || 
+                        (s as any)['hospital-on']?.selection || 
+                        'Unknown'
+        geographicDistribution.set(location, (geographicDistribution.get(location) || 0) + 1)
+      })
+      
+      // Time-based analysis
+      const now = new Date()
+      const last7Days = filtered.filter(s => {
+        const date = new Date(s.submittedAt)
+        const diffTime = now.getTime() - date.getTime()
+        const diffDays = diffTime / (1000 * 60 * 60 * 24)
+        return diffDays <= 7
+      }).length
+      
+      const last30Days = filtered.filter(s => {
+        const date = new Date(s.submittedAt)
+        const diffTime = now.getTime() - date.getTime()
+        const diffDays = diffTime / (1000 * 60 * 60 * 24)
+        return diffDays <= 30
+      }).length
+      
+      return {
+        total,
+        surveysCount,
+        last7Days,
+        last30Days,
+        overviewMetrics: {
+          surveyBreakdown: Array.from(bySurvey.entries())
+            .map(([surveyId, count]) => ({
+              surveyId,
+              surveyTitle: surveyTitleMap.get(surveyId) || surveyId,
+              count,
+              percentage: total > 0 ? Math.round((count / total) * 100) : 0
+            }))
+            .sort((a, b) => b.count - a.count),
+          geographicDistribution: Array.from(geographicDistribution.entries())
+            .map(([location, count]) => ({ location, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10),
+          topLocation: Array.from(geographicDistribution.entries())
+            .sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
+        }
+      }
     }
     
-    return { 
-      total, 
-      avg: Number(avg.toFixed(1)), 
-      excellent, 
-      good, 
-      needsImprovement, 
-      surveysCount,
-      hospitalRatings: Array.from(hospitalRatings.entries())
-        .map(([name, data]) => ({
-          name,
-          avgRating: data.count > 0 ? (data.sum / data.count).toFixed(1) : '0.0',
-          count: data.count
-        }))
-        .sort((a, b) => b.count - a.count)
+    if (isConsent) {
+      // Consent-specific metrics
+      const scdConnectionCounts = new Map<string, number>()
+      const mayContactYes = filtered.filter(s => (s as any).mayContact === 'yes').length
+      const joinMailingListYes = filtered.filter(s => (s as any).joinMailingList === 'yes').length
+      const joinSupportGroupsYes = filtered.filter(s => (s as any).joinSupportGroups === 'yes').length
+      const consentToAdvocacyYes = filtered.filter(s => (s as any).consentToAdvocacy === 'yes').length
+      
+      // Count SCD connections
+      for (const s of filtered) {
+        const connections = (s as any).scdConnection
+        if (Array.isArray(connections)) {
+          connections.forEach((conn: string) => {
+            scdConnectionCounts.set(conn, (scdConnectionCounts.get(conn) || 0) + 1)
+          })
+        } else if (connections) {
+          scdConnectionCounts.set(connections, (scdConnectionCounts.get(connections) || 0) + 1)
+        }
+      }
+      
+      // Geographic distribution
+      const geographicDistribution = new Map<string, number>()
+      for (const s of filtered) {
+        const city = (s as any).city?.selection || 'Unknown'
+        geographicDistribution.set(city, (geographicDistribution.get(city) || 0) + 1)
+      }
+      
+      return {
+        total,
+        surveysCount,
+        consentMetrics: {
+          mayContactYes,
+          mayContactPercent: total > 0 ? Math.round((mayContactYes / total) * 100) : 0,
+          joinMailingListYes,
+          joinMailingListPercent: total > 0 ? Math.round((joinMailingListYes / total) * 100) : 0,
+          joinSupportGroupsYes,
+          joinSupportGroupsPercent: total > 0 ? Math.round((joinSupportGroupsYes / total) * 100) : 0,
+          consentToAdvocacyYes,
+          consentToAdvocacyPercent: total > 0 ? Math.round((consentToAdvocacyYes / total) * 100) : 0,
+          scdConnectionCounts: Array.from(scdConnectionCounts.entries())
+            .map(([type, count]) => ({ type, count }))
+            .sort((a, b) => b.count - a.count),
+          geographicDistribution: Array.from(geographicDistribution.entries())
+            .map(([city, count]) => ({ city, count }))
+            .sort((a, b) => b.count - a.count)
+        }
+      }
+    } else {
+      // Hospital feedback metrics
+      const validRatings = filtered.filter(s => s.rating != null && !isNaN(Number(s.rating)))
+      const avg = validRatings.length > 0 ? (validRatings.reduce((a, s) => a + Number(s.rating), 0) / validRatings.length) : 0
+      let excellent = 0, good = 0, needsImprovement = 0
+      for (const s of validRatings) {
+        const r = Number(s.rating)
+        if (r >= 8) excellent++
+        else if (r >= 5) good++
+        else needsImprovement++
+      }
+      
+      // Group ratings by hospital
+      const hospitalRatings = new Map<string, { total: number; sum: number; count: number }>()
+      for (const s of validRatings) {
+        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
+        const current = hospitalRatings.get(hospital) || { total: 0, sum: 0, count: 0 }
+        hospitalRatings.set(hospital, {
+          total: current.total + 1,
+          sum: current.sum + Number(s.rating),
+          count: current.count + 1
+        })
+      }
+      
+      return { 
+        total, 
+        avg: Number(avg.toFixed(1)), 
+        excellent, 
+        good, 
+        needsImprovement, 
+        surveysCount,
+        hospitalRatings: Array.from(hospitalRatings.entries())
+          .map(([name, data]) => ({
+            name,
+            avgRating: data.count > 0 ? (data.sum / data.count).toFixed(1) : '0.0',
+            count: data.count
+          }))
+          .sort((a, b) => b.count - a.count)
+      }
     }
-  }, [filtered, submissions])
+  }, [filtered, submissions, isConsent, isAllSurveysMode, surveyTitleMap])
 
-  const experienceData = useMemo(() => ([
-    { name: 'Excellent (8-10)', value: metrics.excellent },
-    { name: 'Good (5-7)', value: metrics.good },
-    { name: 'Needs Improvement (0-4)', value: metrics.needsImprovement },
-  ]), [metrics])
+  const experienceData = useMemo(() => {
+    if (isConsent) {
+      return [] // Not applicable for consent surveys
+    }
+    return [
+      { name: 'Excellent (8-10)', value: (metrics as any).excellent || 0 },
+      { name: 'Good (5-7)', value: (metrics as any).good || 0 },
+      { name: 'Needs Improvement (0-4)', value: (metrics as any).needsImprovement || 0 },
+    ]
+  }, [metrics, isConsent])
 
   const submissionsOverTime = useMemo(() => {
     const byDate = new Map<string, number>()
@@ -223,31 +401,61 @@ export default function Dashboard({
 
   // Additional chart data computations
   const chartData = useMemo(() => {
-    // Pain scores distribution
+    const m = metrics as any
+    
+    // Overview mode: High-level chart data
+    if (isAllSurveysMode) {
+      return {
+        surveyBreakdown: m.overviewMetrics?.surveyBreakdown || [],
+        geography: m.overviewMetrics?.geographicDistribution || [],
+        scdConnection: [],
+        contactPreferences: [],
+        painScores: [],
+        waitTimes: [],
+        stayLength: [],
+        departmentSatisfaction: []
+      }
+    }
+    
+    if (isConsent) {
+      // Consent-specific chart data
+      return {
+        scdConnection: m.consentMetrics?.scdConnectionCounts || [],
+        contactPreferences: [
+          { preference: 'May Contact', count: m.consentMetrics?.mayContactYes || 0 },
+          { preference: 'Mailing List', count: m.consentMetrics?.joinMailingListYes || 0 },
+          { preference: 'Support Groups', count: m.consentMetrics?.joinSupportGroupsYes || 0 },
+          { preference: 'Advocacy Consent', count: m.consentMetrics?.consentToAdvocacyYes || 0 },
+        ],
+        geography: m.consentMetrics?.geographicDistribution?.slice(0, 10) || [],
+        surveyBreakdown: [],
+        painScores: [],
+        waitTimes: [],
+        stayLength: [],
+        departmentSatisfaction: []
+      }
+    }
+
+    // Hospital feedback chart data
     const painScores = new Map<number, number>()
     for (let i = 0; i <= 10; i++) painScores.set(i, 0)
     
-    // Wait time distribution
     const waitTimes = new Map<string, number>()
     const waitCategories = ['< 30min', '30-60min', '1-2hr', '2-4hr', '4-8hr', '> 8hr']
     waitCategories.forEach(cat => waitTimes.set(cat, 0))
     
-    // Length of stay distribution
     const stayLength = new Map<string, number>()
     const stayCategories = ['< 1 day', '1-2 days', '3-5 days', '1 week', '> 1 week']
     stayCategories.forEach(cat => stayLength.set(cat, 0))
     
-    // Satisfaction by department
     const departmentSatisfaction = new Map<string, { total: number; sum: number }>()
     
     for (const s of filtered) {
-      // Pain scores
       const pain = (s as any).painScore || (s as any).painLevel
       if (pain !== undefined) {
         painScores.set(Number(pain), (painScores.get(Number(pain)) || 0) + 1)
       }
       
-      // Wait times
       const wait = (s as any).waitTime
       if (wait) {
         let category = '< 30min'
@@ -263,7 +471,6 @@ export default function Dashboard({
         waitTimes.set(category, (waitTimes.get(category) || 0) + 1)
       }
       
-      // Length of stay
       const stay = (s as any).lengthOfStay
       if (stay) {
         let category = '< 1 day'
@@ -278,7 +485,6 @@ export default function Dashboard({
         stayLength.set(category, (stayLength.get(category) || 0) + 1)
       }
       
-      // Department satisfaction
       const dept = (s as any).department || 'Unknown'
       const current = departmentSatisfaction.get(dept) || { total: 0, sum: 0 }
       departmentSatisfaction.set(dept, {
@@ -304,14 +510,24 @@ export default function Dashboard({
           count: data.total
         }))
         .sort((a, b) => parseFloat(b.avgRating) - parseFloat(a.avgRating))
-        .slice(0, 5)
+        .slice(0, 5),
+      scdConnection: [],
+      contactPreferences: [],
+      geography: [],
+      surveyBreakdown: []
     }
-  }, [filtered])
+  }, [filtered, isConsent, metrics, isAllSurveysMode])
 
   const handleAnalyzeFeedback = async () => {
     setIsLoading(true)
     setError(null)
-    const result = await analyzeFeedback()
+    // Use survey-specific analysis if a survey is selected
+    const result = selectedSurvey !== 'all' 
+      ? await (async () => {
+          const { analyzeFeedbackForSurvey } = await import('./actions')
+          return analyzeFeedbackForSurvey(selectedSurvey)
+        })()
+      : await analyzeFeedback()
     if (result.error) {
       setError(result.error)
     } else {
@@ -390,6 +606,90 @@ export default function Dashboard({
     setCurrentPage(1)
   }
 
+  // Export functionality
+  const exportToCSV = useCallback(() => {
+    const headers = isConsent 
+      ? ['Date', 'Name', 'Email', 'Phone', 'City', 'Province', 'Primary Hospital', 'SCD Connection', 'May Contact', 'Mailing List', 'Support Groups']
+      : ['Date', 'Rating', 'Hospital', 'Department', 'Experience', 'Pain Score', 'Wait Time', 'Length of Stay']
+    
+    const rows = filtered.map(sub => {
+      if (isConsent) {
+        const s = sub as any
+        return [
+          new Date(sub.submittedAt).toISOString().split('T')[0],
+          `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+          s.email || '',
+          s.phone || '',
+          s.city?.selection || '',
+          s.province?.selection || '',
+          s.primaryHospital?.selection || '',
+          Array.isArray(s.scdConnection) ? s.scdConnection.join('; ') : s.scdConnection || '',
+          s.mayContact || '',
+          s.joinMailingList || '',
+          s.joinSupportGroups || ''
+        ]
+      } else {
+        const s = sub as any
+        return [
+          new Date(sub.submittedAt).toISOString().split('T')[0],
+          sub.rating || '',
+          s.hospital || s['hospital-on']?.selection || '',
+          s.department || '',
+          sub.hospitalInteraction || '',
+          s.painScore || s.painLevel || '',
+          s.waitTime ? (typeof s.waitTime === 'object' ? `${s.waitTime.hours || 0}h ${s.waitTime.minutes || 0}m` : s.waitTime) : '',
+          s.lengthOfStay ? (typeof s.lengthOfStay === 'object' ? `${s.lengthOfStay.days || 0}d ${s.lengthOfStay.hours || 0}h` : s.lengthOfStay) : ''
+        ]
+      }
+    })
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `${isConsent ? 'consent' : 'feedback'}_export_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }, [filtered, isConsent])
+
+  // Calculate trend compared to previous period
+  const calculateTrend = useCallback((currentMetrics: any, previousPeriod: FeedbackSubmission[]) => {
+    if (isConsent) return null
+    const prevRatings = previousPeriod.filter(s => s.rating != null && !isNaN(Number(s.rating)))
+    const prevAvg = prevRatings.length > 0 ? prevRatings.reduce((a, s) => a + Number(s.rating), 0) / prevRatings.length : 0
+    const currentAvg = currentMetrics.avg || 0
+    const change = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg) * 100 : 0
+    return {
+      change: change.toFixed(1),
+      direction: change > 0 ? 'up' : change < 0 ? 'down' : 'neutral',
+      previousAvg: prevAvg.toFixed(1)
+    }
+  }, [isConsent])
+
+  // Get previous period submissions for comparison
+  const previousPeriodSubmissions = useMemo(() => {
+    if (dateRange === 'all') return []
+    const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - days)
+    const previousStartDate = new Date(startDate)
+    previousStartDate.setDate(previousStartDate.getDate() - days)
+    
+    return submissions.filter(s => {
+      const date = new Date(s.submittedAt)
+      return date >= previousStartDate && date < startDate
+    })
+  }, [submissions, dateRange])
+
+  const trend = useMemo(() => calculateTrend(metrics, previousPeriodSubmissions), [calculateTrend, metrics, previousPeriodSubmissions])
+
   const activeFiltersCount = [
     searchQuery.trim() ? 1 : 0,
     dateRange !== 'all' ? 1 : 0,
@@ -404,6 +704,43 @@ export default function Dashboard({
   // Analytics notifications
   useAnalyticsNotifications(submissions)
 
+  // Keyboard shortcuts for power users
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K: Focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        document.querySelector<HTMLInputElement>('input[placeholder*="Search"]')?.focus()
+      }
+      // Cmd/Ctrl + E: Export data
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault()
+        setShowExportDialog(true)
+      }
+      // Cmd/Ctrl + R: Refresh
+      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault()
+        handleRefresh()
+      }
+      // Escape: Clear filters or close help
+      if (e.key === 'Escape') {
+        if (showKeyboardHelp) {
+          setShowKeyboardHelp(false)
+        } else if (activeFiltersCount > 0 && !isModalOpen && !showExportDialog) {
+          clearAllFilters()
+        }
+      }
+      // ?: Show keyboard shortcuts
+      if (e.key === '?' && !isModalOpen && !showExportDialog) {
+        e.preventDefault()
+        setShowKeyboardHelp(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [activeFiltersCount, isModalOpen, showExportDialog, showKeyboardHelp])
+
   return (
     <>
       <NotificationSystem
@@ -417,10 +754,32 @@ export default function Dashboard({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold">Feedback Dashboard</h1>
-              <p className="text-muted-foreground">Comprehensive hospital experience analytics</p>
+              <h1 className="text-2xl font-bold">
+                {isAllSurveysMode ? 'Survey Overview Dashboard' : isConsent ? 'Consent Form Submissions' : 'Feedback Dashboard'}
+              </h1>
+              <p className="text-muted-foreground">
+                {isAllSurveysMode ? 'High-level insights across all survey submissions' : isConsent ? 'SCAGO Digital Consent & Information Collection' : 'Comprehensive hospital experience analytics'}
+              </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowKeyboardHelp(true)}
+                className="flex items-center gap-2"
+                title="Keyboard shortcuts"
+              >
+                <Keyboard className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowExportDialog(true)}
+                className="flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export Data
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -447,14 +806,17 @@ export default function Dashboard({
 
           {/* Advanced Filter Controls */}
           <div className="flex flex-wrap gap-3 p-4 bg-muted/20 rounded-lg border">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search feedback, hospitals, surveys..."
+                placeholder={isConsent ? "Search by name, email, city..." : "Search feedback, hospitals, surveys..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64"
+                className="w-64 pr-16"
               />
+              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded opacity-60">
+                {typeof navigator !== 'undefined' && navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+              </kbd>
             </div>
             
             <Select onValueChange={setSelectedSurvey} value={selectedSurvey}>
@@ -463,7 +825,9 @@ export default function Dashboard({
               </SelectTrigger>
               <SelectContent>
                 {surveyOptions.map(id => (
-                  <SelectItem key={id} value={id}>{id === 'all' ? 'All Surveys' : id}</SelectItem>
+                  <SelectItem key={id} value={id}>
+                    {id === 'all' ? 'All Surveys' : (surveyTitleMap.get(id) || id)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -480,26 +844,28 @@ export default function Dashboard({
               </SelectContent>
             </Select>
 
-            <Select onValueChange={(value) => setRatingFilter(value as 'all' | 'excellent' | 'good' | 'poor')} value={ratingFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Rating filter" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Ratings</SelectItem>
-                <SelectItem value="excellent">Excellent (8-10)</SelectItem>
-                <SelectItem value="good">Good (5-7)</SelectItem>
-                <SelectItem value="poor">Poor (0-4)</SelectItem>
-              </SelectContent>
-            </Select>
+            {!isConsent && (
+              <Select onValueChange={(value) => setRatingFilter(value as 'all' | 'excellent' | 'good' | 'poor')} value={ratingFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Rating filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Ratings</SelectItem>
+                  <SelectItem value="excellent">Excellent (8-10)</SelectItem>
+                  <SelectItem value="good">Good (5-7)</SelectItem>
+                  <SelectItem value="poor">Poor (0-4)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
 
             <Select onValueChange={setHospitalFilter} value={hospitalFilter}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filter by hospital" />
+                <SelectValue placeholder={isConsent ? "Filter by care location" : "Filter by hospital"} />
               </SelectTrigger>
               <SelectContent>
                 {hospitalOptions.map(hospital => (
                   <SelectItem key={hospital} value={hospital}>
-                    {hospital === 'all' ? 'All Hospitals' : hospital}
+                    {hospital === 'all' ? (isConsent ? 'All Locations' : 'All Hospitals') : hospital}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -545,6 +911,7 @@ export default function Dashboard({
 
         {/* Key Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Key metrics overview">
+              {/* Card 1: Total Submissions (same for both) */}
               <UCard className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 backdrop-blur-sm border-blue-200/50 dark:border-blue-800/50" role="article" aria-labelledby="submissions-title">
                 <CardHeader className="pb-2">
                   <CardTitle id="submissions-title" className="text-base flex items-center gap-2 text-blue-900 dark:text-blue-100">
@@ -557,140 +924,332 @@ export default function Dashboard({
                   <div className="text-3xl font-bold text-blue-700 dark:text-blue-300" aria-live="polite">{metrics.total}</div>
                 </CardContent>
               </UCard>
-              <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="rating-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="rating-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
-                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /> 
-                    Avg Rating
-                  </CardTitle>
-                  <CardDescription>Across selection</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">{metrics.avg}/10</div>
-                </CardContent>
-              </UCard>
-              <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="hospital-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="hospital-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                    <Gauge className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" /> 
-                    Top Hospital
-                  </CardTitle>
-                  <CardDescription>By avg rating</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">{metrics.hospitalRatings[0]?.name || 'N/A'}</div>
-                  <div className="text-sm text-muted-foreground">{metrics.hospitalRatings[0]?.avgRating || '0'}/10</div>
-                </CardContent>
-              </UCard>
-              <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="surveys-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="surveys-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
-                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" /> 
-                    Surveys
-                  </CardTitle>
-                  <CardDescription>Unique surveys</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{selectedSurvey === 'all' ? metrics.surveysCount : 1}</div>
-                </CardContent>
-              </UCard>
+
+              {/* Card 2: Different based on survey type */}
+              {isAllSurveysMode ? (
+                <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="recent-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="recent-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                      <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /> 
+                      Last 7 Days
+                    </CardTitle>
+                    <CardDescription>Recent submissions</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">
+                      {(metrics as any).last7Days || 0}
+                    </div>
+                  </CardContent>
+                </UCard>
+              ) : isConsent ? (
+                <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="contact-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="contact-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                      <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /> 
+                      May Contact
+                    </CardTitle>
+                    <CardDescription>Opted in for contact</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">
+                      {(metrics as any).consentMetrics?.mayContactPercent || 0}%
+                    </div>
+                  </CardContent>
+                </UCard>
+              ) : (
+                <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="rating-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="rating-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                      <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" /> 
+                      Avg Rating
+                    </CardTitle>
+                    <CardDescription>Across selection</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-end justify-between">
+                      <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">{(metrics as any).avg || 0}/10</div>
+                      {trend && trend.direction !== 'neutral' && dateRange !== 'all' && (
+                        <div className={`flex items-center gap-1 text-xs font-medium ${
+                          trend.direction === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {trend.direction === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                          {Math.abs(Number(trend.change))}%
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </UCard>
+              )}
+
+              {/* Card 3: Different based on survey type */}
+              {isAllSurveysMode ? (
+                <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="location-overview-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="location-overview-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                      <Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" /> 
+                      Top Location
+                    </CardTitle>
+                    <CardDescription>Most common location</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">
+                      {(metrics as any).overviewMetrics?.topLocation || 'N/A'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {(metrics as any).overviewMetrics?.geographicDistribution?.[0]?.count || 0} submissions
+                    </div>
+                  </CardContent>
+                </UCard>
+              ) : isConsent ? (
+                <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="location-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="location-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                      <Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" /> 
+                      Top Location
+                    </CardTitle>
+                    <CardDescription>Most common city</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">
+                      {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.city || 'N/A'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.count || 0} submissions
+                    </div>
+                  </CardContent>
+                </UCard>
+              ) : (
+                <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="hospital-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="hospital-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                      <Gauge className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" /> 
+                      Top Hospital
+                    </CardTitle>
+                    <CardDescription>By avg rating</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">
+                      {(metrics as any).hospitalRatings?.[0]?.name || 'N/A'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">{(metrics as any).hospitalRatings?.[0]?.avgRating || '0'}/10</div>
+                  </CardContent>
+                </UCard>
+              )}
+
+              {/* Card 4: Different for overview */}
+              {isAllSurveysMode ? (
+                <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="month-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="month-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                      <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" /> 
+                      Last 30 Days
+                    </CardTitle>
+                    <CardDescription>Monthly submissions</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{(metrics as any).last30Days || 0}</div>
+                  </CardContent>
+                </UCard>
+              ) : (
+                <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="surveys-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="surveys-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                      <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" /> 
+                      Surveys
+                    </CardTitle>
+                    <CardDescription>Unique surveys</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{selectedSurvey === 'all' ? metrics.surveysCount : 1}</div>
+                  </CardContent>
+                </UCard>
+              )}
             </div>
 
         {/* Advanced Insights Section - Now Always Visible */}
         <div className="grid gap-4">
-          {/* Sentiment Distribution */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-green-50 dark:bg-green-950/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Excellent Experience</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {Math.round((metrics.excellent / (metrics.total || 1)) * 100)}%
-            </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {metrics.excellent} submissions (8-10 rating)
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-yellow-50 dark:bg-yellow-950/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Good Experience</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {Math.round((metrics.good / (metrics.total || 1)) * 100)}%
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {metrics.good} submissions (5-7 rating)
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-red-50 dark:bg-red-950/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Needs Improvement</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {Math.round((metrics.needsImprovement / (metrics.total || 1)) * 100)}%
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {metrics.needsImprovement} submissions (0-4 rating)
-                </p>
-              </CardContent>
-            </Card>
-            </div>
-
-          {/* Hospital Rankings and Response Trends */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Top Hospitals by Rating</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {metrics.hospitalRatings.slice(0, 5).map((hospital, idx) => (
-                    <div key={idx} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground w-6">#{idx + 1}</span>
-                        <span className="text-sm truncate max-w-[200px]">{hospital.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                          <div 
-                            className="h-2 rounded-full bg-primary"
-                            style={{ width: `${(parseFloat(hospital.avgRating) / 10) * 100}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-bold w-12 text-right">{hospital.avgRating}</span>
-                      </div>
+          {/* Sentiment Distribution / Consent Preferences - Hide in overview mode */}
+          {!isAllSurveysMode && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {isConsent ? (
+              <>
+                <Card key="contact-card" className="bg-blue-50 dark:bg-blue-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Contact Preferences</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {(metrics as any).consentMetrics?.mayContactPercent || 0}%
                     </div>
-                  ))}
-                  {metrics.hospitalRatings.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No hospital data available</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).consentMetrics?.mayContactYes || 0} opted in for contact
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card key="mailing-card" className="bg-purple-50 dark:bg-purple-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Mailing List</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {(metrics as any).consentMetrics?.joinMailingListPercent || 0}%
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).consentMetrics?.joinMailingListYes || 0} joined mailing list
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card key="support-card" className="bg-green-50 dark:bg-green-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Support Groups</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {(metrics as any).consentMetrics?.joinSupportGroupsPercent || 0}%
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).consentMetrics?.joinSupportGroupsYes || 0} interested in support groups
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <>
+                <Card key="excellent-card" className="bg-green-50 dark:bg-green-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Excellent Experience</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {Math.round(((metrics as any).excellent / (metrics.total || 1)) * 100)}%
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).excellent} submissions (8-10 rating)
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card key="good-card" className="bg-yellow-50 dark:bg-yellow-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Good Experience</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                      {Math.round(((metrics as any).good / (metrics.total || 1)) * 100)}%
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).good} submissions (5-7 rating)
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card key="needs-improvement-card" className="bg-red-50 dark:bg-red-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Needs Improvement</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {Math.round(((metrics as any).needsImprovement / (metrics.total || 1)) * 100)}%
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {(metrics as any).needsImprovement} submissions (0-4 rating)
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+            </div>
+          )}
+
+          {/* Hospital Rankings and Response Trends - Hide in overview mode */}
+          {!isAllSurveysMode && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {isConsent ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Care Locations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {((metrics as any).consentMetrics?.geographicDistribution || []).slice(0, 5).map((row: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-muted-foreground w-6">#{idx + 1}</span>
+                          <span className="text-sm truncate max-w-[200px]">{row.city}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: `${Math.min(100, (row.count / (metrics.total || 1)) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-bold w-12 text-right">{row.count}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(((metrics as any).consentMetrics?.geographicDistribution || []).length === 0) && (
+                      <p className="text-sm text-muted-foreground">No location data available</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Hospitals by Rating</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {((metrics as any).hospitalRatings || []).slice(0, 5).map((hospital: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-muted-foreground w-6">#{idx + 1}</span>
+                          <span className="text-sm truncate max-w-[200px]">{hospital.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: `${(parseFloat(hospital.avgRating) / 10) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-bold w-12 text-right">{hospital.avgRating}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {((metrics as any).hospitalRatings?.length === 0 || !(metrics as any).hospitalRatings) && (
+                      <p className="text-sm text-muted-foreground">No hospital data available</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent Feedback Trends</CardTitle>
+                <CardTitle className="text-base">Recent {isConsent ? 'Consent Submissions' : 'Feedback Trends'}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {filtered.slice(0, 5).map((submission, idx) => (
                     <div key={idx} className="flex items-start gap-3">
-                      <div className={`mt-1 h-2 w-2 rounded-full ${
-                        submission.rating >= 8 ? 'bg-green-500' :
-                        submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`} />
+                      {!isConsent ? (
+                        <div className={`mt-1 h-2 w-2 rounded-full ${
+                          submission.rating >= 8 ? 'bg-green-500' :
+                          submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`} />
+                      ) : (
+                        <div className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm line-clamp-1">
-                          {submission.hospitalInteraction}
+                          {isConsent 
+                            ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'Unnamed'
+                            : submission.hospitalInteraction}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {(submission as any)?.hospital || 'Unknown'} • {isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`} • {new Date(submission.submittedAt).toISOString().split('T')[0]}
+                          {isConsent 
+                            ? `${(submission as any)?.city?.selection || 'Unknown City'} • ${new Date(submission.submittedAt).toISOString().split('T')[0]}`
+                            : `${(submission as any)?.hospital || 'Unknown'} • ${isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`} • ${new Date(submission.submittedAt).toISOString().split('T')[0]}`}
                         </p>
                       </div>
                     </div>
@@ -699,6 +1258,7 @@ export default function Dashboard({
               </CardContent>
             </Card>
           </div>
+          )}
         </div>
 
         {/* Dynamic Chart Section */}
@@ -709,17 +1269,34 @@ export default function Dashboard({
                 <CardTitle>Analytics Dashboard</CardTitle>
                 <CardDescription>Interactive charts for key metrics</CardDescription>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Select value={selectedChart} onValueChange={(value: any) => setSelectedChart(value)}>
+            <div className="flex flex-wrap gap-2">
+              <Select value={selectedChart} onValueChange={(value: any) => setSelectedChart(value)}>
                   <SelectTrigger className="w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="rating">Rating Trends</SelectItem>
-                    <SelectItem value="pain">Pain Scores</SelectItem>
-                    <SelectItem value="wait">Wait Times</SelectItem>
-                    <SelectItem value="stay">Length of Stay</SelectItem>
-                    <SelectItem value="satisfaction">Department Satisfaction</SelectItem>
+                  {isAllSurveysMode ? (
+                    <>
+                      <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
+                      <SelectItem key="chart-survey-breakdown" value="surveyBreakdown">Survey Breakdown</SelectItem>
+                      <SelectItem key="chart-geography" value="geography">Geographic Distribution</SelectItem>
+                    </>
+                  ) : isConsent ? (
+                    <>
+                      <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
+                      <SelectItem key="chart-scd-connection" value="scdConnection">SCD Connection Types</SelectItem>
+                      <SelectItem key="chart-contact-preferences" value="contactPreferences">Contact Preferences</SelectItem>
+                      <SelectItem key="chart-geography" value="geography">Top Locations</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem key="chart-rating" value="rating">Rating Trends</SelectItem>
+                      <SelectItem key="chart-pain" value="pain">Pain Scores</SelectItem>
+                      <SelectItem key="chart-wait" value="wait">Wait Times</SelectItem>
+                      <SelectItem key="chart-stay" value="stay">Length of Stay</SelectItem>
+                      <SelectItem key="chart-satisfaction" value="satisfaction">Department Satisfaction</SelectItem>
+                    </>
+                  )}
                   </SelectContent>
                 </Select>
                 <Button
@@ -767,7 +1344,174 @@ export default function Dashboard({
           </CardHeader>
           <CardContent className="p-4">
             <div className="h-80 w-full">
-              {selectedChart === 'rating' && (
+              {/* Overview charts */}
+              {isAllSurveysMode && selectedChart === 'submissions' && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'All Submissions', angle: -90, position: 'insideLeft' }}
+                    />
+                    <Tooltip />
+                    <Line 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2} 
+                      dot={{ r: 3, fill: 'hsl(var(--primary))' }} 
+                      name="Submissions"
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+
+              {isAllSurveysMode && selectedChart === 'surveyBreakdown' && (
+                (chartData as any).surveyBreakdown?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(chartData as any).surveyBreakdown} margin={{ top: 10, right: 30, left: 0, bottom: 100 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                      <XAxis 
+                        dataKey="surveyTitle" 
+                        tick={{ fontSize: 11 }}
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={120}
+                      />
+                      <YAxis tick={{ fontSize: 12 }} label={{ value: 'Submissions', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Submissions">
+                        {(chartData as any).surveyBreakdown.map((_: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"][index % 6]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">No survey data available</div>
+                )
+              )}
+
+              {isAllSurveysMode && selectedChart === 'geography' && (
+                (chartData as any).geography?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                      <XAxis 
+                        dataKey="location" 
+                        tick={{ fontSize: 12 }}
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={100}
+                      />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Submissions" fill="#8b5cf6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">No geographic data available</div>
+                )
+              )}
+
+              {/* Consent charts */}
+              {isConsent && selectedChart === 'submissions' && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Submissions', angle: -90, position: 'insideLeft' }}
+                    />
+                    <Tooltip />
+                    <Line 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2} 
+                      dot={{ r: 3, fill: 'hsl(var(--primary))' }} 
+                      name="Submissions"
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+
+              {isConsent && selectedChart === 'scdConnection' && (
+                (chartData as any).scdConnection?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(chartData as any).scdConnection} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                      <XAxis 
+                        dataKey="type" 
+                        tick={{ fontSize: 12 }}
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={100}
+                      />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Count" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">No SCD connection data available</div>
+                )
+              )}
+
+              {isConsent && selectedChart === 'contactPreferences' && (
+                (chartData as any).contactPreferences?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(chartData as any).contactPreferences} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                      <XAxis dataKey="preference" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Count">
+                        {(chartData as any).contactPreferences.map((_: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b"][index % 4]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">No contact preference data available</div>
+                )
+              )}
+
+              {isConsent && selectedChart === 'geography' && (
+                (chartData as any).geography?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                      <XAxis dataKey="city" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={100} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="Submissions" fill="#10b981" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">No location data available</div>
+                )
+              )}
+
+              {/* Feedback charts */}
+              {!isConsent && selectedChart === 'rating' && (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={ratingOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
@@ -797,7 +1541,7 @@ export default function Dashboard({
                 </ResponsiveContainer>
               )}
               
-              {selectedChart === 'pain' && (
+              {!isConsent && selectedChart === 'pain' && (
                 chartData.painScores.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData.painScores} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
@@ -829,7 +1573,7 @@ export default function Dashboard({
                 )
               )}
               
-              {selectedChart === 'wait' && (
+              {!isConsent && selectedChart === 'wait' && (
                 chartData.waitTimes.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -861,7 +1605,7 @@ export default function Dashboard({
                 )
               )}
               
-              {selectedChart === 'stay' && (
+              {!isConsent && selectedChart === 'stay' && (
                 chartData.stayLength.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -893,7 +1637,7 @@ export default function Dashboard({
                 )
               )}
               
-              {selectedChart === 'satisfaction' && (
+              {!isConsent && selectedChart === 'satisfaction' && (
                 chartData.departmentSatisfaction.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData.departmentSatisfaction} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
@@ -932,11 +1676,15 @@ export default function Dashboard({
             {/* Chart Description */}
             <div className="mt-4 p-3 bg-muted/50 rounded-lg">
               <p className="text-sm text-muted-foreground">
-                {selectedChart === 'rating' && 'Shows the average rating trend over time for all submissions.'}
-                {selectedChart === 'pain' && 'Distribution of pain scores reported by patients (0 = no pain, 10 = severe pain).'}
-                {selectedChart === 'wait' && 'Breakdown of emergency department wait times across different time ranges.'}
-                {selectedChart === 'stay' && 'Distribution of patient length of stay in the hospital.'}
-                {selectedChart === 'satisfaction' && 'Average satisfaction ratings by hospital department.'}
+                {isConsent && selectedChart === 'submissions' && 'Shows the number of consent submissions over time.'}
+                {isConsent && selectedChart === 'scdConnection' && 'Breakdown of users\' connection to SCD (patient, caregiver, HCP, etc.).'}
+                {isConsent && selectedChart === 'contactPreferences' && 'Counts of users opting into contact, mailing list, support groups, and advocacy.'}
+                {isConsent && selectedChart === 'geography' && 'Top cities represented in consent submissions.'}
+                {!isConsent && selectedChart === 'rating' && 'Shows the average rating trend over time for all submissions.'}
+                {!isConsent && selectedChart === 'pain' && 'Distribution of pain scores reported by patients (0 = no pain, 10 = severe pain).'}
+                {!isConsent && selectedChart === 'wait' && 'Breakdown of emergency department wait times across different time ranges.'}
+                {!isConsent && selectedChart === 'stay' && 'Distribution of patient length of stay in the hospital.'}
+                {!isConsent && selectedChart === 'satisfaction' && 'Average satisfaction ratings by hospital department.'}
               </p>
             </div>
           </CardContent>
@@ -1010,24 +1758,74 @@ export default function Dashboard({
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Experience</TableHead>
+                  {isConsent ? (
+                    <>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>City</TableHead>
+                    </>
+                  ) : (
+                    <>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Experience</TableHead>
+                    </>
+                  )}
                   <TableHead className="text-right">View</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedSubmissions.map(submission => (
-                  <TableRow key={submission.id}>
-                    <TableCell>
-                      {new Date(submission.submittedAt).toISOString().split('T')[0]}
-                    </TableCell>
-                    <TableCell>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</TableCell>
-                    <TableCell>{submission.hospitalInteraction}</TableCell>
-                    <TableCell className="text-right">
-                      <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
+                {paginatedSubmissions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isConsent ? 5 : 4} className="h-64 text-center">
+                      <div className="flex flex-col items-center justify-center space-y-4 py-8">
+                        <div className="rounded-full bg-muted p-6">
+                          <ClipboardList className="h-12 w-12 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-semibold">No submissions found</h3>
+                          <p className="text-sm text-muted-foreground max-w-md">
+                            {activeFiltersCount > 0 
+                              ? "Try adjusting your filters to see more results"
+                              : isConsent 
+                                ? "Consent form submissions will appear here once participants start filling them out"
+                                : "Feedback submissions will appear here once patients start submitting their experiences"
+                            }
+                          </p>
+                        </div>
+                        {activeFiltersCount > 0 && (
+                          <Button variant="outline" onClick={clearAllFilters} className="mt-4">
+                            Clear All Filters
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  paginatedSubmissions.map(submission => (
+                    <TableRow key={submission.id}>
+                      <TableCell>
+                        {new Date(submission.submittedAt).toISOString().split('T')[0]}
+                      </TableCell>
+                      {isConsent ? (
+                        <>
+                          <TableCell>
+                            {`${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'N/A'}
+                          </TableCell>
+                          <TableCell>{(submission as any)?.email || 'N/A'}</TableCell>
+                          <TableCell>{(submission as any)?.city?.selection || 'N/A'}</TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</TableCell>
+                          <TableCell className="max-w-md truncate">{submission.hospitalInteraction}</TableCell>
+                        </>
+                      )}
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -1036,7 +1834,10 @@ export default function Dashboard({
               <div className="flex items-start justify-between">
                 <div>
                   <DialogTitle className="text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                    {(activeSubmission as any)?.name || (activeSubmission as any)?.firstName || 'Anonymous'} - Feedback Submission
+                    {isConsent 
+                      ? `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || ''}`.trim() || 'Anonymous'
+                      : (activeSubmission as any)?.name || (activeSubmission as any)?.firstName || 'Anonymous'
+                    } - {isConsent ? 'Consent Submission' : 'Feedback Submission'}
                   </DialogTitle>
                   <DialogDescription className="mt-2 flex items-center gap-4 text-gray-600 dark:text-gray-400">
                     <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
@@ -1045,18 +1846,23 @@ export default function Dashboard({
                     </span>
                     <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
                       <Building2 className="h-3 w-3" />
-                      {(activeSubmission as any)?.hospital || (activeSubmission as any)?.['hospital-on']?.selection || 'Unknown Hospital'}
+                      {isConsent
+                        ? (activeSubmission as any)?.primaryHospital?.selection || (activeSubmission as any)?.city?.selection || 'Unknown Location'
+                        : (activeSubmission as any)?.hospital || (activeSubmission as any)?.['hospital-on']?.selection || 'Unknown Hospital'
+                      }
                     </span>
                   </DialogDescription>
                 </div>
-                <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm shadow-lg ${
-                  activeSubmission && activeSubmission.rating >= 8 ? 'bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30' :
-                  activeSubmission && activeSubmission.rating >= 5 ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30' : 
-                  'bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30'
-                }`}>
-                  {activeSubmission && activeSubmission.rating >= 8 ? '✨ Excellent' :
-                   activeSubmission && activeSubmission.rating >= 5 ? '👍 Good' : '⚠️ Needs Improvement'}
-                </div>
+                {!isConsent && (
+                  <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm shadow-lg ${
+                    activeSubmission && activeSubmission.rating >= 8 ? 'bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30' :
+                    activeSubmission && activeSubmission.rating >= 5 ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30' : 
+                    'bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30'
+                  }`}>
+                    {activeSubmission && activeSubmission.rating >= 8 ? '✨ Excellent' :
+                     activeSubmission && activeSubmission.rating >= 5 ? '👍 Good' : '⚠️ Needs Improvement'}
+                  </div>
+                )}
               </div>
             </DialogHeader>
             {activeSubmission && (
@@ -1330,22 +2136,24 @@ export default function Dashboard({
                       )}
                     </div>
                     
-                    {/* Experience Summary Bar */}
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Overall Experience</span>
-                        <span className="text-sm text-muted-foreground">{activeSubmission.rating}/10</span>
+                    {/* Experience Summary Bar - Only for feedback surveys */}
+                    {!isConsent && (
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Overall Experience</span>
+                          <span className="text-sm text-muted-foreground">{activeSubmission.rating}/10</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                          <div 
+                            className={`h-2.5 rounded-full transition-all ${
+                              activeSubmission.rating >= 8 ? 'bg-green-500' :
+                              activeSubmission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${(activeSubmission.rating / 10) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                        <div 
-                          className={`h-2.5 rounded-full transition-all ${
-                            activeSubmission.rating >= 8 ? 'bg-green-500' :
-                            activeSubmission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${(activeSubmission.rating / 10) * 100}%` }}
-                        />
-                      </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
                 {/* AI Analysis Section - Top Priority */}
@@ -1367,15 +2175,16 @@ export default function Dashboard({
                   </Card>
                 )}
                 
-                {/* Analysis Actions */}
-                <div className="flex flex-wrap gap-2 p-4 bg-gradient-to-r from-white/30 via-blue-50/20 to-indigo-50/20 dark:from-gray-800/30 dark:via-blue-950/20 dark:to-indigo-950/20 backdrop-blur-md rounded-lg border border-white/30 shadow-lg">
-                  <Button
-                    onClick={async () => {
-                      if (!activeSubmission) return
-                      setSingleLoading(true)
-                      const { analyzeSingleFeedback } = await import('./actions')
-                      const res = await analyzeSingleFeedback({ 
-                        rating: activeSubmission.rating, 
+                {/* Analysis Actions - Only show for feedback surveys */}
+                {!isConsent && (
+                  <div className="flex flex-wrap gap-2 p-4 bg-gradient-to-r from-white/30 via-blue-50/20 to-indigo-50/20 dark:from-gray-800/30 dark:via-blue-950/20 dark:to-indigo-950/20 backdrop-blur-md rounded-lg border border-white/30 shadow-lg">
+                    <Button
+                      onClick={async () => {
+                        if (!activeSubmission) return
+                        setSingleLoading(true)
+                        const { analyzeSingleFeedback } = await import('./actions')
+                        const res = await analyzeSingleFeedback({ 
+                          rating: activeSubmission.rating, 
                         hospitalInteraction: activeSubmission.hospitalInteraction,
                         location: (activeSubmission as any).hospital || 'Various Hospitals'
                       })
@@ -1419,7 +2228,8 @@ export default function Dashboard({
                       Download Report PDF
                     </Button>
                   )}
-                </div>
+                  </div>
+                )}
 
                 {/* Organized Submission Data Table */}
                 <Card className="border border-white/30 shadow-xl bg-gradient-to-br from-white/50 to-gray-50/30 dark:from-gray-800/50 dark:to-gray-900/30 backdrop-blur-lg backdrop-saturate-150">
@@ -1556,6 +2366,116 @@ export default function Dashboard({
         }}
         surveyId={selectedSurvey}
       />
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export Data</DialogTitle>
+            <DialogDescription>
+              Download {isConsent ? 'consent form' : 'feedback'} submissions in CSV format
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                This will export <span className="font-semibold text-foreground">{filtered.length}</span> submissions based on your current filters.
+              </p>
+              <div className="rounded-lg bg-muted p-3 space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>Date Range:</span>
+                  <span className="font-medium">{dateRange === 'all' ? 'All Time' : dateRange === '7d' ? 'Last 7 Days' : dateRange === '30d' ? 'Last 30 Days' : 'Last 90 Days'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Survey:</span>
+                  <span className="font-medium">{selectedSurvey === 'all' ? 'All Surveys' : surveyTitleMap.get(selectedSurvey) || selectedSurvey}</span>
+                </div>
+                {!isConsent && ratingFilter !== 'all' && (
+                  <div className="flex justify-between">
+                    <span>Rating:</span>
+                    <span className="font-medium">{ratingFilter === 'excellent' ? 'Excellent (8-10)' : ratingFilter === 'good' ? 'Good (5-7)' : 'Poor (0-4)'}</span>
+                  </div>
+                )}
+                {hospitalFilter !== 'all' && (
+                  <div className="flex justify-between">
+                    <span>{isConsent ? 'Location' : 'Hospital'}:</span>
+                    <span className="font-medium">{hospitalFilter}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                exportToCSV()
+                setShowExportDialog(false)
+              }}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Keyboard Shortcuts Help Dialog */}
+      <Dialog open={showKeyboardHelp} onOpenChange={setShowKeyboardHelp}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-5 w-5" />
+              Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription>
+              Use these shortcuts to navigate faster
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm">Focus search</span>
+                <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">
+                  {typeof navigator !== 'undefined' && navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} + K
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm">Export data</span>
+                <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">
+                  {typeof navigator !== 'undefined' && navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} + E
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm">Refresh data</span>
+                <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">
+                  {typeof navigator !== 'undefined' && navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} + R
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-sm">Clear all filters</span>
+                <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">
+                  Esc
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm">Show shortcuts</span>
+                <kbd className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500">
+                  ?
+                </kbd>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowKeyboardHelp(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -5,6 +5,7 @@ import { CreateSurveyDropdown, DeleteSurveyButton } from './client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Trash2 } from 'lucide-react';
 import { listSurveys } from './actions';
+import PasswordProtection from '@/components/password-protection';
 
 function SurveyListSkeleton() {
   return (
@@ -75,17 +76,19 @@ async function SurveyList() {
 
 export default function EditorPage() {
   return (
-    <div className="container flex flex-col gap-6 py-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">My Surveys</h1>
-          <p className="text-muted-foreground mt-2">Create and manage your surveys</p>
+    <PasswordProtection>
+      <div className="container flex flex-col gap-6 py-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">My Surveys</h1>
+            <p className="text-muted-foreground mt-2">Create and manage your surveys</p>
+          </div>
+          <CreateSurveyDropdown />
         </div>
-        <CreateSurveyDropdown />
+        <React.Suspense fallback={<SurveyListSkeleton />}>
+          <SurveyList />
+        </React.Suspense>
       </div>
-      <React.Suspense fallback={<SurveyListSkeleton />}>
-        <SurveyList />
-      </React.Suspense>
-    </div>
+    </PasswordProtection>
   );
 }

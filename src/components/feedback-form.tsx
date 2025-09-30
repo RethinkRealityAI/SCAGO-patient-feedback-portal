@@ -53,6 +53,20 @@ import { useTranslation, translateFieldLabel, translateOption, translateSectionT
 import { LanguageToggle } from '@/components/language-toggle';
 import { FormFieldRenderer, type FieldDef } from '@/components/form-field-renderer';
 import { SignaturePad } from '@/components/signature-pad';
+import {
+  MultiTextField,
+  MatrixField,
+  LikertScaleField,
+  PainScaleField,
+  RankingField,
+  FileUploadField,
+  DateTimeField,
+  ColorPickerField,
+  RangeField,
+  PercentageField,
+  CurrencyField,
+  CalculatedField,
+} from '@/components/advanced-field-renderers';
 
 // FieldDef type is now imported from form-field-renderer
 
@@ -189,6 +203,45 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         case 'rating':
         case 'nps':
           fieldSchema = z.number().min(1, 'A rating is required.');
+          break;
+        case 'file-upload':
+          fieldSchema = z.array(z.any()).optional();
+          break;
+        case 'multi-text':
+          fieldSchema = z.array(z.string()).optional();
+          break;
+        case 'matrix-single':
+          fieldSchema = z.record(z.string()).optional();
+          break;
+        case 'matrix-multiple':
+          fieldSchema = z.record(z.array(z.string())).optional();
+          break;
+        case 'likert-scale':
+          fieldSchema = z.string().optional();
+          break;
+        case 'pain-scale':
+          fieldSchema = z.number().min(0).max(10).optional();
+          break;
+        case 'ranking':
+          fieldSchema = z.array(z.string()).optional();
+          break;
+        case 'datetime':
+          fieldSchema = z.object({ date: z.string(), time: z.string() }).optional();
+          break;
+        case 'color':
+          fieldSchema = z.string().optional();
+          break;
+        case 'range':
+          fieldSchema = z.object({ min: z.number(), max: z.number() }).optional();
+          break;
+        case 'percentage':
+          fieldSchema = z.number().min(0).max(100).optional();
+          break;
+        case 'currency':
+          fieldSchema = z.string().optional();
+          break;
+        case 'calculated':
+          fieldSchema = z.string().optional();
           break;
         default:
           fieldSchema = z.any();
@@ -708,6 +761,30 @@ function renderField(fieldConfig: FieldDef, form: any, isFrench: boolean = false
                     return <Rating field={field} />;
                 case 'nps':
                     return <NpsScale field={field} />;
+                case 'file-upload':
+                    return <FileUploadField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'multi-text':
+                    return <MultiTextField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'matrix-single':
+                case 'matrix-multiple':
+                    return <MatrixField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'likert-scale':
+                    return <LikertScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'pain-scale':
+                    return <PainScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'ranking':
+                    return <RankingField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'datetime':
+                    return <DateTimeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'color':
+                    return <ColorPickerField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'range':
+                    return <RangeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'percentage':
+                    return <PercentageField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                case 'currency':
+                    return <CurrencyField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+h                    return <CalculatedField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
                 default:
                   return <Input {...fieldWithValue} className="max-w-md" />;
               }

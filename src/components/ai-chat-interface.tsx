@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { getSurveyContextFromId, getQuickInsightQuestions } from '@/lib/survey-contexts';
 
 interface Message {
   id: string;
@@ -147,8 +148,26 @@ export default function AIChatInterface({ onSendQuery, surveyId }: AIChatInterfa
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [dynamicQuestions, setDynamicQuestions] = useState<string[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Load survey-specific questions on mount or when surveyId changes
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        // In a real app, you'd fetch submissions to detect survey type
+        // For now, we'll use a simplified approach
+        const questions = surveyId === 'all' 
+          ? getQuickInsightQuestions(getSurveyContextFromId('all', []))
+          : getQuickInsightQuestions(getSurveyContextFromId(surveyId || '', []));
+        setDynamicQuestions(questions);
+      } catch (error) {
+        console.error('Error loading quick insight questions:', error);
+      }
+    };
+    loadQuestions();
+  }, [surveyId]);
 
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive
@@ -292,6 +311,38 @@ export default function AIChatInterface({ onSendQuery, surveyId }: AIChatInterfa
                 </Badge>
               ))}
             </div>
+
+            {/* Survey-Specific Quick Insights */}
+            {dynamicQuestions.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Quick Insights for This Survey</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {dynamicQuestions.slice(0, 8).map((question, index) => (
+                    <button
+                      key={`dynamic-${index}`}
+                      onClick={() => handlePredefinedQuery(question)}
+                      className={cn(
+                        "group relative p-3 rounded-xl text-left transition-all duration-200",
+                        "bg-gradient-to-br from-[#C8262A]/5 to-[#D34040]/5 backdrop-blur-xl",
+                        "border border-[#C8262A]/20 dark:border-[#C8262A]/30",
+                        "hover:border-[#C8262A]/50 hover:shadow-md hover:scale-102"
+                      )}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="p-1.5 rounded-lg bg-[#C8262A]/10 backdrop-blur-sm">
+                          <Sparkles className="h-3.5 w-3.5 text-[#C8262A]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-700 dark:text-gray-300 line-clamp-2">
+                            {question}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Predefined Queries Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
