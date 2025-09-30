@@ -52,6 +52,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useTranslation, translateFieldLabel, translateOption, translateSectionTitle } from '@/lib/translations';
 import { LanguageToggle } from '@/components/language-toggle';
 import { FormFieldRenderer, type FieldDef } from '@/components/form-field-renderer';
+import { SignaturePad } from '@/components/signature-pad';
 
 // FieldDef type is now imported from form-field-renderer
 
@@ -87,6 +88,15 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
             stringSchema = stringSchema.regex(createRegExp(field.validation.pattern), 'Invalid format.');
           }
           fieldSchema = stringSchema;
+          break;
+        }
+        case 'digital-signature': {
+          // Signature is stored as a data URL (base64 PNG)
+          let signatureSchema = z.string();
+          if (field.validation?.pattern) {
+            signatureSchema = signatureSchema.regex(createRegExp(field.validation.pattern), 'Invalid format.');
+          }
+          fieldSchema = signatureSchema;
           break;
         }
         case 'textarea': {
@@ -497,20 +507,30 @@ function DurationDhField({ field }: { field: any }) {
     );
 }
 
-function DateField({ field }: { field: any }) {
-    const selected = field.value ? new Date(field.value) : undefined;
+function DateField({ field, isFrench }: { field: any; isFrench?: boolean }) {
+    const t = useTranslation(isFrench ? 'fr' : 'en');
+    // Parse date string as local date (add T00:00:00 to prevent timezone shifts)
+    const selected = field.value ? new Date(field.value + 'T00:00:00') : undefined;
     return (
         <Popover>
             <PopoverTrigger asChild>
                 <Button type="button" variant="outline" className="w-[240px] justify-start text-left font-normal">
-                    {selected ? format(selected, 'yyyy-MM-dd') : 'Pick a date'}
+                    {selected ? format(selected, 'yyyy-MM-dd') : <span className="text-muted-foreground">{t.pickADate}</span>}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="p-0" align="start">
                 <Calendar
                     mode="single"
                     selected={selected}
+                    defaultMonth={selected || new Date()}
                     onSelect={(d) => field.onChange(d ? format(d, 'yyyy-MM-dd') : '')}
+                    disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const compareDate = new Date(date);
+                        compareDate.setHours(0, 0, 0, 0);
+                        return compareDate > today || compareDate < new Date('1900-01-01');
+                    }}
                     initialFocus
                 />
             </PopoverContent>
@@ -573,11 +593,19 @@ function renderField(fieldConfig: FieldDef, form: any, isFrench: boolean = false
                 case 'url':
                   return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder="https://example.com" />;
                 case 'email':
-                  return <Input type="email" {...fieldWithValue} className="max-w-md" />;
+                  return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={t.enterEmail} />;
                 case 'phone':
-                  return <Input type="tel" {...fieldWithValue} className="max-w-md" />;
+                  return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={t.enterPhoneNumber} />;
+                case 'digital-signature':
+                  return (
+                    <SignaturePad
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      placeholder={t.typeYourSignatureHere}
+                    />
+                  );
                 case 'date':
-                  return <DateField field={field} />;
+                  return <DateField field={field} isFrench={isFrench} />;
                 case 'time':
                   return <Input type="time" {...fieldWithValue} className="max-w-md" />;
                 case 'number':

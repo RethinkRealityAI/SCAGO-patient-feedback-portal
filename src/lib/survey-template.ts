@@ -882,7 +882,255 @@ export const consentSurvey = {
         {
           id: 'digitalSignature',
           label: 'Full Name (Digital Signature)',
+          type: 'digital-signature',
+          validation: { required: true },
+        },
+        {
+          id: 'signatureDate',
+          label: 'Date',
+          type: 'date',
+          validation: { required: true },
+        },
+      ],
+    },
+  ],
+};
+
+// SCAGO Digital Consent & Information Collection Survey - French Version
+export const consentSurveyFr = {
+  appearance: {
+    themeColor: '#C8262A',
+    cardShadow: 'sm',
+    cardTitleSize: 'lg',
+    sectionTitleSize: 'lg',
+    labelSize: 'sm',
+    gradient: true,
+    showTitle: true,
+  },
+  title: 'Consentement Numérique et Collecte d\'Informations SCAGO',
+  description: 'Le Groupe de Sensibilisation à la Drépanocytose de l\'Ontario (SCAGO) est la plus grande organisation de soutien et de défense des patients en Ontario. En complétant ce formulaire, vous fournissez vos informations à SCAGO. Nous stockons toutes les données de manière sécurisée et ne partagerons jamais vos informations personnelles avec des tiers sans votre consentement.',
+  submitButtonLabel: 'Soumettre le Formulaire de Consentement',
+  saveProgressEnabled: true,
+  shareButtonEnabled: false,
+  sections: [
+    {
+      id: 'consent-notice-section-fr',
+      title: 'À propos de SCAGO et Consentement à Participer',
+      description: 'SCAGO crée et fournit des services et du soutien basés sur des preuves à travers l\'Ontario depuis 2005. SCAGO offre uniquement des services de soutien non médicaux. Si vous avez besoin d\'une attention médicale urgente, veuillez contacter votre fournisseur de soins de santé ou appeler le 911. Note: Ce formulaire est destiné aux personnes de 18 ans ou plus. Si vous avez moins de 18 ans, un parent ou tuteur doit compléter ce formulaire en votre nom.',
+      fields: [
+        {
+          id: 'ageConfirmation',
+          label: 'Je confirme que j\'ai 18 ans ou plus, OU je suis un parent/tuteur complétant ce formulaire au nom de quelqu\'un de moins de 18 ans',
+          type: 'boolean-checkbox',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'basic-information-section-fr',
+      title: 'Informations de Base',
+      fields: [
+        {
+          id: 'title',
+          label: 'Titre',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'M.', value: 'mr' },
+            { id: nanoid(), label: 'Mme', value: 'mrs' },
+            { id: nanoid(), label: 'Mlle', value: 'ms' },
+            { id: nanoid(), label: 'Mx', value: 'mx' },
+            { id: nanoid(), label: 'Dr', value: 'dr' },
+            { id: nanoid(), label: 'Autre', value: 'other' },
+          ],
+        },
+        {
+          id: 'titleOther',
+          label: 'Si autre, veuillez préciser',
           type: 'text',
+          conditionField: 'title',
+          conditionValue: 'other',
+          validation: { required: true },
+        },
+        {
+          id: 'consent-name-group',
+          type: 'group',
+          fields: [
+            { id: 'firstName', type: 'text', label: 'Prénom', validation: { required: true } },
+            { id: 'lastName', type: 'text', label: 'Nom de famille', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'consent-contact-group',
+          type: 'group',
+          fields: [
+            { id: 'email', type: 'email', label: 'Adresse courriel', validation: { required: true } },
+            { id: 'phone', type: 'phone', label: 'Numéro de téléphone (cellulaire)', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'streetAddress',
+          label: 'Adresse',
+          type: 'text',
+          validation: { required: true },
+        },
+        {
+          id: 'consent-location-group',
+          type: 'group',
+          fields: [
+            { id: 'city', type: 'city-on', label: 'Ville', validation: { required: true } },
+            { id: 'province', type: 'province-ca', label: 'Province', validation: { required: true } },
+          ],
+        },
+        {
+          id: 'postalCode',
+          label: 'Code postal',
+          type: 'text',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'scd-connection-section-fr',
+      title: 'Votre Lien avec la Drépanocytose',
+      fields: [
+        {
+          id: 'scdConnection',
+          label: 'Veuillez sélectionner tout ce qui s\'applique',
+          type: 'checkbox',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'J\'ai la drépanocytose', value: 'i-have-scd' },
+            { id: nanoid(), label: 'Mon enfant a la drépanocytose', value: 'my-child-has-scd' },
+            { id: nanoid(), label: 'Je suis un aidant ou un membre de la famille', value: 'caregiver-family' },
+            { id: nanoid(), label: 'Je suis un professionnel de la santé', value: 'healthcare-provider' },
+            { id: nanoid(), label: 'Autre', value: 'other' },
+          ],
+        },
+        {
+          id: 'scdConnectionOther',
+          label: 'Si vous avez sélectionné "Autre" ci-dessus, veuillez décrire',
+          type: 'text',
+        },
+        {
+          id: 'individual1-group',
+          type: 'group',
+          fields: [
+            { id: 'individual1Name', type: 'text', label: 'Personne 1 - Nom' },
+            { id: 'individual1DOB', type: 'date', label: 'Personne 1 - Date de Naissance' },
+          ],
+        },
+        {
+          id: 'individual2-group',
+          type: 'group',
+          fields: [
+            { id: 'individual2Name', type: 'text', label: 'Personne 2 - Nom' },
+            { id: 'individual2DOB', type: 'date', label: 'Personne 2 - Date de Naissance' },
+          ],
+        },
+        {
+          id: 'individual3-group',
+          type: 'group',
+          fields: [
+            { id: 'individual3Name', type: 'text', label: 'Personne 3 - Nom' },
+            { id: 'individual3DOB', type: 'date', label: 'Personne 3 - Date de Naissance' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'care-information-section-fr',
+      title: 'Informations de Soins',
+      fields: [
+        {
+          id: 'primaryHospital',
+          label: 'Dans quel(s) hôpital(s) recevez-vous/votre enfant recevez-vous principalement des soins pour la drépanocytose?',
+          type: 'hospital-on',
+          validation: { required: true },
+        },
+      ],
+    },
+    {
+      id: 'stay-connected-section-fr',
+      title: 'Restez Connecté',
+      fields: [
+        {
+          id: 'mayContact',
+          label: 'Pouvons-nous vous contacter au sujet des services, programmes ou événements de SCAGO?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Oui', value: 'yes' },
+            { id: nanoid(), label: 'Non', value: 'no' },
+          ],
+        },
+        {
+          id: 'preferredContactMethod',
+          label: 'Méthode de contact préférée',
+          type: 'radio',
+          conditionField: 'mayContact',
+          conditionValue: 'yes',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Courriel', value: 'email' },
+            { id: nanoid(), label: 'Téléphone (SMS/Appel)', value: 'phone' },
+            { id: nanoid(), label: 'L\'un ou l\'autre', value: 'either' },
+          ],
+        },
+        {
+          id: 'joinMailingList',
+          label: 'Aimeriez-vous vous inscrire à la liste de diffusion de SCAGO pour les mises à jour, bulletins et nouvelles de plaidoyer?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Oui', value: 'yes' },
+            { id: nanoid(), label: 'Non', value: 'no' },
+          ],
+        },
+        {
+          id: 'joinSupportGroups',
+          label: 'Aimeriez-vous rejoindre nos groupes de soutien WhatsApp ou en personne?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Oui', value: 'yes' },
+            { id: nanoid(), label: 'Non', value: 'no' },
+          ],
+        },
+        {
+          id: 'supportGroupContactMethod',
+          label: 'Comment devrions-nous vous contacter au sujet des groupes de soutien?',
+          type: 'radio',
+          conditionField: 'joinSupportGroups',
+          conditionValue: 'yes',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Courriel', value: 'email' },
+            { id: nanoid(), label: 'Téléphone', value: 'phone' },
+            { id: nanoid(), label: 'L\'un ou l\'autre', value: 'either' },
+          ],
+        },
+        {
+          id: 'consentToAdvocacy',
+          label: 'Consentez-vous à ce qu\'un membre du personnel de SCAGO ou un coordinateur du bien-être des patients plaide en votre nom lorsque demandé?',
+          type: 'radio',
+          validation: { required: true },
+          options: [
+            { id: nanoid(), label: 'Oui', value: 'yes' },
+            { id: nanoid(), label: 'Non', value: 'no' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'consent-confirmation-section-fr',
+      title: 'Consentement et Confirmation',
+      description: 'En tapant votre nom ci-dessous, vous confirmez que: (1) Vous avez 18 ans ou plus, (2) Vous avez lu et compris les informations fournies ci-dessus, (3) Vous consentez volontairement à la collecte et à l\'utilisation de vos informations par SCAGO comme décrit.',
+      fields: [
+        {
+          id: 'digitalSignature',
+          label: 'Nom Complet (Signature Numérique)',
+          type: 'digital-signature',
           validation: { required: true },
         },
         {

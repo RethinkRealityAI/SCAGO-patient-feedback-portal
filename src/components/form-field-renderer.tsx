@@ -31,6 +31,7 @@ import { provinces, ontarioCities } from "@/lib/location-data";
 import { hospitalDepartments } from "@/lib/hospital-departments";
 import { ontarioHospitals } from "@/lib/hospital-names";
 import { translateFieldLabel, translateOption, useTranslation } from '@/lib/translations';
+import { SignaturePad } from '@/components/signature-pad';
 
 // Define field type
 export type FieldDef = {
@@ -85,7 +86,11 @@ export function FormFieldRenderer({
           <FormControl>
             <Input
               type={fieldConfig.type === 'email' ? 'email' : fieldConfig.type === 'phone' ? 'tel' : fieldConfig.type === 'url' ? 'url' : 'text'}
-              placeholder={fieldConfig.type === 'email' ? t.email : ''}
+              placeholder={
+                fieldConfig.type === 'email' ? t.enterEmail : 
+                fieldConfig.type === 'phone' ? t.enterPhoneNumber : 
+                ''
+              }
               {...form.register(fieldConfig.id)}
             />
           </FormControl>
@@ -116,17 +121,21 @@ export function FormFieldRenderer({
         );
 
       case 'select':
+      case 'province-ca':
+        const selectOptions = fieldConfig.type === 'province-ca' ? provinces : translatedOptions;
         return (
           <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={form.watch(fieldConfig.id) || ''}>
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder={t.pleaseSelect} />
+                <SelectValue placeholder={
+                  fieldConfig.type === 'province-ca' ? t.selectProvince : t.selectAnOption
+                } />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              {translatedOptions?.map((option) => (
+              {selectOptions?.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {translateOption(option.label, isFrench ? 'fr' : 'en')}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -244,9 +253,9 @@ export function FormFieldRenderer({
                   className="w-full pl-3 text-left font-normal"
                 >
                   {form.watch(fieldConfig.id) ? (
-                    format(new Date(form.watch(fieldConfig.id)), 'PPP')
+                    format(new Date(form.watch(fieldConfig.id) + 'T00:00:00'), 'PPP')
                   ) : (
-                    <span>{t.date}</span>
+                    <span className="text-muted-foreground">{t.pickADate}</span>
                   )}
                 </Button>
               </FormControl>
@@ -254,16 +263,39 @@ export function FormFieldRenderer({
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
-                selected={form.watch(fieldConfig.id) ? new Date(form.watch(fieldConfig.id)) : undefined}
+                selected={form.watch(fieldConfig.id) ? new Date(form.watch(fieldConfig.id) + 'T00:00:00') : undefined}
+                defaultMonth={form.watch(fieldConfig.id) ? new Date(form.watch(fieldConfig.id) + 'T00:00:00') : new Date()}
                 onSelect={(date) => {
-                  form.setValue(fieldConfig.id, date?.toISOString());
+                  if (date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    form.setValue(fieldConfig.id, `${year}-${month}-${day}`);
+                  } else {
+                    form.setValue(fieldConfig.id, '');
+                  }
                   setCalendarOpen(false);
                 }}
-                disabled={(date) => date > new Date() || date < new Date('1900-01-01')}
+                disabled={(date) => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const compareDate = new Date(date);
+                  compareDate.setHours(0, 0, 0, 0);
+                  return compareDate > today || compareDate < new Date('1900-01-01');
+                }}
                 initialFocus
               />
             </PopoverContent>
           </Popover>
+        );
+
+      case 'digital-signature':
+        return (
+          <SignaturePad
+            value={form.watch(fieldConfig.id) || ''}
+            onChange={(value) => form.setValue(fieldConfig.id, value)}
+            placeholder={t.typeYourSignatureHere}
+          />
         );
 
       // Add more field types as needed...

@@ -99,6 +99,98 @@ export interface Translation {
   selectAnOption: string;
   selectAHospital: string;
   
+  // Consent and Information Collection Terms
+  scagoDigitalConsent: string;
+  aboutScago: string;
+  consentToParticipate: string;
+  informationCollection: string;
+  basicInformation: string;
+  title: string;
+  streetAddress: string;
+  postalCode: string;
+  yourConnectionToScd: string;
+  pleaseSelectAllThatApply: string;
+  iHaveSickleCellDisease: string;
+  myChildHasSickleCellDisease: string;
+  iAmCaregiverOrFamilyMember: string;
+  iAmHealthcareProvider: string;
+  other: string;
+  ifApplicableListNames: string;
+  individualName: string;
+  dateOfBirth: string;
+  careInformation: string;
+  whichHospitalsDoYouReceiveCare: string;
+  stayConnected: string;
+  mayWeContactYou: string;
+  preferredMethodOfContact: string;
+  email: string;
+  phoneTextPhonecall: string;
+  either: string;
+  wouldYouLikeToJoinMailingList: string;
+  wouldYouLikeToJoinSupportGroups: string;
+  ifYesHowShouldWeContactYou: string;
+  doYouConsentToAdvocacy: string;
+  consentAndConfirmation: string;
+  byTypingYourNameBelow: string;
+  youAre18YearsOrOlder: string;
+  youHaveReadAndUnderstood: string;
+  youVoluntarilyConsent: string;
+  fullNameDigitalSignature: string;
+  dateMMDDYYYY: string;
+  thankYouForJoiningScago: string;
+  memberOfOurTeamWillBeInTouch: string;
+  ageConfirmation: string;
+  iConfirm18YearsOrOlder: string;
+  parentGuardianCompleting: string;
+  scagoOffersNonMedicalSupport: string;
+  ifYouRequireUrgentMedicalAttention: string;
+  thisFormIsForIndividuals18OrOlder: string;
+  ifYouAreUnder18: string;
+  parentOrGuardianMustComplete: string;
+  scagoStoresDataSecurely: string;
+  willNeverSharePersonalInformation: string;
+  withoutYourConsent: string;
+  pleaseDescribe: string;
+  ifYouSelectedOtherAbove: string;
+  individual1Name: string;
+  individual1DateOfBirth: string;
+  individual2Name: string;
+  individual2DateOfBirth: string;
+  individual3Name: string;
+  individual3DateOfBirth: string;
+  whichHospitalDoYouReceiveCare: string;
+  mayWeContactYouAboutScagoServices: string;
+  wouldYouLikeToJoinScagoMailingList: string;
+  wouldYouLikeToJoinWhatsappSupportGroups: string;
+  howShouldWeContactYouAboutSupportGroups: string;
+  doYouConsentToScagoStaffAdvocating: string;
+  byTypingYourNameBelowYouConfirm: string;
+  youAre18YearsOrOlder2: string;
+  youHaveReadAndUnderstoodInformation: string;
+  youVoluntarilyConsentToScagoCollection: string;
+  fullNameDigitalSignature2: string;
+  date2: string;
+  thankYouForJoiningScagoCommunity: string;
+  memberOfOurTeamWillBeInTouchShortly: string;
+  
+  // Title options
+  mr: string;
+  mrs: string;
+  ms: string;
+  mx: string;
+  dr: string;
+  
+  // Placeholder texts
+  pickADate: string;
+  enterEmail: string;
+  enterPhoneNumber: string;
+  selectProvince: string;
+  selectCity: string;
+  enterYourName: string;
+  typeYourSignatureHere: string;
+  signHere: string;
+  digitalSignature: string;
+  
   // Visit types
   outpatientClinicVisit: string;
   emergencyDepartment: string;
@@ -244,7 +336,99 @@ export const translations: Record<'en' | 'fr', Translation> = {
     september: 'September',
     october: 'October',
     november: 'November',
-    december: 'December'
+    december: 'December',
+    
+    // Consent and Information Collection Terms
+    scagoDigitalConsent: 'SCAGO Digital Consent & Information Collection',
+    aboutScago: 'About SCAGO',
+    consentToParticipate: 'Consent to Participate & Information Collection',
+    informationCollection: 'Information Collection',
+    basicInformation: 'Basic Information',
+    title: 'Title',
+    streetAddress: 'Street Address',
+    postalCode: 'Postal Code',
+    yourConnectionToScd: 'Your Connection to Sickle Cell Disease',
+    pleaseSelectAllThatApply: 'Please select all that apply',
+    iHaveSickleCellDisease: 'I have sickle cell disease',
+    myChildHasSickleCellDisease: 'My child has sickle cell disease',
+    iAmCaregiverOrFamilyMember: 'I am a caregiver or family member',
+    iAmHealthcareProvider: 'I am a healthcare provider',
+    other: 'Other',
+    ifApplicableListNames: 'If applicable, list the names and birthdates of individuals with SCD in your household',
+    individualName: 'Name',
+    dateOfBirth: 'Date of Birth',
+    careInformation: 'Care Information',
+    whichHospitalsDoYouReceiveCare: 'Which hospital(s) do you/your child primarily receive care from for SCD?',
+    stayConnected: 'Stay Connected',
+    mayWeContactYou: 'May we contact you about SCAGO services, programs, or events?',
+    preferredMethodOfContact: 'Preferred method of contact',
+    email: 'Email',
+    phoneTextPhonecall: 'Phone (Text/Phone call)',
+    either: 'Either',
+    wouldYouLikeToJoinMailingList: 'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?',
+    wouldYouLikeToJoinSupportGroups: 'Would you like to join our WhatsApp or face-to-face support groups?',
+    ifYesHowShouldWeContactYou: 'If yes, how should we contact you?',
+    doYouConsentToAdvocacy: 'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?',
+    consentAndConfirmation: 'Consent and Confirmation',
+    byTypingYourNameBelow: 'By typing your name below, you confirm that:',
+    youAre18YearsOrOlder: 'You are 18 years or older',
+    youHaveReadAndUnderstood: 'You have read and understood the information provided above',
+    youVoluntarilyConsent: 'You voluntarily consent to SCAGO\'s collection and use of your information as described',
+    fullNameDigitalSignature: 'Full Name (Digital Signature)',
+    dateMMDDYYYY: 'Date (MM-DD-YYYY)',
+    thankYouForJoiningScago: 'Thank you for joining the SCAGO community! A member of our team will be in touch shortly.',
+    memberOfOurTeamWillBeInTouch: 'A member of our team will be in touch shortly.',
+    ageConfirmation: 'I confirm that I am 18 years of age or older, OR I am a parent/guardian completing this form on behalf of someone under 18',
+    iConfirm18YearsOrOlder: 'I confirm that I am 18 years of age or older',
+    parentGuardianCompleting: 'I am a parent/guardian completing this form on behalf of someone under 18',
+    scagoOffersNonMedicalSupport: 'SCAGO offers non-medical support services only',
+    ifYouRequireUrgentMedicalAttention: 'If you require urgent medical attention, please contact your healthcare provider or call 911',
+    thisFormIsForIndividuals18OrOlder: 'This form is for individuals aged 18 or older',
+    ifYouAreUnder18: 'If you are under 18',
+    parentOrGuardianMustComplete: 'a parent or guardian must complete this form on your behalf',
+    scagoStoresDataSecurely: 'SCAGO stores all data securely',
+    willNeverSharePersonalInformation: 'will never share your personal information with third parties',
+    withoutYourConsent: 'without your consent',
+    pleaseDescribe: 'Please describe',
+    ifYouSelectedOtherAbove: 'If you selected "Other" above, please describe',
+    individual1Name: 'Individual 1 - Name',
+    individual1DateOfBirth: 'Individual 1 - Date of Birth',
+    individual2Name: 'Individual 2 - Name',
+    individual2DateOfBirth: 'Individual 2 - Date of Birth',
+    individual3Name: 'Individual 3 - Name',
+    individual3DateOfBirth: 'Individual 3 - Date of Birth',
+    whichHospitalDoYouReceiveCare: 'Which hospital(s) do you/your child primarily receive care from for SCD?',
+    mayWeContactYouAboutScagoServices: 'May we contact you about SCAGO services, programs, or events?',
+    wouldYouLikeToJoinScagoMailingList: 'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?',
+    wouldYouLikeToJoinWhatsappSupportGroups: 'Would you like to join our WhatsApp or face-to-face support groups?',
+    howShouldWeContactYouAboutSupportGroups: 'How should we contact you about support groups?',
+    doYouConsentToScagoStaffAdvocating: 'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?',
+    byTypingYourNameBelowYouConfirm: 'By typing your name below, you confirm that:',
+    youAre18YearsOrOlder2: 'You are 18 years or older',
+    youHaveReadAndUnderstoodInformation: 'You have read and understood the information provided above',
+    youVoluntarilyConsentToScagoCollection: 'You voluntarily consent to SCAGO\'s collection and use of your information as described',
+    fullNameDigitalSignature2: 'Full Name (Digital Signature)',
+    date2: 'Date',
+    thankYouForJoiningScagoCommunity: 'Thank you for joining the SCAGO community!',
+    memberOfOurTeamWillBeInTouchShortly: 'A member of our team will be in touch shortly.',
+    
+    // Title options
+    mr: 'Mr',
+    mrs: 'Mrs',
+    ms: 'Ms',
+    mx: 'Mx',
+    dr: 'Dr',
+    
+    // Placeholder texts
+    pickADate: 'Pick a date',
+    enterEmail: 'Enter email address',
+    enterPhoneNumber: 'Enter phone number',
+    selectProvince: 'Select province',
+    selectCity: 'Select city',
+    enterYourName: 'Enter your name',
+    typeYourSignatureHere: 'Type your signature here',
+    signHere: 'Sign here',
+    digitalSignature: 'Digital Signature'
   },
   
   fr: {
@@ -367,7 +551,99 @@ export const translations: Record<'en' | 'fr', Translation> = {
     september: 'Septembre',
     october: 'Octobre',
     november: 'Novembre',
-    december: 'Décembre'
+    december: 'Décembre',
+    
+    // Consent and Information Collection Terms
+    scagoDigitalConsent: 'Consentement Numérique et Collecte d\'Informations SCAGO',
+    aboutScago: 'À propos de SCAGO',
+    consentToParticipate: 'Consentement à Participer et Collecte d\'Informations',
+    informationCollection: 'Collecte d\'Informations',
+    basicInformation: 'Informations de Base',
+    title: 'Titre',
+    streetAddress: 'Adresse',
+    postalCode: 'Code Postal',
+    yourConnectionToScd: 'Votre Lien avec la Drépanocytose',
+    pleaseSelectAllThatApply: 'Veuillez sélectionner tout ce qui s\'applique',
+    iHaveSickleCellDisease: 'J\'ai la drépanocytose',
+    myChildHasSickleCellDisease: 'Mon enfant a la drépanocytose',
+    iAmCaregiverOrFamilyMember: 'Je suis un aidant ou un membre de la famille',
+    iAmHealthcareProvider: 'Je suis un professionnel de la santé',
+    other: 'Autre',
+    ifApplicableListNames: 'Si applicable, listez les noms et dates de naissance des personnes atteintes de drépanocytose dans votre foyer',
+    individualName: 'Nom',
+    dateOfBirth: 'Date de Naissance',
+    careInformation: 'Informations de Soins',
+    whichHospitalsDoYouReceiveCare: 'Dans quel(s) hôpital(s) recevez-vous/votre enfant recevez-vous principalement des soins pour la drépanocytose?',
+    stayConnected: 'Restez Connecté',
+    mayWeContactYou: 'Pouvons-nous vous contacter au sujet des services, programmes ou événements de SCAGO?',
+    preferredMethodOfContact: 'Méthode de contact préférée',
+    email: 'Courriel',
+    phoneTextPhonecall: 'Téléphone (SMS/Appel)',
+    either: 'L\'un ou l\'autre',
+    wouldYouLikeToJoinMailingList: 'Aimeriez-vous vous inscrire à la liste de diffusion de SCAGO pour les mises à jour, bulletins et nouvelles de plaidoyer?',
+    wouldYouLikeToJoinSupportGroups: 'Aimeriez-vous rejoindre nos groupes de soutien WhatsApp ou en personne?',
+    ifYesHowShouldWeContactYou: 'Si oui, comment devrions-nous vous contacter?',
+    doYouConsentToAdvocacy: 'Consentez-vous à ce qu\'un membre du personnel de SCAGO ou un coordinateur du bien-être des patients plaide en votre nom lorsque demandé?',
+    consentAndConfirmation: 'Consentement et Confirmation',
+    byTypingYourNameBelow: 'En tapant votre nom ci-dessous, vous confirmez que:',
+    youAre18YearsOrOlder: 'Vous avez 18 ans ou plus',
+    youHaveReadAndUnderstood: 'Vous avez lu et compris les informations fournies ci-dessus',
+    youVoluntarilyConsent: 'Vous consentez volontairement à la collecte et à l\'utilisation de vos informations par SCAGO comme décrit',
+    fullNameDigitalSignature: 'Nom Complet (Signature Numérique)',
+    dateMMDDYYYY: 'Date (MM-JJ-AAAA)',
+    thankYouForJoiningScago: 'Merci de rejoindre la communauté SCAGO! Un membre de notre équipe vous contactera sous peu.',
+    memberOfOurTeamWillBeInTouch: 'Un membre de notre équipe vous contactera sous peu.',
+    ageConfirmation: 'Je confirme que j\'ai 18 ans ou plus, OU je suis un parent/tuteur complétant ce formulaire au nom de quelqu\'un de moins de 18 ans',
+    iConfirm18YearsOrOlder: 'Je confirme que j\'ai 18 ans ou plus',
+    parentGuardianCompleting: 'Je suis un parent/tuteur complétant ce formulaire au nom de quelqu\'un de moins de 18 ans',
+    scagoOffersNonMedicalSupport: 'SCAGO offre uniquement des services de soutien non médicaux',
+    ifYouRequireUrgentMedicalAttention: 'Si vous avez besoin d\'une attention médicale urgente, veuillez contacter votre fournisseur de soins de santé ou appeler le 911',
+    thisFormIsForIndividuals18OrOlder: 'Ce formulaire est destiné aux personnes de 18 ans ou plus',
+    ifYouAreUnder18: 'Si vous avez moins de 18 ans',
+    parentOrGuardianMustComplete: 'un parent ou tuteur doit compléter ce formulaire en votre nom',
+    scagoStoresDataSecurely: 'SCAGO stocke toutes les données de manière sécurisée',
+    willNeverSharePersonalInformation: 'ne partagera jamais vos informations personnelles avec des tiers',
+    withoutYourConsent: 'sans votre consentement',
+    pleaseDescribe: 'Veuillez décrire',
+    ifYouSelectedOtherAbove: 'Si vous avez sélectionné "Autre" ci-dessus, veuillez décrire',
+    individual1Name: 'Personne 1 - Nom',
+    individual1DateOfBirth: 'Personne 1 - Date de Naissance',
+    individual2Name: 'Personne 2 - Nom',
+    individual2DateOfBirth: 'Personne 2 - Date de Naissance',
+    individual3Name: 'Personne 3 - Nom',
+    individual3DateOfBirth: 'Personne 3 - Date de Naissance',
+    whichHospitalDoYouReceiveCare: 'Dans quel(s) hôpital(s) recevez-vous/votre enfant recevez-vous principalement des soins pour la drépanocytose?',
+    mayWeContactYouAboutScagoServices: 'Pouvons-nous vous contacter au sujet des services, programmes ou événements de SCAGO?',
+    wouldYouLikeToJoinScagoMailingList: 'Aimeriez-vous vous inscrire à la liste de diffusion de SCAGO pour les mises à jour, bulletins et nouvelles de plaidoyer?',
+    wouldYouLikeToJoinWhatsappSupportGroups: 'Aimeriez-vous rejoindre nos groupes de soutien WhatsApp ou en personne?',
+    howShouldWeContactYouAboutSupportGroups: 'Comment devrions-nous vous contacter au sujet des groupes de soutien?',
+    doYouConsentToScagoStaffAdvocating: 'Consentez-vous à ce qu\'un membre du personnel de SCAGO ou un coordinateur du bien-être des patients plaide en votre nom lorsque demandé?',
+    byTypingYourNameBelowYouConfirm: 'En tapant votre nom ci-dessous, vous confirmez que:',
+    youAre18YearsOrOlder2: 'Vous avez 18 ans ou plus',
+    youHaveReadAndUnderstoodInformation: 'Vous avez lu et compris les informations fournies ci-dessus',
+    youVoluntarilyConsentToScagoCollection: 'Vous consentez volontairement à la collecte et à l\'utilisation de vos informations par SCAGO comme décrit',
+    fullNameDigitalSignature2: 'Nom Complet (Signature Numérique)',
+    date2: 'Date',
+    thankYouForJoiningScagoCommunity: 'Merci de rejoindre la communauté SCAGO!',
+    memberOfOurTeamWillBeInTouchShortly: 'Un membre de notre équipe vous contactera sous peu.',
+    
+    // Title options
+    mr: 'M.',
+    mrs: 'Mme',
+    ms: 'Mlle',
+    mx: 'Mx',
+    dr: 'Dr',
+    
+    // Placeholder texts
+    pickADate: 'Choisir une date',
+    enterEmail: 'Entrez l\'adresse courriel',
+    enterPhoneNumber: 'Entrez le numéro de téléphone',
+    selectProvince: 'Sélectionnez une province',
+    selectCity: 'Sélectionnez une ville',
+    enterYourName: 'Entrez votre nom',
+    typeYourSignatureHere: 'Tapez votre signature ici',
+    signHere: 'Signez ici',
+    digitalSignature: 'Signature Numérique'
   }
 };
 
@@ -411,7 +687,48 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
     'Hospital Engagement': 'hospitalEngagement',
     'Are you a patient or a caregiver?': 'areYouPatientOrCaregiver',
     'Which type of hospital encounter did you have on your most recent visit?': 'whichTypeOfHospitalEncounter',
-    'Submit anonymously': 'submitAnonymously'
+    'Submit anonymously': 'submitAnonymously',
+    // Consent form labels
+    'Title': 'title',
+    'Street Address': 'streetAddress',
+    'Postal Code': 'postalCode',
+    'Your Connection to Sickle Cell Disease': 'yourConnectionToScd',
+    'Please select all that apply': 'pleaseSelectAllThatApply',
+    'I have sickle cell disease': 'iHaveSickleCellDisease',
+    'My child has sickle cell disease': 'myChildHasSickleCellDisease',
+    'I am a caregiver or family member': 'iAmCaregiverOrFamilyMember',
+    'I am a healthcare provider': 'iAmHealthcareProvider',
+    'Other': 'other',
+    'If applicable, list the names and birthdates of individuals with SCD in your household': 'ifApplicableListNames',
+    'Name': 'individualName',
+    'Date of Birth': 'dateOfBirth',
+    'Care Information': 'careInformation',
+    'Which hospital(s) do you/your child primarily receive care from for SCD?': 'whichHospitalsDoYouReceiveCare',
+    'Stay Connected': 'stayConnected',
+    'May we contact you about SCAGO services, programs, or events?': 'mayWeContactYou',
+    'Preferred method of contact': 'preferredMethodOfContact',
+    'Email': 'email',
+    'Phone (Text/Phone call)': 'phoneTextPhonecall',
+    'Either': 'either',
+    'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?': 'wouldYouLikeToJoinMailingList',
+    'Would you like to join our WhatsApp or face-to-face support groups?': 'wouldYouLikeToJoinSupportGroups',
+    'If yes, how should we contact you?': 'ifYesHowShouldWeContactYou',
+    'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?': 'doYouConsentToAdvocacy',
+    'Consent and Confirmation': 'consentAndConfirmation',
+    'Full Name (Digital Signature)': 'fullNameDigitalSignature',
+    'Date (MM-DD-YYYY)': 'dateMMDDYYYY',
+    'I confirm that I am 18 years of age or older, OR I am a parent/guardian completing this form on behalf of someone under 18': 'ageConfirmation',
+    'I confirm that I am 18 years of age or older': 'iConfirm18YearsOrOlder',
+    'I am a parent/guardian completing this form on behalf of someone under 18': 'parentGuardianCompleting',
+    'If you selected "Other" above, please describe': 'ifYouSelectedOtherAbove',
+    'Individual 1 - Name': 'individual1Name',
+    'Individual 1 - Date of Birth': 'individual1DateOfBirth',
+    'Individual 2 - Name': 'individual2Name',
+    'Individual 2 - Date of Birth': 'individual2DateOfBirth',
+    'Individual 3 - Name': 'individual3Name',
+    'Individual 3 - Date of Birth': 'individual3DateOfBirth',
+    'How should we contact you about support groups?': 'howShouldWeContactYouAboutSupportGroups',
+    'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?': 'doYouConsentToScagoStaffAdvocating'
   };
   
   const mappedKey = labelMappings[label];
@@ -468,7 +785,20 @@ export function translateOption(option: string, language: 'en' | 'fr' = 'en'): s
     'September': 'september',
     'October': 'october',
     'November': 'november',
-    'December': 'december'
+    'December': 'december',
+    // Consent form options
+    'Mr': 'mr',
+    'Mrs': 'mrs',
+    'Ms': 'ms',
+    'Mx': 'mx',
+    'Dr': 'dr',
+    'I have sickle cell disease': 'iHaveSickleCellDisease',
+    'My child has sickle cell disease': 'myChildHasSickleCellDisease',
+    'I am a caregiver or family member': 'iAmCaregiverOrFamilyMember',
+    'I am a healthcare provider': 'iAmHealthcareProvider',
+    'Email': 'email',
+    'Phone (Text/Phone call)': 'phoneTextPhonecall',
+    'Either': 'either'
   };
   
   const mappedKey = optionMappings[option];
