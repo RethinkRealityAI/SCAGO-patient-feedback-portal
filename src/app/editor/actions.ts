@@ -15,6 +15,49 @@ import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
 
 const surveyActionSchema = z.record(z.any());
 
+export async function createBlankSurvey() {
+  const newSurveyRef = doc(collection(db, 'surveys'));
+  const newSurvey = {
+    appearance: {
+      themeColor: '#C8262A',
+      cardShadow: 'sm',
+      cardTitleSize: 'lg',
+      sectionTitleSize: 'lg',
+      labelSize: 'sm',
+      gradient: true,
+      showTitle: true,
+    },
+    title: 'Untitled Survey',
+    description: '',
+    submitButtonLabel: 'Submit',
+    saveProgressEnabled: true,
+    shareButtonEnabled: true,
+    shareTitle: 'Share this survey',
+    shareText: "I'd like your feedback—please fill out this survey.",
+    resumeSettings: {
+      showResumeModal: true,
+      resumeTitle: 'Resume your saved progress?',
+      resumeDescription: 'We found a saved draft. Continue where you left off or start over.',
+      continueLabel: 'Continue',
+      startOverLabel: 'Start over',
+      showContinue: true,
+      showStartOver: true,
+    },
+    sections: [
+      {
+        id: 'section-1',
+        title: 'Section 1',
+        fields: []
+      }
+    ],
+  };
+
+  await setDoc(newSurveyRef, newSurvey);
+
+  revalidatePath('/editor');
+  return { id: newSurveyRef.id };
+}
+
 export async function createSurvey() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {

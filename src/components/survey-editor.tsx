@@ -33,7 +33,7 @@ const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single', 'matrix-multiple', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime', 'color', 'range', 'percentage', 'currency']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -45,6 +45,18 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().optional(),
+  minLength: z.number().optional(),
+  maxLength: z.number().optional(),
+  rows: z.array(optionSchema).optional(),
+  columns: z.array(optionSchema).optional(),
+  calculation: z.string().optional(),
+  fileTypes: z.array(z.string()).optional(),
+  maxFileSize: z.number().optional(),
+  maxFiles: z.number().optional(),
+  placeholder: z.string().optional(),
+  helperText: z.string().optional(),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
 const appearanceSchema = z.object({
@@ -215,6 +227,19 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="duration-hm">Duration (Hours/Minutes)</SelectItem>
                 <SelectItem value="duration-dh">Duration (Days/Hours)</SelectItem>
                 <SelectItem value="time-amount">Time Amount (Days/Hours)</SelectItem>
+                <SelectItem value="file-upload">File Upload</SelectItem>
+                <SelectItem value="multi-text">Multi-Text (Add Multiple)</SelectItem>
+                <SelectItem value="matrix-single">Matrix (Single Choice)</SelectItem>
+                <SelectItem value="matrix-multiple">Matrix (Multiple Choice)</SelectItem>
+                <SelectItem value="likert-scale">Likert Scale (Agreement)</SelectItem>
+                <SelectItem value="pain-scale">Pain Scale (0-10 Visual)</SelectItem>
+                <SelectItem value="calculated">Calculated Field</SelectItem>
+                <SelectItem value="ranking">Ranking (Drag to Order)</SelectItem>
+                <SelectItem value="datetime">Date & Time Combined</SelectItem>
+                <SelectItem value="color">Color Picker</SelectItem>
+                <SelectItem value="range">Range Slider</SelectItem>
+                <SelectItem value="percentage">Percentage (0-100%)</SelectItem>
+                <SelectItem value="currency">Currency (CAD)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -236,7 +261,104 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
         {field?.type === 'group' && (
           <GroupChildrenEditor parentFieldPath={fieldPath} />
         )}
-        {!(field?.type === 'group' || field?.type === 'anonymous-toggle') && (
+        {['matrix-single', 'matrix-multiple'].includes(field?.type) && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Matrix Rows</Label>
+              <FormField control={control} name={`${fieldPath}.rows` as any} render={() => (
+                <div className="space-y-2">
+                  {(watch(`${fieldPath}.rows` as any) || []).map((row: any, idx: number) => (
+                    <div key={row.id} className="flex gap-2">
+                      <Input placeholder="Row label" value={row.label} onChange={(e) => {
+                        const rows = watch(`${fieldPath}.rows` as any) || [];
+                        rows[idx].label = e.target.value;
+                        rows[idx].value = e.target.value.toLowerCase().replace(/\s+/g, '-');
+                        setValue(`${fieldPath}.rows` as any, [...rows]);
+                      }} onPointerDown={stopPropagation} />
+                      <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => {
+                        const rows = (watch(`${fieldPath}.rows` as any) || []).filter((_: any, i: number) => i !== idx);
+                        setValue(`${fieldPath}.rows` as any, rows);
+                      }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => {
+                    const rows = watch(`${fieldPath}.rows` as any) || [];
+                    setValue(`${fieldPath}.rows` as any, [...rows, { id: nanoid(), label: '', value: '' }]);
+                  }}>Add Row</Button>
+                </div>
+              )} />
+            </div>
+            <div className="space-y-2">
+              <Label>Matrix Columns</Label>
+              <FormField control={control} name={`${fieldPath}.columns` as any} render={() => (
+                <div className="space-y-2">
+                  {(watch(`${fieldPath}.columns` as any) || []).map((col: any, idx: number) => (
+                    <div key={col.id} className="flex gap-2">
+                      <Input placeholder="Column label" value={col.label} onChange={(e) => {
+                        const cols = watch(`${fieldPath}.columns` as any) || [];
+                        cols[idx].label = e.target.value;
+                        cols[idx].value = e.target.value.toLowerCase().replace(/\s+/g, '-');
+                        setValue(`${fieldPath}.columns` as any, [...cols]);
+                      }} onPointerDown={stopPropagation} />
+                      <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => {
+                        const cols = (watch(`${fieldPath}.columns` as any) || []).filter((_: any, i: number) => i !== idx);
+                        setValue(`${fieldPath}.columns` as any, cols);
+                      }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => {
+                    const cols = watch(`${fieldPath}.columns` as any) || [];
+                    setValue(`${fieldPath}.columns` as any, [...cols, { id: nanoid(), label: '', value: '' }]);
+                  }}>Add Column</Button>
+                </div>
+              )} />
+            </div>
+          </div>
+        )}
+        {field?.type === 'file-upload' && (
+          <div className="space-y-3">
+            <FormField control={control} name={`${fieldPath}.maxFiles` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Max Files</FormLabel><FormControl><Input type="number" min="1" max="10" {...formField} value={formField.value ?? 1} onChange={e => formField.onChange(parseInt(e.target.value))} onPointerDown={stopPropagation} /></FormControl><FormDescription>Maximum number of files (1-10)</FormDescription></FormItem>
+            )} />
+            <FormField control={control} name={`${fieldPath}.maxFileSize` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Max File Size (MB)</FormLabel><FormControl><Input type="number" min="1" max="50" {...formField} value={formField.value ?? 5} onChange={e => formField.onChange(parseInt(e.target.value))} onPointerDown={stopPropagation} /></FormControl><FormDescription>Maximum size per file in megabytes</FormDescription></FormItem>
+            )} />
+            <FormField control={control} name={`${fieldPath}.fileTypes` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Allowed File Types</FormLabel><FormControl><Input {...formField} value={formField.value?.join(', ') ?? '.pdf,.jpg,.png'} onChange={e => formField.onChange(e.target.value.split(',').map((t: string) => t.trim()))} onPointerDown={stopPropagation} placeholder=".pdf,.jpg,.png,.doc,.docx" /></FormControl><FormDescription>Comma-separated file extensions</FormDescription></FormItem>
+            )} />
+          </div>
+        )}
+        {field?.type === 'calculated' && (
+          <FormField control={control} name={`${fieldPath}.calculation` as any} render={({ field: formField }) => (
+            <FormItem><FormLabel>Calculation Formula</FormLabel><FormControl><Textarea {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="fieldId1 + fieldId2" className="font-mono text-sm" /></FormControl><FormDescription>Use field IDs in formula (e.g., age + years or total * 1.13)</FormDescription></FormItem>
+          )} />
+        )}
+        {['text', 'textarea'].includes(field?.type) && (
+          <div className="grid grid-cols-2 gap-3">
+            <FormField control={control} name={`${fieldPath}.minLength` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Min Length</FormLabel><FormControl><Input type="number" min="0" {...formField} value={formField.value ?? ''} onChange={e => formField.onChange(e.target.value ? parseInt(e.target.value) : undefined)} onPointerDown={stopPropagation} /></FormControl></FormItem>
+            )} />
+            <FormField control={control} name={`${fieldPath}.maxLength` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Max Length</FormLabel><FormControl><Input type="number" min="1" {...formField} value={formField.value ?? ''} onChange={e => formField.onChange(e.target.value ? parseInt(e.target.value) : undefined)} onPointerDown={stopPropagation} /></FormControl></FormItem>
+            )} />
+          </div>
+        )}
+        {['text', 'textarea', 'number', 'email', 'phone'].includes(field?.type) && (
+          <FormField control={control} name={`${fieldPath}.placeholder` as any} render={({ field: formField }) => (
+            <FormItem><FormLabel>Placeholder Text</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="Enter placeholder..." /></FormControl></FormItem>
+          )} />
+        )}
+        {field?.type === 'currency' && (
+          <div className="grid grid-cols-2 gap-3">
+            <FormField control={control} name={`${fieldPath}.prefix` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Prefix</FormLabel><FormControl><Input {...formField} value={formField.value ?? '$'} onPointerDown={stopPropagation} /></FormControl></FormItem>
+            )} />
+            <FormField control={control} name={`${fieldPath}.suffix` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Suffix</FormLabel><FormControl><Input {...formField} value={formField.value ?? 'CAD'} onPointerDown={stopPropagation} /></FormControl></FormItem>
+            )} />
+          </div>
+        )}
+        {!(field?.type === 'group' || field?.type === 'anonymous-toggle' || field?.type === 'calculated') && (
           <div className="flex items-center justify-between">
             <FormField control={control} name={`${fieldPath}.validation.required` as any} render={({ field: formField }) => (
               <FormItem className="flex flex-row items-center justify-between rounded-lg border p-2 pr-3 shadow-sm">

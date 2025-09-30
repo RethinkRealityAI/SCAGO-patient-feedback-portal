@@ -6,7 +6,7 @@ import { useTransition, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader, Trash2, Plus, ChevronDown } from 'lucide-react';
-import { createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey } from './actions';
+import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey } from './actions';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,10 +58,13 @@ export function CreateSurveyDropdown() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const handleCreateSurvey = (templateType: 'default' | 'v2' | 'consent') => {
+  const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent') => {
     startTransition(async () => {
       let survey;
       switch (templateType) {
+        case 'blank':
+          survey = await createBlankSurvey();
+          break;
         case 'v2':
           survey = await createSurveyV2();
           break;
@@ -90,6 +93,18 @@ export function CreateSurveyDropdown() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>Choose a Template</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => handleCreateSurvey('blank')}
+          disabled={isPending}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">✨ Blank Survey</span>
+            <span className="text-xs text-muted-foreground">
+              Start from scratch with an empty survey. Build your form from the ground up.
+            </span>
+          </div>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => handleCreateSurvey('default')}

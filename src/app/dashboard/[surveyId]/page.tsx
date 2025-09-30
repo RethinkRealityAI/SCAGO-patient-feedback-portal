@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle, Loader } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import PasswordProtection from '@/components/password-protection'
 
 export default async function SurveyDashboardPage({ params }: { params: { surveyId: string } }) {
   const { surveyId } = await params
@@ -12,15 +13,17 @@ export default async function SurveyDashboardPage({ params }: { params: { survey
 
   if ('error' in submissionsOrError) {
     return (
-      <div className="container max-w-2xl py-8 text-center">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error Loading Dashboard</AlertTitle>
-          <AlertDescription>
-            <p className="mb-2">{submissionsOrError.error}</p>
-          </AlertDescription>
-        </Alert>
-      </div>
+      <PasswordProtection>
+        <div className="container max-w-2xl py-8 text-center">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error Loading Dashboard</AlertTitle>
+            <AlertDescription>
+              <p className="mb-2">{submissionsOrError.error}</p>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </PasswordProtection>
     )
   }
 
@@ -41,18 +44,19 @@ export default async function SurveyDashboardPage({ params }: { params: { survey
                       'Hospital'
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid gap-8">
-        {/* Header with Survey ID */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Survey Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Survey ID: {surveyId}</p>
+    <PasswordProtection>
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid gap-8">
+          {/* Header with Survey ID */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Survey Dashboard</h1>
+              <p className="text-muted-foreground mt-1">Survey ID: {surveyId}</p>
+            </div>
+            <Button asChild>
+              <a href="/dashboard">View All Surveys</a>
+            </Button>
           </div>
-          <Button asChild>
-            <a href="/dashboard">View All Surveys</a>
-          </Button>
-        </div>
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -178,6 +182,7 @@ export default async function SurveyDashboardPage({ params }: { params: { survey
         </Card>
       </div>
     </div>
+    </PasswordProtection>
   )
 }
 

@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import type { FeedbackSubmission } from './types';
 import { unstable_noStore as noStore } from 'next/cache';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
 
 export async function analyzeFeedback() {
   try {
@@ -84,55 +85,107 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
   try {
     const feedbackCol = collection(db, 'feedback');
     const feedbackSnapshot = await getDocs(feedbackCol);
-    const feedbackList = feedbackSnapshot.docs
-      .map(doc => doc.data() as FeedbackSubmission)
-      .filter(f => (f as any).surveyId === surveyId);
+    const allSubmissions = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
+    
+    // Get survey-specific context
+    const surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
+    
+    const feedbackList = allSubmissions.filter(f => (f as any).surveyId === surveyId);
 
     if (feedbackList.length === 0) {
-      return { summary: 'No feedback submissions yet for this survey.' };
+      return { summary: `No submissions yet for this ${surveyContext.title.toLowerCase()}.` };
     }
 
-    // Aggregate metrics (per-survey)
-    const averageRating = feedbackList.reduce((acc, f) => acc + Number(f.rating || 0), 0) / feedbackList.length;
-    let promoters = 0, passives = 0, detractors = 0;
-    for (const f of feedbackList) {
-      const r = Number(f.rating || 0);
-      if (r >= 9) promoters++; else if (r >= 7) passives++; else detractors++;
-    }
-    const byDate = new Map<string, { count: number; sum: number }>();
-    for (const f of feedbackList) {
-      const raw = (f as any).submittedAt as any;
-      const d = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : null));
-      if (!d || isNaN(d.getTime())) continue;
-      const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
-      const cur = byDate.get(key) || { count: 0, sum: 0 };
-      byDate.set(key, { count: cur.count + 1, sum: cur.sum + Number(f.rating || 0) });
-    }
-    const sorted = Array.from(byDate.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
-    const last7 = sorted.slice(-7);
-    const prev7 = sorted.slice(-14, -7);
-    const avgLast7 = last7.length ? last7.reduce((a, [,v])=>a+v.sum,0) / last7.reduce((a,[,v])=>a+v.count,0) : 0;
-    const avgPrev7 = prev7.length ? prev7.reduce((a, [,v])=>a+v.sum,0) / prev7.reduce((a,[,v])=>a+v.count,0) : 0;
-    const trend = avgPrev7 ? (avgLast7 - avgPrev7) : 0;
+    // Build context-aware data summary
+    let feedbackText = '';
+    let metrics: any = {};
 
-    const feedbackText = feedbackList
-      .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
-      .join('\n');
-    const ai = await runAnalysisFlow({ location: 'Various Hospitals', rating: Math.round(averageRating), feedbackText });
+    if (surveyContext.type === 'consent') {
+      // Consent-specific data summary
+      const mayContactYes = feedbackList.filter(s => (s as any).mayContact === 'yes').length;
+      const scdConnections = feedbackList.flatMap(s => {
+        const conn = (s as any).scdConnection;
+        return Array.isArray(conn) ? conn : [conn];
+      }).filter(Boolean);
+      const cities = feedbackList.map(s => (s as any).city?.selection).filter(Boolean);
+      const hospitals = feedbackList.map(s => (s as any).primaryHospital?.selection).filter(Boolean);
+      
+      feedbackText = feedbackList.map(f => {
+        const firstName = (f as any).firstName || '';
+        const lastName = (f as any).lastName || '';
+        const city = (f as any).city?.selection || '';
+        const conn = (f as any).scdConnection;
+        const connStr = Array.isArray(conn) ? conn.join(', ') : conn;
+        return `- Name: ${firstName} ${lastName}, City: ${city}, SCD Connection: ${connStr}, May Contact: ${(f as any).mayContact}`;
+      }).join('\n');
+      
+      metrics = {
+        totalSubmissions: feedbackList.length,
+        mayContactRate: `${Math.round((mayContactYes / feedbackList.length) * 100)}%`,
+        topSCDConnections: [...new Set(scdConnections)].slice(0, 3).join(', '),
+        topCities: [...new Set(cities)].slice(0, 3).join(', '),
+        topHospitals: [...new Set(hospitals)].slice(0, 3).join(', ')
+      };
+    } else if (surveyContext.type === 'overview') {
+      // Overview mode - cross-survey insights
+      const surveyBreakdown = new Map<string, number>();
+      feedbackList.forEach(f => {
+        const sid = (f as any).surveyId || 'unknown';
+        surveyBreakdown.set(sid, (surveyBreakdown.get(sid) || 0) + 1);
+      });
+      
+      feedbackText = `Survey breakdown: ${Array.from(surveyBreakdown.entries()).map(([id, count]) => `${id}: ${count}`).join(', ')}`;
+      
+      metrics = {
+        totalSubmissions: feedbackList.length,
+        uniqueSurveys: surveyBreakdown.size,
+        avgSubmissionsPerSurvey: Math.round(feedbackList.length / surveyBreakdown.size)
+      };
+    } else {
+      // Feedback-specific data summary
+      const averageRating = feedbackList.reduce((acc, f) => acc + Number(f.rating || 0), 0) / feedbackList.length;
+      let promoters = 0, passives = 0, detractors = 0;
+      for (const f of feedbackList) {
+        const r = Number(f.rating || 0);
+        if (r >= 9) promoters++; else if (r >= 7) passives++; else detractors++;
+      }
+      
+      feedbackText = feedbackList
+        .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
+        .join('\n');
+      
+      metrics = {
+        totalSubmissions: feedbackList.length,
+        averageRating: averageRating.toFixed(1),
+        promoters,
+        passives,
+        detractors
+      };
+    }
 
+    // Get context-aware AI prompt
+    const contextPrompt = getAnalysisPrompt(surveyContext, feedbackList.length);
+    
+    // Run AI analysis with survey-specific context
+    const aiInput = {
+      location: surveyContext.type === 'consent' ? 'SCAGO Community' : 'Various Hospitals',
+      rating: surveyContext.type === 'feedback' ? Math.round(Number(metrics.averageRating)) : 8,
+      feedbackText: `${contextPrompt}\n\nData:\n${feedbackText}`
+    };
+    
+    const ai = await runAnalysisFlow(aiInput);
+
+    // Build survey-type specific report
     const report = [
-      `# Feedback Insights (Survey ${surveyId})`,
+      `# ${surveyContext.title} Analysis`,
       ``,
       `## Overview`,
-      `- Total submissions: ${feedbackList.length}`,
-      `- Average rating: ${averageRating.toFixed(1)}/10`,
-      `- NPS segments: Promoters ${promoters}, Passives ${passives}, Detractors ${detractors}`,
-      `- Change in average rating (last 7 days vs prior 7 days): ${trend >= 0 ? '+' : ''}${trend.toFixed(1)}`,
+      ...Object.entries(metrics).map(([key, value]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}: ${value}`),
       ``,
       `## Sentiment`,
       `- Overall: ${ai.sentiment}`,
       ``,
-      `## Key Topics`,
+      `## Key Insights`,
       ...ai.keyTopics.map(t => `- ${t}`),
       ``,
       `## Recommendations`,
@@ -390,18 +443,32 @@ export async function chatWithFeedbackData(query: string, surveyId?: string): Pr
     const feedbackSnapshot = await getDocs(feedbackCol);
     let feedbackList = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
     
+    // Get survey context
+    const allSubmissions = [...feedbackList];
+    const surveyContext = getSurveyContextFromId(surveyId || 'all', allSubmissions);
+    
     // Filter by survey if surveyId is provided
     if (surveyId && surveyId !== 'all') {
       feedbackList = feedbackList.filter(f => (f as any).surveyId === surveyId);
     }
 
     if (feedbackList.length === 0) {
-      return { response: 'No feedback data available yet. Please collect some feedback first!' };
+      return { response: `No ${surveyContext.title.toLowerCase()} data available yet. Please collect some submissions first!` };
     }
+
+    // Add survey context to the query
+    const contextualizedQuery = `Context: You are analyzing ${surveyContext.title} (${surveyContext.description}).
+
+Key fields in this survey:
+${surveyContext.keyFields.map(f => `- ${f}`).join('\n')}
+
+${surveyContext.analysisPrompt}
+
+User question: ${query}`;
 
     // Use the chat-with-data flow
     const { chatWithData } = await import('@/ai/flows/chat-with-data-flow');
-    const response = await chatWithData(query, feedbackList);
+    const response = await chatWithData(contextualizedQuery, feedbackList);
     
     return { response };
   } catch (e) {
