@@ -5,7 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePathname } from 'next/navigation';
 import Header from '@/components/header';
 
-const HIDDEN_NAV_PATHS = ['/survey'];
+const HIDDEN_NAV_PATHS = ['/survey', '/dashboard'];
 
 export default function AppBody({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
