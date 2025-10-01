@@ -617,185 +617,7 @@ function TimeAmountField({ field }: { field: any }) {
 }
 
 
-function renderField(fieldConfig: FieldDef, form: any, isFrench: boolean = false) {
-  const { control } = form;
-  const t = useTranslation(isFrench ? 'fr' : 'en');
-  
-  // Translate the field label
-  const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
-
-  return (
-    <FormField
-      key={fieldConfig.id}
-      control={control}
-      name={fieldConfig.id}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>
-            {translatedLabel}
-            {fieldConfig.validation?.required && (
-              <span className="text-destructive ml-1">*</span>
-            )}
-          </FormLabel>
-          <FormControl>
-            {(() => {
-                const fieldWithValue = { ...field, value: field.value ?? '' };
-                switch (fieldConfig.type) {
-                case 'text':
-                  return <Input {...fieldWithValue} className="max-w-md" />;
-                case 'url':
-                  return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder="https://example.com" />;
-                case 'email':
-                  return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={t.enterEmail} />;
-                case 'phone':
-                  return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={t.enterPhoneNumber} />;
-                case 'digital-signature':
-                  return (
-                    <SignaturePad
-                      value={field.value || ''}
-                      onChange={field.onChange}
-                      placeholder={t.typeYourSignatureHere}
-                    />
-                  );
-                case 'date':
-                  return <DateField field={field} isFrench={isFrench} />;
-                case 'time':
-                  return <Input type="time" {...fieldWithValue} className="max-w-md" />;
-                case 'number':
-                  return <Input type="number" {...fieldWithValue} className="max-w-md" />;
-                case 'textarea':
-                  return <Textarea {...fieldWithValue} className="max-w-2xl" />;
-                case 'select':
-                case 'province-ca':
-                    const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
-                    return (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <SelectTrigger className="max-w-md">
-                            <SelectValue placeholder={translateOption("Select an option", isFrench ? 'fr' : 'en')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                            {options.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                {translateOption(option.label, isFrench ? 'fr' : 'en')}
-                                </SelectItem>
-                            ))}
-                            </SelectContent>
-                        </Select>
-                    );
-                case 'department-on':
-                    return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" isFrench={isFrench} />;
-                case 'city-on':
-                    return <OntarioCityField field={field} isFrench={isFrench} />;
-                case 'hospital-on':
-                    return <OntarioHospitalField field={field} isFrench={isFrench} />;
-                case 'duration-hm':
-                    return <DurationHmField field={field} />;
-                case 'duration-dh':
-                    return <DurationDhField field={field} />;
-                case 'time-amount':
-                    return <TimeAmountField field={field} />;
-                case 'radio':
-                  return (
-                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                      {fieldConfig.options?.map((option) => (
-                        <FormItem key={option.value} className="flex items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <RadioGroupItem value={option.value} />
-                          </FormControl>
-                          <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
-                        </FormItem>
-                      ))}
-                    </RadioGroup>
-                  );
-                case 'checkbox':
-                    return (
-                        <div className="space-y-2">
-                          {fieldConfig.options?.map((option) => (
-                            <FormItem key={option.value} className="flex flex-row items-start space-x-3 space-y-0">
-                                <FormControl>
-                                    <Checkbox
-                                        checked={field.value?.includes(option.value)}
-                                        onCheckedChange={(checked) => {
-                                            const currentValue = field.value || [];
-                                            if (checked) {
-                                                field.onChange([...currentValue, option.value]);
-                                            } else {
-                                                field.onChange(currentValue.filter((v: string) => v !== option.value));
-                                            }
-                                        }}
-                                    />
-                                </FormControl>
-                                <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
-                            </FormItem>
-                          ))}
-                        </div>
-                      );
-                case 'slider': {
-                    const min = fieldConfig.min ?? 0;
-                    const max = fieldConfig.max ?? 100;
-                    const step = fieldConfig.step ?? 1;
-                    const value = typeof field.value === 'number' ? field.value : (min + max) / 2;
-                    return (
-                        <div className="space-y-2 max-w-lg">
-                            <UiSlider
-                                value={[value]}
-                                min={min}
-                                max={max}
-                                step={step}
-                                onValueChange={(vals) => field.onChange(vals[0])}
-                            />
-                            <div className="text-sm text-muted-foreground">{value}</div>
-                        </div>
-                    );
-                }
-                case 'boolean-checkbox':
-                    return <Checkbox checked={field.value} onCheckedChange={field.onChange} />;
-                case 'anonymous-toggle':
-                    return (
-                        <div className="flex items-center gap-3">
-                            <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
-                            <span className="text-sm">{translateFieldLabel("Submit anonymously", isFrench ? 'fr' : 'en')}</span>
-                        </div>
-                    );
-                case 'rating':
-                    return <Rating field={field} />;
-                case 'nps':
-                    return <NpsScale field={field} />;
-                case 'file-upload':
-                    return <FileUploadField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'multi-text':
-                    return <MultiTextField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'matrix-single':
-                case 'matrix-multiple':
-                    return <MatrixField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'likert-scale':
-                    return <LikertScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'pain-scale':
-                    return <PainScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'ranking':
-                    return <RankingField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'datetime':
-                    return <DateTimeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'color':
-                    return <ColorPickerField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'range':
-                    return <RangeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'percentage':
-                    return <PercentageField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                case 'currency':
-                    return <CurrencyField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-h                    return <CalculatedField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
-                default:
-                  return <Input {...fieldWithValue} className="max-w-md" />;
-              }
-            })()}
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-}
+// renderField function moved inside FeedbackForm component to fix React hooks usage
 
 export default function FeedbackForm({ survey }: { survey: any }) {
     const { toast } = useToast();
@@ -969,6 +791,187 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const titleSizeClass = appearance.cardTitleSize === 'xl' ? 'text-3xl' : appearance.cardTitleSize === 'md' ? 'text-xl' : appearance.cardTitleSize === 'sm' ? 'text-lg' : 'text-2xl';
     const sectionTitleSizeClass = appearance.sectionTitleSize === 'xl' ? 'text-2xl' : appearance.sectionTitleSize === 'md' ? 'text-lg' : appearance.sectionTitleSize === 'sm' ? 'text-base' : 'text-xl';
     const labelSizeClass = appearance.labelSize === 'xs' ? 'text-xs' : appearance.labelSize === 'md' ? 'text-sm' : 'text-xs';
+
+    // renderField function moved inside component to fix React hooks usage
+    const renderField = (fieldConfig: FieldDef, form: any, isFrench: boolean = false) => {
+      const { control } = form;
+      
+      // Translate the field label
+      const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
+
+      return (
+        <FormField
+          key={fieldConfig.id}
+          control={control}
+          name={fieldConfig.id}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                {translatedLabel}
+                {fieldConfig.validation?.required && (
+                  <span className="text-destructive ml-1">*</span>
+                )}
+              </FormLabel>
+              <FormControl>
+                {(() => {
+                    const fieldWithValue = { ...field, value: field.value ?? '' };
+                    switch (fieldConfig.type) {
+                    case 'text':
+                      return <Input {...fieldWithValue} className="max-w-md" />;
+                    case 'url':
+                      return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder="https://example.com" />;
+                    case 'email':
+                      return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={t.enterEmail} />;
+                    case 'phone':
+                      return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={t.enterPhoneNumber} />;
+                    case 'digital-signature':
+                      return (
+                        <SignaturePad
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          placeholder={t.typeYourSignatureHere}
+                        />
+                      );
+                    case 'date':
+                      return <DateField field={field} isFrench={isFrench} />;
+                    case 'time':
+                      return <Input type="time" {...fieldWithValue} className="max-w-md" />;
+                    case 'number':
+                      return <Input type="number" {...fieldWithValue} className="max-w-md" />;
+                    case 'textarea':
+                      return <Textarea {...fieldWithValue} className="max-w-2xl" />;
+                    case 'select':
+                    case 'province-ca':
+                        const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
+                        return (
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <SelectTrigger className="max-w-md">
+                                <SelectValue placeholder={translateOption("Select an option", isFrench ? 'fr' : 'en')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                    {translateOption(option.label, isFrench ? 'fr' : 'en')}
+                                    </SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+                        );
+                    case 'department-on':
+                        return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" isFrench={isFrench} />;
+                    case 'city-on':
+                        return <OntarioCityField field={field} isFrench={isFrench} />;
+                    case 'hospital-on':
+                        return <OntarioHospitalField field={field} isFrench={isFrench} />;
+                    case 'duration-hm':
+                        return <DurationHmField field={field} />;
+                    case 'duration-dh':
+                        return <DurationDhField field={field} />;
+                    case 'time-amount':
+                        return <TimeAmountField field={field} />;
+                    case 'radio':
+                      return (
+                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                          {fieldConfig.options?.map((option) => (
+                            <FormItem key={option.value} className="flex items-center space-x-3 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value={option.value} />
+                              </FormControl>
+                              <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
+                            </FormItem>
+                          ))}
+                        </RadioGroup>
+                      );
+                    case 'checkbox':
+                        return (
+                            <div className="space-y-2">
+                              {fieldConfig.options?.map((option) => (
+                                <FormItem key={option.value} className="flex flex-row items-start space-x-3 space-y-0">
+                                    <FormControl>
+                                        <Checkbox
+                                            checked={field.value?.includes(option.value)}
+                                            onCheckedChange={(checked) => {
+                                                const currentValue = field.value || [];
+                                                if (checked) {
+                                                    field.onChange([...currentValue, option.value]);
+                                                } else {
+                                                    field.onChange(currentValue.filter((v: string) => v !== option.value));
+                                                }
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
+                                </FormItem>
+                              ))}
+                            </div>
+                          );
+                    case 'slider': {
+                        const min = fieldConfig.min ?? 0;
+                        const max = fieldConfig.max ?? 100;
+                        const step = fieldConfig.step ?? 1;
+                        const value = typeof field.value === 'number' ? field.value : (min + max) / 2;
+                        return (
+                            <div className="space-y-2 max-w-lg">
+                                <UiSlider
+                                    value={[value]}
+                                    min={min}
+                                    max={max}
+                                    step={step}
+                                    onValueChange={(vals) => field.onChange(vals[0])}
+                                />
+                                <div className="text-sm text-muted-foreground">{value}</div>
+                            </div>
+                        );
+                    }
+                    case 'boolean-checkbox':
+                        return <Checkbox checked={field.value} onCheckedChange={field.onChange} />;
+                    case 'anonymous-toggle':
+                        return (
+                            <div className="flex items-center gap-3">
+                                <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
+                                <span className="text-sm">{translateFieldLabel("Submit anonymously", isFrench ? 'fr' : 'en')}</span>
+                            </div>
+                        );
+                    case 'rating':
+                        return <Rating field={field} />;
+                    case 'nps':
+                        return <NpsScale field={field} />;
+                    case 'file-upload':
+                        return <FileUploadField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'multi-text':
+                        return <MultiTextField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'matrix-single':
+                    case 'matrix-multiple':
+                        return <MatrixField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'likert-scale':
+                        return <LikertScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'pain-scale':
+                        return <PainScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'ranking':
+                        return <RankingField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'datetime':
+                        return <DateTimeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'color':
+                        return <ColorPickerField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'range':
+                        return <RangeField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'percentage':
+                        return <PercentageField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'currency':
+                        return <CurrencyField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    case 'calculated':
+                        return <CalculatedField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                    default:
+                      return <Input {...fieldWithValue} className="max-w-md" />;
+                  }
+                })()}
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      );
+    };
 
     return (
       <Card className={`w-full max-w-5xl mx-auto rounded-lg border p-6 shadow-sm ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
