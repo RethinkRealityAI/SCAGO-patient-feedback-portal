@@ -162,3 +162,4 @@ const scdConnections = (metrics as any).consentMetrics?.scdConnectionCounts
 6. Update submission modal display (lines ~1033-1506)
 7. Create consent-specific AI analysis function
 8. Update PDF generation for consent data
+

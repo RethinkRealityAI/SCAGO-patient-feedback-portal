@@ -95,9 +95,13 @@ export default function Dashboard({
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
 
   const surveyOptions = useMemo(() => {
-    const ids = Array.from(new Set(submissions.map(s => s.surveyId)))
-    return ['all', ...ids]
-  }, [submissions])
+    // Only include surveys that exist in the surveys list
+    const existingSurveyIds = new Set(surveys.map(s => s.id))
+    const submissionSurveyIds = Array.from(new Set(submissions.map(s => s.surveyId)))
+    // Filter to only include IDs that have a corresponding survey
+    const validSurveyIds = submissionSurveyIds.filter(id => existingSurveyIds.has(id))
+    return ['all', ...validSurveyIds]
+  }, [submissions, surveys])
 
   const surveyTitleMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -113,6 +117,13 @@ export default function Dashboard({
     )))
     return ['all', ...hospitals]
   }, [submissions])
+
+  // Reset selectedSurvey if it's no longer valid (e.g., survey was deleted)
+  useEffect(() => {
+    if (selectedSurvey !== 'all' && !surveyOptions.includes(selectedSurvey)) {
+      setSelectedSurvey('all')
+    }
+  }, [selectedSurvey, surveyOptions])
 
   // Detect if we're in "All Surveys" overview mode
   const isAllSurveysMode = selectedSurvey === 'all'
@@ -139,7 +150,9 @@ export default function Dashboard({
   }, [isConsent, selectedChart, isAllSurveysMode])
 
   const filtered = useMemo(() => {
-    let result = submissions
+    // First, filter to only include submissions from existing surveys
+    const existingSurveyIds = new Set(surveys.map(s => s.id))
+    let result = submissions.filter(s => existingSurveyIds.has(s.surveyId))
 
     // Filter by survey
     if (selectedSurvey !== 'all') {
@@ -198,7 +211,7 @@ export default function Dashboard({
     }
 
     return result
-  }, [submissions, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isConsent])
+  }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isConsent])
 
   const totalPages = Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE)
 
@@ -228,7 +241,13 @@ export default function Dashboard({
 
   const metrics = useMemo(() => {
     const total = filtered.length
-    const surveysCount = new Set(submissions.map(s => s.surveyId)).size
+    // Count only surveys that exist in the surveys list
+    const existingSurveyIds = new Set(surveys.map(s => s.id))
+    const surveysCount = new Set(
+      submissions
+        .filter(s => existingSurveyIds.has(s.surveyId))
+        .map(s => s.surveyId)
+    ).size
     
     // Overview mode: High-level metrics across all surveys
     if (isAllSurveysMode) {
@@ -376,7 +395,7 @@ export default function Dashboard({
           .sort((a, b) => b.count - a.count)
       }
     }
-  }, [filtered, submissions, isConsent, isAllSurveysMode, surveyTitleMap])
+  }, [filtered, submissions, surveys, isConsent, isAllSurveysMode, surveyTitleMap])
 
   const experienceData = useMemo(() => {
     if (isConsent) {
@@ -2365,6 +2384,7 @@ export default function Dashboard({
           return result.response || 'No response received.';
         }}
         surveyId={selectedSurvey}
+        surveyType={(isAllSurveysMode ? 'overview' : (isConsent ? 'consent' : 'feedback')) as 'overview' | 'consent' | 'feedback'}
       />
 
       {/* Export Dialog */}

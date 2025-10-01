@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import AIChatInterface from '@/components/ai-chat-interface';
 import { cn } from '@/lib/utils';
 
@@ -74,9 +74,6 @@ export default function FloatingChatButton({ onSendQuery, surveyId }: FloatingCh
           )}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <DialogHeader className="sr-only">
-            <DialogTitle>AI Insights Chat</DialogTitle>
-          </DialogHeader>
           {/* Custom close button with glassmorphic style */}
           <Button
             variant="ghost"

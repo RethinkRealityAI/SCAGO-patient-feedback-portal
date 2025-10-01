@@ -180,3 +180,4 @@ const scdConnections = (metrics as any).consentMetrics?.scdConnectionCounts
 4. Update submission detail modal (medium priority)
 5. Adapt AI analysis (medium priority)
 6. Update PDF generation (low priority - can be done later)
+
