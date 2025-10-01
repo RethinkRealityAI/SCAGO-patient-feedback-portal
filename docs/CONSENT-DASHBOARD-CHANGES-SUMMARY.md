@@ -149,3 +149,4 @@ All metrics access uses `(metrics as any)` to handle the dual type system. The m
 2. Do we need consent-specific analytics/reports separate from AI analysis?
 3. Should the "Top Locations" card be clickable to filter by that location?
 4. Do we want to track which hospitals are mentioned most in consent forms?
+

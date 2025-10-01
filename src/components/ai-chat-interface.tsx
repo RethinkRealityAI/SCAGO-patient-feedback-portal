@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
-import { getSurveyContextFromId, getQuickInsightQuestions } from '@/lib/survey-contexts';
+import { getSurveyContextFromId, getQuickInsightQuestions, SurveyType } from '@/lib/survey-contexts';
 
 interface Message {
   id: string;
@@ -39,135 +39,280 @@ interface PredefinedQuery {
   color: string;
 }
 
-const predefinedQueries: PredefinedQuery[] = [
-  {
-    id: 'high-pain-scores',
-    icon: <AlertTriangle className="h-4 w-4" />,
-    label: 'High Pain Scores',
-    query: 'How many patients reported high pain scores (7+ out of 10)? Show me the breakdown and any patterns.',
-    category: 'quality',
-    color: 'from-red-500/10 to-red-600/5'
-  },
-  {
-    id: 'low-ratings',
-    icon: <TrendingUp className="h-4 w-4" />,
-    label: 'Subpar Hospitals',
-    query: 'Which hospitals received ratings below 5/10? Show me the hospitals ranked from lowest to highest rating.',
-    category: 'performance',
-    color: 'from-orange-500/10 to-orange-600/5'
-  },
-  {
-    id: 'top-performers',
-    icon: <Heart className="h-4 w-4" />,
-    label: 'Top Performers',
-    query: 'Which hospitals are performing best? Show me the top 5 hospitals by rating with their average scores.',
-    category: 'performance',
-    color: 'from-green-500/10 to-green-600/5'
-  },
-  {
-    id: 'wait-times',
-    icon: <Hospital className="h-4 w-4" />,
-    label: 'Wait Time Issues',
-    query: 'Analyze feedback mentioning wait times. How many patients complained about long waits and which departments?',
-    category: 'insights',
-    color: 'from-blue-500/10 to-blue-600/5'
-  },
-  {
-    id: 'patient-satisfaction',
-    icon: <Users className="h-4 w-4" />,
-    label: 'Patient Satisfaction',
-    query: 'What is the overall patient satisfaction rate? Show me promoters (9-10), passives (7-8), and detractors (<7).',
-    category: 'performance',
-    color: 'from-purple-500/10 to-purple-600/5'
-  },
-  {
-    id: 'common-complaints',
-    icon: <MessageSquare className="h-4 w-4" />,
-    label: 'Common Complaints',
-    query: 'What are the most common complaints or issues mentioned in the feedback? Group by theme.',
-    category: 'insights',
-    color: 'from-yellow-500/10 to-yellow-600/5'
-  },
-  {
-    id: 'emergency-vs-outpatient',
-    icon: <BarChart3 className="h-4 w-4" />,
-    label: 'Visit Type Comparison',
-    query: 'Compare ratings between emergency department visits and outpatient clinic visits. Which has better satisfaction?',
-    category: 'trends',
-    color: 'from-indigo-500/10 to-indigo-600/5'
-  },
-  {
-    id: 'recent-trends',
-    icon: <TrendingUp className="h-4 w-4" />,
-    label: 'Recent Trends',
-    query: 'What are the trends in patient feedback over the last 30 days? Are ratings improving or declining?',
-    category: 'trends',
-    color: 'from-cyan-500/10 to-cyan-600/5'
-  },
-  {
-    id: 'caregiver-vs-patient',
-    icon: <Users className="h-4 w-4" />,
-    label: 'Patient vs Caregiver',
-    query: 'Compare feedback from patients vs caregivers. Are there differences in their ratings and concerns?',
-    category: 'insights',
-    color: 'from-pink-500/10 to-pink-600/5'
-  },
-  {
-    id: 'positive-experiences',
-    icon: <Heart className="h-4 w-4" />,
-    label: 'Positive Highlights',
-    query: 'Show me the most positive experiences. What are patients praising the most?',
-    category: 'quality',
-    color: 'from-emerald-500/10 to-emerald-600/5'
-  },
-  {
-    id: 'staff-interactions',
-    icon: <Users className="h-4 w-4" />,
-    label: 'Staff Interactions',
-    query: 'Analyze mentions of staff interactions. Are there patterns in positive or negative staff-related feedback?',
-    category: 'quality',
-    color: 'from-violet-500/10 to-violet-600/5'
-  },
-  {
-    id: 'urgent-actions',
-    icon: <AlertTriangle className="h-4 w-4" />,
-    label: 'Urgent Actions Needed',
-    query: 'What issues require immediate attention? Identify critical feedback with ratings below 3.',
-    category: 'performance',
-    color: 'from-rose-500/10 to-rose-600/5'
+// Helper function to get survey-type-specific predefined queries
+function getPredefinedQueries(surveyType: SurveyType): PredefinedQuery[] {
+  if (surveyType === 'consent') {
+    return [
+      {
+        id: 'geographic-distribution',
+        icon: <Hospital className="h-4 w-4" />,
+        label: 'Geographic Distribution',
+        query: 'What is the geographic distribution of participants? Which cities and regions are most represented?',
+        category: 'insights',
+        color: 'from-blue-500/10 to-blue-600/5'
+      },
+      {
+        id: 'scd-connections',
+        icon: <Users className="h-4 w-4" />,
+        label: 'SCD Connections',
+        query: 'What types of SCD connections are most common? Break down by self, family, healthcare worker, educator, etc.',
+        category: 'insights',
+        color: 'from-purple-500/10 to-purple-600/5'
+      },
+      {
+        id: 'contact-consent',
+        icon: <MessageSquare className="h-4 w-4" />,
+        label: 'Contact Consent',
+        query: 'What percentage of participants opted in for contact? Show me the consent rates and preferred contact methods.',
+        category: 'performance',
+        color: 'from-green-500/10 to-green-600/5'
+      },
+      {
+        id: 'engagement-rates',
+        icon: <Heart className="h-4 w-4" />,
+        label: 'Engagement Rates',
+        query: 'What are the engagement rates for mailing lists, support groups, and advocacy? Which programs are most popular?',
+        category: 'performance',
+        color: 'from-emerald-500/10 to-emerald-600/5'
+      },
+      {
+        id: 'primary-hospitals',
+        icon: <Hospital className="h-4 w-4" />,
+        label: 'Primary Hospitals',
+        query: 'Which hospitals are serving the most participants? Show me the top hospitals by participant count.',
+        category: 'trends',
+        color: 'from-cyan-500/10 to-cyan-600/5'
+      },
+      {
+        id: 'underserved-areas',
+        icon: <AlertTriangle className="h-4 w-4" />,
+        label: 'Underserved Areas',
+        query: 'Are there underserved geographic areas or demographics that need more outreach?',
+        category: 'insights',
+        color: 'from-yellow-500/10 to-yellow-600/5'
+      },
+      {
+        id: 'age-demographics',
+        icon: <Users className="h-4 w-4" />,
+        label: 'Demographics',
+        query: 'What demographic patterns emerge from the data? Analyze age, location, and connection type patterns.',
+        category: 'insights',
+        color: 'from-pink-500/10 to-pink-600/5'
+      },
+      {
+        id: 'recent-signups',
+        icon: <TrendingUp className="h-4 w-4" />,
+        label: 'Recent Trends',
+        query: 'What are the trends in new participant signups over the last 30 days? Are we growing?',
+        category: 'trends',
+        color: 'from-indigo-500/10 to-indigo-600/5'
+      }
+    ];
+  } else if (surveyType === 'overview') {
+    return [
+      {
+        id: 'survey-breakdown',
+        icon: <BarChart3 className="h-4 w-4" />,
+        label: 'Survey Breakdown',
+        query: 'Show me a breakdown of submissions by survey type. Which surveys are most popular?',
+        category: 'performance',
+        color: 'from-blue-500/10 to-blue-600/5'
+      },
+      {
+        id: 'overall-trends',
+        icon: <TrendingUp className="h-4 w-4" />,
+        label: 'Overall Trends',
+        query: 'What are the overall submission trends across all surveys? Show me patterns over time.',
+        category: 'trends',
+        color: 'from-green-500/10 to-green-600/5'
+      },
+      {
+        id: 'geographic-overview',
+        icon: <Hospital className="h-4 w-4" />,
+        label: 'Geographic Overview',
+        query: 'What is the geographic distribution across all surveys? Which locations show highest engagement?',
+        category: 'insights',
+        color: 'from-purple-500/10 to-purple-600/5'
+      },
+      {
+        id: 'cross-program-insights',
+        icon: <Sparkles className="h-4 w-4" />,
+        label: 'Cross-Program Insights',
+        query: 'What insights emerge when comparing different survey programs? Any correlations?',
+        category: 'insights',
+        color: 'from-pink-500/10 to-pink-600/5'
+      },
+      {
+        id: 'resource-allocation',
+        icon: <Users className="h-4 w-4" />,
+        label: 'Resource Allocation',
+        query: 'Based on the data, how should resources be allocated across programs and locations?',
+        category: 'performance',
+        color: 'from-yellow-500/10 to-yellow-600/5'
+      },
+      {
+        id: 'peak-times',
+        icon: <TrendingUp className="h-4 w-4" />,
+        label: 'Peak Times',
+        query: 'When do we see peak submission times? Are there seasonal or time-based patterns?',
+        category: 'trends',
+        color: 'from-cyan-500/10 to-cyan-600/5'
+      }
+    ];
+  } else {
+    // Feedback survey queries
+    return [
+      {
+        id: 'high-pain-scores',
+        icon: <AlertTriangle className="h-4 w-4" />,
+        label: 'High Pain Scores',
+        query: 'How many patients reported high pain scores (7+ out of 10)? Show me the breakdown and any patterns.',
+        category: 'quality',
+        color: 'from-red-500/10 to-red-600/5'
+      },
+      {
+        id: 'low-ratings',
+        icon: <TrendingUp className="h-4 w-4" />,
+        label: 'Subpar Hospitals',
+        query: 'Which hospitals received ratings below 5/10? Show me the hospitals ranked from lowest to highest rating.',
+        category: 'performance',
+        color: 'from-orange-500/10 to-orange-600/5'
+      },
+      {
+        id: 'top-performers',
+        icon: <Heart className="h-4 w-4" />,
+        label: 'Top Performers',
+        query: 'Which hospitals are performing best? Show me the top 5 hospitals by rating with their average scores.',
+        category: 'performance',
+        color: 'from-green-500/10 to-green-600/5'
+      },
+      {
+        id: 'wait-times',
+        icon: <Hospital className="h-4 w-4" />,
+        label: 'Wait Time Issues',
+        query: 'Analyze feedback mentioning wait times. How many patients complained about long waits and which departments?',
+        category: 'insights',
+        color: 'from-blue-500/10 to-blue-600/5'
+      },
+      {
+        id: 'patient-satisfaction',
+        icon: <Users className="h-4 w-4" />,
+        label: 'Patient Satisfaction',
+        query: 'What is the overall patient satisfaction rate? Show me promoters (9-10), passives (7-8), and detractors (<7).',
+        category: 'performance',
+        color: 'from-purple-500/10 to-purple-600/5'
+      },
+      {
+        id: 'common-complaints',
+        icon: <MessageSquare className="h-4 w-4" />,
+        label: 'Common Complaints',
+        query: 'What are the most common complaints or issues mentioned in the feedback? Group by theme.',
+        category: 'insights',
+        color: 'from-yellow-500/10 to-yellow-600/5'
+      },
+      {
+        id: 'emergency-vs-outpatient',
+        icon: <BarChart3 className="h-4 w-4" />,
+        label: 'Visit Type Comparison',
+        query: 'Compare ratings between emergency department visits and outpatient clinic visits. Which has better satisfaction?',
+        category: 'trends',
+        color: 'from-indigo-500/10 to-indigo-600/5'
+      },
+      {
+        id: 'recent-trends',
+        icon: <TrendingUp className="h-4 w-4" />,
+        label: 'Recent Trends',
+        query: 'What are the trends in patient feedback over the last 30 days? Are ratings improving or declining?',
+        category: 'trends',
+        color: 'from-cyan-500/10 to-cyan-600/5'
+      },
+      {
+        id: 'caregiver-vs-patient',
+        icon: <Users className="h-4 w-4" />,
+        label: 'Patient vs Caregiver',
+        query: 'Compare feedback from patients vs caregivers. Are there differences in their ratings and concerns?',
+        category: 'insights',
+        color: 'from-pink-500/10 to-pink-600/5'
+      },
+      {
+        id: 'positive-experiences',
+        icon: <Heart className="h-4 w-4" />,
+        label: 'Positive Highlights',
+        query: 'Show me the most positive experiences. What are patients praising the most?',
+        category: 'quality',
+        color: 'from-emerald-500/10 to-emerald-600/5'
+      },
+      {
+        id: 'staff-interactions',
+        icon: <Users className="h-4 w-4" />,
+        label: 'Staff Interactions',
+        query: 'Analyze mentions of staff interactions. Are there patterns in positive or negative staff-related feedback?',
+        category: 'quality',
+        color: 'from-violet-500/10 to-violet-600/5'
+      },
+      {
+        id: 'urgent-actions',
+        icon: <AlertTriangle className="h-4 w-4" />,
+        label: 'Urgent Actions Needed',
+        query: 'What issues require immediate attention? Identify critical feedback with ratings below 3.',
+        category: 'performance',
+        color: 'from-rose-500/10 to-rose-600/5'
+      }
+    ];
   }
-];
+}
 
 interface AIChatInterfaceProps {
   onSendQuery: (query: string) => Promise<string>;
   surveyId?: string;
+  surveyType?: SurveyType; // Allow passing in survey type from parent
 }
 
-export default function AIChatInterface({ onSendQuery, surveyId }: AIChatInterfaceProps) {
+export default function AIChatInterface({ onSendQuery, surveyId, surveyType: propSurveyType }: AIChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [dynamicQuestions, setDynamicQuestions] = useState<string[]>([]);
+  const [surveyType, setSurveyType] = useState<SurveyType>('feedback');
+  const [predefinedQueries, setPredefinedQueries] = useState<PredefinedQuery[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // Load survey-specific questions on mount or when surveyId changes
+  // Load survey-specific questions and queries on mount or when surveyId changes
   useEffect(() => {
-    const loadQuestions = async () => {
+    const loadSurveyContext = async () => {
       try {
-        // In a real app, you'd fetch submissions to detect survey type
-        // For now, we'll use a simplified approach
-        const questions = surveyId === 'all' 
-          ? getQuickInsightQuestions(getSurveyContextFromId('all', []))
-          : getQuickInsightQuestions(getSurveyContextFromId(surveyId || '', []));
+        // Use provided survey type if available, otherwise determine from surveyId
+        let type: SurveyType;
+        if (propSurveyType) {
+          type = propSurveyType;
+        } else {
+          const context = getSurveyContextFromId(surveyId || 'all', []);
+          type = context.type;
+        }
+        
+        setSurveyType(type);
+        
+        // Load quick insight questions
+        const context = surveyId === 'all' 
+          ? getSurveyContextFromId('all', [])
+          : getSurveyContextFromId(surveyId || '', []);
+        const questions = getQuickInsightQuestions(context);
         setDynamicQuestions(questions);
+        
+        // Load predefined queries for this survey type
+        const queries = getPredefinedQueries(type);
+        setPredefinedQueries(queries);
       } catch (error) {
-        console.error('Error loading quick insight questions:', error);
+        console.error('Error loading survey context:', error);
+        // Fallback to feedback type
+        setSurveyType('feedback');
+        setPredefinedQueries(getPredefinedQueries('feedback'));
       }
     };
-    loadQuestions();
-  }, [surveyId]);
+    loadSurveyContext();
+  }, [surveyId, propSurveyType]);
 
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive

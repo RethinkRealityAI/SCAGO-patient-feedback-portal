@@ -161,3 +161,4 @@ const res = await generateAnalysisPdf({
 - All survey lookups use `useMemo` for optimal performance
 - Survey title map only rebuilds when surveys array changes
 - No impact on render performance
+
