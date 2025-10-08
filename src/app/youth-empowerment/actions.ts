@@ -1,5 +1,3 @@
-'use server';
-
 import { z } from 'zod';
 import { db } from '@/lib/firebase';
 import {
@@ -18,7 +16,7 @@ import {
   addDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { revalidatePath } from 'next/cache';
+// import { revalidatePath } from 'next/cache'; // Removed - not compatible with client-side usage
 import { hashSIN, extractSINLast4, validateSIN } from '@/lib/youth-empowerment';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -128,7 +126,7 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
 
     const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('Error creating participant:', error);
@@ -165,7 +163,7 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 
     await updateDoc(doc(db, 'yep_participants', id), updateData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error updating participant:', error);
@@ -192,7 +190,7 @@ export async function deleteParticipant(id: string) {
 
     await deleteDoc(doc(db, 'yep_participants', id));
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error deleting participant:', error);
@@ -244,7 +242,7 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
 
     const docRef = await addDoc(collection(db, 'yep_mentors'), mentorData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('Error creating mentor:', error);
@@ -259,7 +257,7 @@ export async function updateMentor(id: string, data: Partial<z.infer<typeof ment
       updatedAt: serverTimestamp(),
     });
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error updating mentor:', error);
@@ -271,7 +269,7 @@ export async function deleteMentor(id: string) {
   try {
     await deleteDoc(doc(db, 'yep_mentors', id));
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error deleting mentor:', error);
@@ -309,7 +307,7 @@ export async function createWorkshop(data: z.infer<typeof workshopSchema>) {
 
     const docRef = await addDoc(collection(db, 'yep_workshops'), workshopData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('Error creating workshop:', error);
@@ -330,7 +328,7 @@ export async function updateWorkshop(id: string, data: Partial<z.infer<typeof wo
 
     await updateDoc(doc(db, 'yep_workshops', id), updateData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error updating workshop:', error);
@@ -342,7 +340,7 @@ export async function deleteWorkshop(id: string) {
   try {
     await deleteDoc(doc(db, 'yep_workshops', id));
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error deleting workshop:', error);
@@ -388,7 +386,7 @@ export async function markWorkshopAttendance(data: z.infer<typeof attendanceSche
     
     await Promise.all(batch);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error marking attendance:', error);
@@ -431,7 +429,7 @@ export async function createAdvisorMeeting(data: z.infer<typeof meetingSchema>) 
 
     const docRef = await addDoc(collection(db, 'yep_advisor_meetings'), meetingData);
     
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('Error creating meeting:', error);
@@ -487,7 +485,7 @@ export async function getSurveys() {
 export async function deleteMeeting(meetingId: string) {
   try {
     await deleteDoc(doc(db, 'yep_advisor_meetings', meetingId));
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error deleting meeting:', error);
@@ -498,7 +496,7 @@ export async function deleteMeeting(meetingId: string) {
 export async function deleteAttendance(attendanceId: string) {
   try {
     await deleteDoc(doc(db, 'yep_workshop_attendance', attendanceId));
-    revalidatePath('/youth-empowerment');
+    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error deleting attendance:', error);
