@@ -40,6 +40,12 @@ export default function Header() {
           >
             Editor
           </Link>
+          <Link 
+            href="/youth-empowerment" 
+            className="px-3 py-2 text-sm font-medium text-foreground/80 transition-all duration-300 hover:text-foreground hover:bg-accent/20 rounded-lg backdrop-blur-sm"
+          >
+            Youth Program
+          </Link>
         </nav>
       </div>
     </header>
