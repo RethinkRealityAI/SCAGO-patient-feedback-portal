@@ -54,6 +54,9 @@ import { useNotifications, useAnalyticsNotifications } from '@/hooks/use-notific
 import { NotificationSystem } from '@/components/notification-system'
 import FloatingChatButton from '@/components/floating-chat-button'
 import AnalysisDisplay from '@/components/analysis-display'
+import { collection, getDocs, orderBy, query } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { getSurveys } from '../actions'
 
 const SUBMISSIONS_PER_PAGE = 10
 
@@ -65,13 +68,11 @@ function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
   return !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
 }
 
-export default function Dashboard({
-  submissions,
-  surveys = [],
-}: {
-  submissions: FeedbackSubmission[]
-  surveys?: Array<{ id: string; title: string; description?: string }>
-}) {
+export default function Dashboard() {
+  const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string }>>([])
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -117,6 +118,48 @@ export default function Dashboard({
     )))
     return ['all', ...hospitals]
   }, [submissions])
+
+  // Fetch data on mount
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setInitialLoading(true)
+        setFetchError(null)
+
+        // Fetch submissions directly from Firestore (client-side with auth context)
+        const feedbackCol = collection(db, 'feedback')
+        const q = query(feedbackCol, orderBy('submittedAt', 'desc'))
+        const feedbackSnapshot = await getDocs(q)
+        const feedbackList = feedbackSnapshot.docs.map(doc => {
+          const data = doc.data()
+          const raw = data.submittedAt as any
+          const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
+          return {
+            id: doc.id,
+            ...data,
+            rating: Number(data.rating),
+            submittedAt: date,
+          } as FeedbackSubmission
+        })
+        setSubmissions(feedbackList)
+
+        // Fetch surveys
+        const surveysData = await getSurveys()
+        setSurveys(surveysData)
+      } catch (e: any) {
+        console.error("Error fetching data:", e)
+        if (e.code === 'permission-denied') {
+          setFetchError('You do not have permission to view this data. Please ensure you are logged in as an admin.')
+        } else {
+          setFetchError('Failed to load dashboard data. Please try refreshing the page.')
+        }
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
 
   // Reset selectedSurvey if it's no longer valid (e.g., survey was deleted)
   useEffect(() => {
@@ -611,9 +654,32 @@ export default function Dashboard({
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    // Simulate refresh - in a real app, this would refetch data
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsRefreshing(false)
+    try {
+      // Refetch submissions from Firestore
+      const feedbackCol = collection(db, 'feedback')
+      const q = query(feedbackCol, orderBy('submittedAt', 'desc'))
+      const feedbackSnapshot = await getDocs(q)
+      const feedbackList = feedbackSnapshot.docs.map(doc => {
+        const data = doc.data()
+        const raw = data.submittedAt as any
+        const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
+        return {
+          id: doc.id,
+          ...data,
+          rating: Number(data.rating),
+          submittedAt: date,
+        } as FeedbackSubmission
+      })
+      setSubmissions(feedbackList)
+
+      // Refetch surveys
+      const surveysData = await getSurveys()
+      setSurveys(surveysData)
+    } catch (e) {
+      console.error("Error refreshing data:", e)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const clearAllFilters = () => {
@@ -759,6 +825,42 @@ export default function Dashboard({
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [activeFiltersCount, isModalOpen, showExportDialog, showKeyboardHelp])
+
+  // Show loading state
+  if (initialLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <Loader className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (fetchError) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error Loading Dashboard</AlertTitle>
+          <AlertDescription>
+            <p className="mb-2">{fetchError}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => window.location.reload()}
+              className="mt-2"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
 
   return (
     <>

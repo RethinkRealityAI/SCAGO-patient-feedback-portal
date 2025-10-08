@@ -15,18 +15,6 @@ service cloud.firestore {
              get(/databases/$(database)/documents/config/admins).data.emails.hasAny([request.auth.token.email]);
     }
     
-    // Helper function to check if user is YEP Manager
-    function isYEPManager() {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/config/yep_managers) &&
-             get(/databases/$(database)/documents/config/yep_managers).data.emails.hasAny([request.auth.token.email]);
-    }
-    
-    // Helper function to check if user is admin or YEP Manager
-    function isAdminOrYEPManager() {
-      return isAdmin() || isYEPManager();
-    }
-    
     // Surveys - Read by anyone, Write by admin only
     match /surveys/{surveyId} {
       allow read: if true;  // Anyone can view surveys
@@ -61,26 +49,6 @@ service cloud.firestore {
     match /backups/{backupId} {
       allow read, write: if isAdmin();
     }
-    
-    // Youth Empowerment Program Collections - Admin or YEP Manager
-    match /yep_participants/{participantId} {
-      allow read, write: if isAdminOrYEPManager();
-    }
-    
-    match /yep_mentors/{mentorId} {
-      allow read, write: if isAdminOrYEPManager();
-    }
-    
-    match /yep_workshops/{workshopId} {
-      allow read, write: if isAdminOrYEPManager();
-    }
-    
-    match /yep_workshop_attendance/{attendanceId} {
-      allow read, write: if isAdminOrYEPManager();
-    }
-    
-    match /yep_advisor_meetings/{meetingId} {
-      allow read, write: if isAdminOrYEPManager();
-    }
   }
 }
+
