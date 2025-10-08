@@ -3,6 +3,8 @@
 import { createContext, useEffect, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthChange, isUserAdmin, isUserYEPManager, getUserRole } from '@/lib/firebase-auth';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -70,8 +72,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Track login (optional - will fail if Firestore rules don't allow)
         if (authUser.email && authUser.uid) {
           try {
-            const { trackUserLogin } = await import('@/lib/firebase-admin-users');
-            await trackUserLogin(authUser.email, authUser.uid);
+            // Use client-side Firestore operations for login tracking
+            const { doc, setDoc, updateDoc, getDoc, Timestamp } = await import('firebase/firestore');
+            const { db } = await import('@/lib/firebase');
+            
+            const userRef = doc(db, 'users', authUser.email);
+            const userDoc = await getDoc(userRef);
+
+            if (userDoc.exists()) {
+              await updateDoc(userRef, {
+                lastLoginAt: Timestamp.now(),
+                'metadata.lastSignInTime': new Date().toISOString(),
+              });
+            } else {
+              await setDoc(userRef, {
+                email: authUser.email,
+                uid: authUser.uid,
+                createdAt: Timestamp.now(),
+                lastLoginAt: Timestamp.now(),
+                disabled: false,
+                emailVerified: false,
+                metadata: {
+                  creationTime: new Date().toISOString(),
+                  lastSignInTime: new Date().toISOString(),
+                },
+              });
+            }
           } catch (error) {
             // Silently fail - login tracking is optional
             console.log('Login tracking skipped (requires Firestore write permissions)');
@@ -84,7 +110,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           
           // Admin routes require admin access
           if (isProtectedRoute && !adminStatus) {
-            router.push('/unauthorized');
+            // Check if this is the first time setup
+            const adminDoc = await getDoc(doc(db, 'config', 'admins'));
+            if (!adminDoc.exists()) {
+              router.push('/setup-admin');
+            } else {
+              router.push('/unauthorized');
+            }
           }
           
           // YEP routes require YEP Manager or Admin access

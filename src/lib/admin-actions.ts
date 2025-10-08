@@ -1,5 +1,3 @@
-'use server';
-
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { logUserActivity } from './firebase-admin-users';
