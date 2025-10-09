@@ -336,7 +336,7 @@ export function BulkAttendanceForm({ isOpen, onClose, onSuccess, preselectedStud
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedStudents.includes(participant.id)}
-                            onChange={() => {}} // Handled by parent click
+                            readOnly
                           />
                           <div className="flex-1">
                             <div className="font-medium">{participant.youthParticipant}</div>

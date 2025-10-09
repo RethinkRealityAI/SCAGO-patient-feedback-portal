@@ -301,7 +301,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedStudents.includes(participant.id)}
-                            onChange={() => {}} // Handled by parent click
+                            readOnly
                           />
                           <div className="flex-1">
                             <div className="font-medium">{participant.youthParticipant}</div>
@@ -427,7 +427,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
-                        onChange={() => {}} // Handled by parent click
+                        readOnly
                       />
                       <Label className="text-sm cursor-pointer">{topic}</Label>
                     </div>

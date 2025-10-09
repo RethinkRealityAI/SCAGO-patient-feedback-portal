@@ -329,7 +329,7 @@ export function MeetingForm({
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
-                        onChange={() => {}} // Handled by parent click
+                        readOnly
                       />
                       <Label className="text-sm cursor-pointer">{topic}</Label>
                     </div>

@@ -229,7 +229,7 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
                     >
                       <Checkbox
                         checked={selectedDataTypes.includes(dataType.id)}
-                        onChange={() => {}} // Handled by parent click
+                        readOnly
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
