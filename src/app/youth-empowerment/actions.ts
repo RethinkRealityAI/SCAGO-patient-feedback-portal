@@ -49,6 +49,18 @@ const participantSchema = z.object({
   scagoCounterpart: z.string().optional(),
   dob: z.string().min(1, 'Date of birth is required'),
   file: z.instanceof(File).optional(),
+  // New fields from current participants data
+  age: z.number().optional(),
+  citizenshipStatus: z.string().optional(),
+  location: z.string().optional(),
+  projectCategory: z.string().optional(),
+  duties: z.string().optional(),
+  affiliationWithSCD: z.string().optional(),
+  notes: z.string().optional(),
+  nextSteps: z.string().optional(),
+  interviewed: z.boolean().optional(),
+  interviewNotes: z.string().optional(),
+  recruited: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
     ctx.addIssue({
@@ -314,6 +326,18 @@ export async function getParticipants(filters?: {
         fileUrl: data.fileUrl || '',
         fileName: data.fileName || '',
         fileType: data.fileType || '',
+        // New fields from current participants data
+        age: data.age || null,
+        citizenshipStatus: data.citizenshipStatus || '',
+        location: data.location || '',
+        projectCategory: data.projectCategory || '',
+        duties: data.duties || '',
+        affiliationWithSCD: data.affiliationWithSCD || '',
+        notes: data.notes || '',
+        nextSteps: data.nextSteps || '',
+        interviewed: data.interviewed || false,
+        interviewNotes: data.interviewNotes || '',
+        recruited: data.recruited || false,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
       };

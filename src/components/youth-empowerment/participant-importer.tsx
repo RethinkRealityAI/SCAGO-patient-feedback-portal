@@ -13,7 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { upsertParticipantByEmail } from '@/app/youth-empowerment/actions';
 
 const TargetFields = [
-  'youthParticipant','email','etransferEmailAddress','mailingAddress','phoneNumber','region','approved','contractSigned','signedSyllabus','availability','assignedMentor','idProvided','canadianStatus','canadianStatusOther','sin','youthProposal','proofOfAffiliationWithSCD','scagoCounterpart','dob'
+  'youthParticipant','email','etransferEmailAddress','mailingAddress','phoneNumber','region','approved','contractSigned','signedSyllabus','availability','assignedMentor','idProvided','canadianStatus','canadianStatusOther','sin','youthProposal','proofOfAffiliationWithSCD','scagoCounterpart','dob',
+  // New fields from current participants data
+  'age','citizenshipStatus','location','projectCategory','duties','affiliationWithSCD','notes','nextSteps','interviewed','interviewNotes','recruited'
 ] as const;
 type TargetField = typeof TargetFields[number];
 

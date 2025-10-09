@@ -159,6 +159,18 @@ async function processParticipantForm(
     canadianStatus: (data.canadianStatus as any) || 'Other',
     sin: data.sin || '',
     youthProposal: data.youthProposal || '',
+    // New fields from current participants data
+    age: data.age ? Number(data.age) : undefined,
+    citizenshipStatus: data.citizenshipStatus || '',
+    location: data.location || '',
+    projectCategory: data.projectCategory || '',
+    duties: data.duties || '',
+    affiliationWithSCD: data.affiliationWithSCD || '',
+    notes: data.notes || '',
+    nextSteps: data.nextSteps || '',
+    interviewed: Boolean(data.interviewed),
+    interviewNotes: data.interviewNotes || '',
+    recruited: Boolean(data.recruited),
   };
 
   // Create or update participant

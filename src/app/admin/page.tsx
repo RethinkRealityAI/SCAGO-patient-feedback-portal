@@ -13,12 +13,15 @@ import { DataManagement } from '@/components/admin/data-management';
 import { SecuritySettings } from '@/components/admin/security-settings';
 import { ActivityLog } from '@/components/admin/activity-log';
 import { PlatformStats } from '@/components/admin/platform-stats';
+import { CurrentParticipantsImporter } from '@/components/youth-empowerment/current-participants-importer';
+import { ImportDialog } from '@/components/youth-empowerment/import-dialog';
 
 export default function AdminPage() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [timeoutError, setTimeoutError] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -202,6 +205,30 @@ export default function AdminPage() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-lg">Data Import & Export</CardTitle>
+                  <CardDescription>
+                    Import and export YEP data in various formats
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button 
+                    onClick={() => setIsImportDialogOpen(true)}
+                    className="w-full justify-start"
+                  >
+                    <Database className="h-4 w-4 mr-2" />
+                    Import Data (CSV/JSON/Excel)
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Database className="h-4 w-4 mr-2" />
+                    Export Data
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <CurrentParticipantsImporter />
+
+              <Card>
+                <CardHeader>
                   <CardTitle>YEP Data Overview</CardTitle>
                   <CardDescription>
                     Quick statistics and health metrics for the Youth Empowerment Program
@@ -249,6 +276,17 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Import Dialog */}
+        <ImportDialog
+          isOpen={isImportDialogOpen}
+          onClose={() => setIsImportDialogOpen(false)}
+          onSuccess={() => {
+            setIsImportDialogOpen(false);
+            // Refresh data after successful import
+            window.location.reload();
+          }}
+        />
     </div>
   );
 }

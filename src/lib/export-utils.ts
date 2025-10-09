@@ -50,6 +50,18 @@ export function sanitizeParticipantForExport(participant: YEPParticipant, includ
     assignedMentor: participant.assignedMentor,
     idProvided: participant.idProvided,
     canadianStatus: participant.canadianStatus,
+    // New fields (safe to include)
+    age: participant.age,
+    citizenshipStatus: participant.citizenshipStatus,
+    location: participant.location,
+    projectCategory: participant.projectCategory,
+    duties: participant.duties,
+    affiliationWithSCD: participant.affiliationWithSCD,
+    notes: participant.notes,
+    nextSteps: participant.nextSteps,
+    interviewed: participant.interviewed,
+    interviewNotes: participant.interviewNotes,
+    recruited: participant.recruited,
     // Mask sensitive fields
     email: participant.email ? '***@***.***' : '',
     sinLast4: participant.sinLast4 ? '****' : '',

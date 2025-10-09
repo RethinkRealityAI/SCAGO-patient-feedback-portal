@@ -48,6 +48,18 @@ const participantFormSchema = z.object({
   scagoCounterpart: z.string().optional(),
   dob: z.string().min(1, 'Date of birth is required'),
   file: z.instanceof(File).optional(),
+  // New fields from current participants data
+  age: z.number().optional(),
+  citizenshipStatus: z.string().optional(),
+  location: z.string().optional(),
+  projectCategory: z.string().optional(),
+  duties: z.string().optional(),
+  affiliationWithSCD: z.string().optional(),
+  notes: z.string().optional(),
+  nextSteps: z.string().optional(),
+  interviewed: z.boolean().optional(),
+  interviewNotes: z.string().optional(),
+  recruited: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
     ctx.addIssue({
@@ -97,6 +109,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       proofOfAffiliationWithSCD: participant?.proofOfAffiliationWithSCD || false,
       scagoCounterpart: participant?.scagoCounterpart || '',
       dob: participant?.dob || '',
+      // New fields
+      age: participant?.age || undefined,
+      citizenshipStatus: participant?.citizenshipStatus || '',
+      location: participant?.location || '',
+      projectCategory: participant?.projectCategory || '',
+      duties: participant?.duties || '',
+      affiliationWithSCD: participant?.affiliationWithSCD || '',
+      notes: participant?.notes || '',
+      nextSteps: participant?.nextSteps || '',
+      interviewed: participant?.interviewed || false,
+      interviewNotes: participant?.interviewNotes || '',
+      recruited: participant?.recruited || false,
     },
   });
 
@@ -134,6 +158,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         proofOfAffiliationWithSCD: participant.proofOfAffiliationWithSCD || false,
         scagoCounterpart: participant.scagoCounterpart || '',
         dob: participant.dob || '',
+        // New fields
+        age: participant.age || undefined,
+        citizenshipStatus: participant.citizenshipStatus || '',
+        location: participant.location || '',
+        projectCategory: participant.projectCategory || '',
+        duties: participant.duties || '',
+        affiliationWithSCD: participant.affiliationWithSCD || '',
+        notes: participant.notes || '',
+        nextSteps: participant.nextSteps || '',
+        interviewed: participant.interviewed || false,
+        interviewNotes: participant.interviewNotes || '',
+        recruited: participant.recruited || false,
       });
       // Explicitly clear the SIN field to ensure it's completely empty
       form.setValue('sin', '');
@@ -164,6 +200,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         proofOfAffiliationWithSCD: false,
         scagoCounterpart: '',
         dob: '',
+        // New fields
+        age: undefined,
+        citizenshipStatus: '',
+        location: '',
+        projectCategory: '',
+        duties: '',
+        affiliationWithSCD: '',
+        notes: '',
+        nextSteps: '',
+        interviewed: false,
+        interviewNotes: '',
+        recruited: false,
       });
       // Reset file states for new participant
       setUploadedFile(null);
@@ -219,6 +267,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD,
         scagoCounterpart: data.scagoCounterpart || '',
         dob: data.dob,
+        // New fields
+        age: data.age,
+        citizenshipStatus: data.citizenshipStatus || '',
+        location: data.location || '',
+        projectCategory: data.projectCategory || '',
+        duties: data.duties || '',
+        affiliationWithSCD: data.affiliationWithSCD || '',
+        notes: data.notes || '',
+        nextSteps: data.nextSteps || '',
+        interviewed: data.interviewed || false,
+        interviewNotes: data.interviewNotes || '',
+        recruited: data.recruited || false,
       };
 
       // Only include SIN if provided and not empty
@@ -420,196 +480,186 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 </CardContent>
               </Card>
 
-              {/* Status and Documents */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Status & Documents</CardTitle>
-                  <CardDescription>Program status and required documents</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
+              {/* Right column with Status & Documents and Program Details stacked */}
+              <div className="space-y-6">
+                {/* Status and Documents - Compact */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Status & Documents</CardTitle>
+                    <CardDescription>Program status and required documents</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="approved"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="text-sm">Approved</FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="contractSigned"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="text-sm">Contract Signed</FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="signedSyllabus"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="text-sm">Signed Syllabus</FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="idProvided"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="text-sm">ID Provided</FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="proofOfAffiliationWithSCD"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="text-sm">SCD Affiliation</FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Program Details - Compact */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Program Details</CardTitle>
+                    <CardDescription>Assignment and availability information</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-4">
                     <FormField
                       control={form.control}
-                      name="approved"
+                      name="availability"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                        <FormItem>
+                          <FormLabel>Availability</FormLabel>
                           <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
+                            <AvailabilitySelector
+                              value={field.value}
+                              onChange={field.onChange}
+                              disabled={false}
                             />
                           </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Approved</FormLabel>
-                            <FormDescription>
-                              Participant has been approved for the program
-                            </FormDescription>
-                          </div>
+                          <FormDescription>
+                            Select days and time slots when the participant is available
+                          </FormDescription>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="contractSigned"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Contract Signed</FormLabel>
-                            <FormDescription>
-                              Participant has signed the program contract
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="assignedMentor"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Assigned Mentor</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select mentor" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {mentors.map((mentor) => (
+                                  <SelectItem key={mentor.id} value={mentor.id}>
+                                    {mentor.name} - {mentor.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="signedSyllabus"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Signed Syllabus</FormLabel>
+                      <FormField
+                        control={form.control}
+                        name="scagoCounterpart"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>SCAGO Counterpart</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Staff member name" />
+                            </FormControl>
                             <FormDescription>
-                              Participant has signed the program syllabus
+                              SCAGO staff member assigned to this participant
                             </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="idProvided"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>ID Provided</FormLabel>
-                            <FormDescription>
-                              Participant has provided valid identification
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="proofOfAffiliationWithSCD"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Proof of SCD Affiliation</FormLabel>
-                            <FormDescription>
-                              Participant has provided proof of SCD affiliation
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Program Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Program Details</CardTitle>
-                  <CardDescription>Assignment and availability information</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="availability"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Availability</FormLabel>
-                        <FormControl>
-                          <AvailabilitySelector
-                            value={field.value}
-                            onChange={field.onChange}
-                            disabled={false}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Select days and time slots when the participant is available
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="assignedMentor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assigned Mentor</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select mentor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {mentors.map((mentor) => (
-                              <SelectItem key={mentor.id} value={mentor.id}>
-                                {mentor.name} - {mentor.title}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="scagoCounterpart"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>SCAGO Counterpart</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Staff member name" />
-                        </FormControl>
-                        <FormDescription>
-                          SCAGO staff member assigned to this participant
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-
               {/* Legal and Security */}
               <Card>
                 <CardHeader>
@@ -694,6 +744,80 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                   />
                 </CardContent>
               </Card>
+
+              {/* Document Upload - Now next to Legal & Security */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Document Upload</CardTitle>
+                  <CardDescription>Upload supporting documents</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {existingFileUrl && !uploadedFile && (
+                    <Alert>
+                      <FileText className="h-4 w-4" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>Existing file attached</span>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleFileDownload}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(existingFileUrl, '_blank')}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <FormField
+                    control={form.control}
+                    name="file"
+                    render={({ field: { onChange, ...field } }) => (
+                      <FormItem>
+                        <FormLabel>Upload File</FormLabel>
+                        <FormControl>
+                          <div className="flex items-center gap-4">
+                            <Input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleFileChange(e);
+                                  onChange(file);
+                                }
+                              }}
+                              className="max-w-sm"
+                            />
+                            {uploadedFile && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Upload className="h-4 w-4" />
+                                {uploadedFile.name}
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormDescription>
+                          Upload supporting documents (PDF, DOC, images)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
             </div>
 
             {/* Project Information */}
@@ -702,7 +826,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 <CardTitle className="text-lg">Project Information</CardTitle>
                 <CardDescription>Youth proposal and project details</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <FormField
                   control={form.control}
                   name="youthProposal"
@@ -723,75 +847,233 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     </FormItem>
                   )}
                 />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="projectCategory"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project Category</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g., Advocacy, Education, Community Engagement" />
+                        </FormControl>
+                        <FormDescription>
+                          Type of project or initiative
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="duties"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duties/Responsibilities</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Describe specific duties and responsibilities" rows={3} />
+                        </FormControl>
+                        <FormDescription>
+                          Specific duties and responsibilities
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </CardContent>
             </Card>
 
-            {/* File Upload */}
+            {/* Additional Information */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Document Upload</CardTitle>
-                <CardDescription>Upload supporting documents</CardDescription>
+                <CardTitle className="text-lg">Additional Information</CardTitle>
+                <CardDescription>Additional participant details and status</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {existingFileUrl && !uploadedFile && (
-                  <Alert>
-                    <FileText className="h-4 w-4" />
-                    <AlertDescription className="flex items-center justify-between">
-                      <span>Existing file attached</span>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleFileDownload}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(existingFileUrl, '_blank')}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="age"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Age</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            {...field} 
+                            value={field.value || ''} 
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '') {
+                                field.onChange(undefined);
+                              } else {
+                                const numValue = parseInt(value);
+                                field.onChange(isNaN(numValue) ? undefined : numValue);
+                              }
+                            }}
+                            placeholder="Enter age"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Participant's age
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="location"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="City, Province" />
+                        </FormControl>
+                        <FormDescription>
+                          Specific location or city
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}
-                  name="file"
-                  render={({ field: { onChange, ...field } }) => (
+                  name="citizenshipStatus"
+                  render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Upload File</FormLabel>
+                      <FormLabel>Citizenship Status</FormLabel>
                       <FormControl>
-                        <div className="flex items-center gap-4">
-                          <Input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                handleFileChange(e);
-                                onChange(file);
-                              }
-                            }}
-                            className="max-w-sm"
-                          />
-                          {uploadedFile && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Upload className="h-4 w-4" />
-                              {uploadedFile.name}
-                            </div>
-                          )}
-                        </div>
+                        <Input {...field} placeholder="e.g., Canadian Citizen, Permanent Resident" />
                       </FormControl>
                       <FormDescription>
-                        Upload supporting documents (PDF, DOC, images)
+                        Original citizenship status from application
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="affiliationWithSCD"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Affiliation with SCD</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Living with SCD, Advocate, Sibling of someone with SCD" />
+                      </FormControl>
+                      <FormDescription>
+                        Connection to Sickle Cell Disease
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="interviewed"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Interviewed</FormLabel>
+                          <FormDescription>
+                            Has been interviewed
+                          </FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="recruited"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Recruited</FormLabel>
+                          <FormDescription>
+                            Successfully recruited
+                          </FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="nextSteps"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Next Steps</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Next steps or follow-up actions" />
+                      </FormControl>
+                      <FormDescription>
+                        Planned next steps or follow-up actions
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="interviewNotes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Interview Notes</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          {...field} 
+                          placeholder="Notes from interviews or meetings"
+                          rows={3}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Notes from interviews or meetings
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>General Notes</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          {...field} 
+                          placeholder="Additional notes or comments"
+                          rows={3}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Additional notes or comments
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
