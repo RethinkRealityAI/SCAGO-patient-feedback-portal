@@ -16,6 +16,7 @@ interface FieldEditorProps {
   fieldIndex: number;
   control: Control<any>;
   formName: string;
+  removeField: (sectionIndex: number, fieldIndex: number) => void;
 }
 
 export function FieldEditor({ 
@@ -23,7 +24,8 @@ export function FieldEditor({
   sectionIndex, 
   fieldIndex, 
   control, 
-  formName 
+  formName,
+  removeField
 }: FieldEditorProps) {
   const { register, formState: { errors } } = useFormContext();
 
@@ -42,9 +44,7 @@ export function FieldEditor({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            // Remove field logic here
-          }}
+          onClick={() => removeField(sectionIndex, fieldIndex)}
           className="text-red-500 hover:text-red-700"
         >
           <Trash2 className="h-4 w-4" />

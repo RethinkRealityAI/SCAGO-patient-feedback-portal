@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { SINSecureField } from './sin-secure-field';
+import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 
 interface YEPFieldRendererProps {
   field: YEPField;
@@ -93,12 +94,12 @@ export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
             name={fieldName}
             render={({ field: controllerField }) => (
               <div className="space-y-2">
-                <Select onValueChange={controllerField.onChange} value={controllerField.value}>
+                <Select onValueChange={controllerField.onChange} value={coerceSelectValue(controllerField.value)}>
                   <SelectTrigger>
                     <SelectValue placeholder={field.placeholder || 'Select an option'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {field.options?.map((option: any) => (
+                    {sanitizeOptions(field.options as any)?.map((option: any) => (
                       <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
                     <SelectItem value="other">Other</SelectItem>

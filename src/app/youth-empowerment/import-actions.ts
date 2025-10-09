@@ -45,7 +45,7 @@ export async function importParticipants(
     const mappedData = data.map(row => {
       const mapped: any = {};
       Object.entries(mapping).forEach(([csvColumn, dbField]) => {
-        if (row[csvColumn] !== undefined) {
+        if (row[csvColumn] !== undefined && dbField !== 'skip') {
           mapped[dbField] = row[csvColumn];
         }
       });
@@ -149,7 +149,7 @@ export async function importMentors(
     const mappedData = data.map(row => {
       const mapped: any = {};
       Object.entries(mapping).forEach(([csvColumn, dbField]) => {
-        if (row[csvColumn] !== undefined) {
+        if (row[csvColumn] !== undefined && dbField !== 'skip') {
           mapped[dbField] = row[csvColumn];
         }
       });
@@ -252,7 +252,7 @@ export async function importWorkshops(
     const mappedData = data.map(row => {
       const mapped: any = {};
       Object.entries(mapping).forEach(([csvColumn, dbField]) => {
-        if (row[csvColumn] !== undefined) {
+        if (row[csvColumn] !== undefined && dbField !== 'skip') {
           mapped[dbField] = row[csvColumn];
         }
       });
@@ -356,7 +356,7 @@ export async function importAttendance(
     const mappedData = data.map(row => {
       const mapped: any = {};
       Object.entries(mapping).forEach(([csvColumn, dbField]) => {
-        if (row[csvColumn] !== undefined) {
+        if (row[csvColumn] !== undefined && dbField !== 'skip') {
           mapped[dbField] = row[csvColumn];
         }
       });
@@ -460,7 +460,7 @@ export async function importMeetings(
     const mappedData = data.map(row => {
       const mapped: any = {};
       Object.entries(mapping).forEach(([csvColumn, dbField]) => {
-        if (row[csvColumn] !== undefined) {
+        if (row[csvColumn] !== undefined && dbField !== 'skip') {
           mapped[dbField] = row[csvColumn];
         }
       });

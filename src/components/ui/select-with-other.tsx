@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 
 interface SelectWithOtherProps {
   name: string;
@@ -60,12 +61,12 @@ export function SelectWithOther({
         </Label>
       )}
       
-      <Select onValueChange={handleSelectionChange} value={selectedValue}>
+      <Select onValueChange={handleSelectionChange} value={coerceSelectValue(selectedValue)}>
         <SelectTrigger>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {options.map((option) => (
+          {sanitizeOptions(options).map((option) => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>

@@ -4,13 +4,13 @@ import { getYEPFormTemplate } from '../../actions';
 import YEPFormEditor from '@/components/yep-forms/yep-form-editor';
 
 interface YEPFormEditorPageProps {
-  params: {
+  params: Promise<{
     formId: string;
-  };
+  }>;
 }
 
 export default async function YEPFormEditorPage({ params }: YEPFormEditorPageProps) {
-  const { formId } = params;
+  const { formId } = await params;
   
   const result = await getYEPFormTemplate(formId);
   

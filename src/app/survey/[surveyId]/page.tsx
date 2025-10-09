@@ -4,9 +4,9 @@ import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type SurveyPageProps = {
-  params: {
+  params: Promise<{
     surveyId: string;
-  };
+  }>;
 };
 
 export default async function SurveyPage({ params }: SurveyPageProps) {

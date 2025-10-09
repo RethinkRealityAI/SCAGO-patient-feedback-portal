@@ -31,6 +31,7 @@ import { provinces, ontarioCities } from "@/lib/location-data";
 import { hospitalDepartments } from "@/lib/hospital-departments";
 import { ontarioHospitals } from "@/lib/hospital-names";
 import { translateFieldLabel, translateOption, useTranslation } from '@/lib/translations';
+import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { SignaturePad } from '@/components/signature-pad';
 
 // Define field type
@@ -71,10 +72,12 @@ export function FormFieldRenderer({
   const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
   
   // Translate options if they exist
-  const translatedOptions = fieldConfig.options?.map(option => ({
-    ...option,
-    label: translateOption(option.label, isFrench ? 'fr' : 'en')
-  }));
+  const translatedOptions = sanitizeOptions(
+    fieldConfig.options?.map(option => ({
+      ...option,
+      label: translateOption(option.label, isFrench ? 'fr' : 'en')
+    }))
+  );
 
   const renderFieldContent = () => {
     switch (fieldConfig.type) {
@@ -123,7 +126,7 @@ export function FormFieldRenderer({
       case 'select':
         return (
           <div className="space-y-2">
-            <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={form.watch(fieldConfig.id) || ''}>
+            <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={coerceSelectValue(form.watch(fieldConfig.id))}>
               <FormControl>
                 <SelectTrigger>
                   <SelectValue placeholder={t.selectAnOption} />
@@ -155,7 +158,7 @@ export function FormFieldRenderer({
         );
       case 'province-ca':
         return (
-          <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={form.watch(fieldConfig.id) || ''}>
+          <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={coerceSelectValue(form.watch(fieldConfig.id))}>
             <FormControl>
               <SelectTrigger>
                 <SelectValue placeholder={t.selectProvince} />
