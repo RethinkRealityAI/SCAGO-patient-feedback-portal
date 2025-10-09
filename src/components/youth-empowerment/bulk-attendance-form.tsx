@@ -191,7 +191,7 @@ export function BulkAttendanceForm({ isOpen, onClose, onSuccess, preselectedStud
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -203,7 +203,7 @@ export function BulkAttendanceForm({ isOpen, onClose, onSuccess, preselectedStud
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Workshop Selection */}
               <Card>

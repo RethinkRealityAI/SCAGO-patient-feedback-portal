@@ -152,7 +152,7 @@ export function MeetingForm({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
@@ -164,7 +164,7 @@ export function MeetingForm({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Meeting Participants */}
               <Card>
@@ -315,7 +315,7 @@ export function MeetingForm({
                 <CardTitle className="text-lg">Meeting Topics</CardTitle>
                 <CardDescription>What was discussed during the meeting?</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="max-h-60 overflow-y-auto">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {commonTopics.map((topic) => (
                     <div

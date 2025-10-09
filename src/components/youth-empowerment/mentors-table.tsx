@@ -318,7 +318,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
 
       {/* View Modal */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Mentor Details</DialogTitle>
             <DialogDescription>

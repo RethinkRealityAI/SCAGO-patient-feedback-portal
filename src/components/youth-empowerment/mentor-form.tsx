@@ -123,7 +123,7 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {mentor ? 'Edit Mentor' : 'Add New Mentor'}
@@ -137,7 +137,7 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Mentor Information</CardTitle>

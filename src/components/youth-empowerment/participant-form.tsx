@@ -156,7 +156,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {participant ? 'Edit Participant' : 'Add New Participant'}
@@ -170,7 +170,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Information */}
               <Card>

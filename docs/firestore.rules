@@ -82,5 +82,15 @@ service cloud.firestore {
     match /yep_advisor_meetings/{meetingId} {
       allow read, write: if isAdminOrYEPManager();
     }
+    
+    // YEP Form Templates - Admin or YEP Manager
+    match /yep-form-templates/{templateId} {
+      allow read, write: if isAdminOrYEPManager();
+    }
+    
+    // YEP Form Submissions - Admin or YEP Manager
+    match /yep-form-submissions/{submissionId} {
+      allow read, write: if isAdminOrYEPManager();
+    }
   }
 }
