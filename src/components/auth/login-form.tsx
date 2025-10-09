@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, resetPassword } from '@/lib/firebase-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,12 +12,16 @@ import { Lock, Mail, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
+  
+  // Get the redirect URL from query parameters
+  const redirectUrl = searchParams.get('redirect');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,8 +51,11 @@ export default function LoginForm() {
         setError(result.error);
         setPassword('');
       } else {
-        // AuthProvider will handle redirect
-        router.push('/dashboard');
+        // Redirect to the intended page or dashboard as fallback
+        const destination = redirectUrl ? decodeURIComponent(redirectUrl) : '/dashboard';
+        // Ensure the destination is safe (starts with / and doesn't contain dangerous characters)
+        const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/dashboard';
+        router.push(safeDestination);
       }
     }
   };

@@ -132,7 +132,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const isProtectedRoute = PROTECTED_ROUTES.some(route => pathname?.startsWith(route));
           const isYEPRoute = YEP_ROUTES.some(route => pathname?.startsWith(route));
           if (isProtectedRoute || isYEPRoute) {
-            router.push('/login');
+            // Include the current path as a redirect parameter
+            const redirectUrl = encodeURIComponent(pathname || '/');
+            router.push(`/login?redirect=${redirectUrl}`);
           }
         }
       } catch (error) {

@@ -307,7 +307,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
 
       {/* Forms and Modals */}
       <MentorForm
-        mentor={selectedMentor}
+        mentor={selectedMentor || undefined}
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);

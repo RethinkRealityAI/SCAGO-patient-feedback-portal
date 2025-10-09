@@ -51,12 +51,28 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
   useEffect(() => {
     if (isOpen) {
       loadParticipants();
-      if (mentor?.assignedStudents) {
-        setSelectedStudents(mentor.assignedStudents);
-        form.setValue('assignedStudents', mentor.assignedStudents);
-      }
     }
-  }, [isOpen, mentor]);
+  }, [isOpen]);
+
+  // Reset form when mentor changes
+  useEffect(() => {
+    if (mentor) {
+      form.reset({
+        name: mentor.name || '',
+        title: mentor.title || '',
+        assignedStudents: mentor.assignedStudents || [],
+      });
+      setSelectedStudents(mentor.assignedStudents || []);
+    } else {
+      // Reset to default values for new mentor
+      form.reset({
+        name: '',
+        title: '',
+        assignedStudents: [],
+      });
+      setSelectedStudents([]);
+    }
+  }, [mentor, form]);
 
   const loadParticipants = async () => {
     try {
@@ -121,8 +137,10 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
     return student ? student.youthParticipant : 'Unknown Student';
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>

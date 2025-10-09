@@ -40,12 +40,16 @@ import {
   FileText,
   Mail,
   MapPin,
-  Calendar
+  Calendar,
+  Phone,
+  CreditCard,
+  Home
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getParticipants, deleteParticipant } from '@/app/youth-empowerment/actions';
 import { YEPParticipant } from '@/lib/youth-empowerment';
 import { ParticipantForm } from './participant-form';
+import { ParticipantImporter } from './participant-importer';
 
 interface ParticipantsTableProps {
   onRefresh?: () => void;
@@ -60,6 +64,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
   const [regionFilter, setRegionFilter] = useState('all');
   const [selectedParticipant, setSelectedParticipant] = useState<YEPParticipant | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [participantToDelete, setParticipantToDelete] = useState<YEPParticipant | null>(null);
@@ -98,6 +103,9 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
       filtered = filtered.filter(p => 
         p.youthParticipant.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.etransferEmailAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.phoneNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.mailingAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.region.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
@@ -222,6 +230,9 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
               <Plus className="h-4 w-4 mr-2" />
               Add Participant
             </Button>
+            <Button variant="secondary" onClick={() => setIsImporterOpen(true)}>
+              Import CSV
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -267,6 +278,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Participant</TableHead>
+                  <TableHead>Contact Info</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Region</TableHead>
                   <TableHead>Mentor</TableHead>
@@ -278,7 +290,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
               <TableBody>
                 {filteredParticipants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No participants found
                     </TableCell>
                   </TableRow>
@@ -292,6 +304,33 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                             <Mail className="h-3 w-3" />
                             {participant.email}
                           </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          {participant.phoneNumber && (
+                            <div className="text-sm flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {participant.phoneNumber}
+                            </div>
+                          )}
+                          {participant.etransferEmailAddress && (
+                            <div className="text-sm flex items-center gap-1">
+                              <CreditCard className="h-3 w-3" />
+                              {participant.etransferEmailAddress}
+                            </div>
+                          )}
+                          {participant.mailingAddress && (
+                            <div className="text-sm flex items-center gap-1">
+                              <Home className="h-3 w-3" />
+                              <span className="truncate max-w-[200px]" title={participant.mailingAddress}>
+                                {participant.mailingAddress}
+                              </span>
+                            </div>
+                          )}
+                          {!participant.phoneNumber && !participant.etransferEmailAddress && !participant.mailingAddress && (
+                            <span className="text-muted-foreground text-sm">No contact info</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -366,13 +405,19 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
       {/* Forms and Modals */}
       <ParticipantForm
-        participant={selectedParticipant}
+        participant={selectedParticipant || undefined}
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);
           setSelectedParticipant(null);
         }}
         onSuccess={handleFormSuccess}
+      />
+
+      <ParticipantImporter
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+        onImported={handleFormSuccess}
       />
 
       {/* View Modal */}
@@ -396,6 +441,18 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                   <p className="text-sm">{selectedParticipant.email}</p>
                 </div>
                 <div>
+                  <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                  <p className="text-sm">{selectedParticipant.phoneNumber || 'Not provided'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">E-transfer Email</label>
+                  <p className="text-sm">{selectedParticipant.etransferEmailAddress || 'Not provided'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Mailing Address</label>
+                  <p className="text-sm">{selectedParticipant.mailingAddress || 'Not provided'}</p>
+                </div>
+                <div>
                   <label className="text-sm font-medium text-muted-foreground">Region</label>
                   <p className="text-sm">{selectedParticipant.region}</p>
                 </div>
@@ -410,6 +467,10 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
                   <p className="text-sm">{new Date(selectedParticipant.dob).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Assigned Mentor</label>
+                  <p className="text-sm">{selectedParticipant.assignedMentor || 'Not assigned'}</p>
                 </div>
               </div>
               {selectedParticipant.youthProposal && (

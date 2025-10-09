@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import Header from '@/components/header';
 import { AuthProvider } from '@/components/auth/auth-provider';
 
-// Only hide navigation for public survey submission pages
-const HIDDEN_NAV_PATHS = ['/survey'];
+// Hide navigation for public pages, login, unauthorized, setup-admin, and youth empowerment dashboard
+const HIDDEN_NAV_PATHS = ['/survey', '/youth-empowerment', '/login', '/unauthorized', '/setup-admin'];
 
 export default function AppBody({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();

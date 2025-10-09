@@ -20,7 +20,7 @@ export async function updateSurvey(surveyId: string, data: any) {
 
 export async function createSurvey(data: any) {
   try {
-    return await serverCreateSurvey(data);
+    return await serverCreateSurvey();
   } catch (error) {
     console.error('Error creating survey:', error);
     return { error: 'Failed to create survey' };

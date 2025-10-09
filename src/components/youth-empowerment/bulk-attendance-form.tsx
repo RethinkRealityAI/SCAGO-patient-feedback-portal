@@ -189,8 +189,10 @@ export function BulkAttendanceForm({ isOpen, onClose, onSuccess, preselectedStud
 
   const totalCombinations = selectedWorkshops.length * selectedStudents.length;
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -336,7 +338,7 @@ export function BulkAttendanceForm({ isOpen, onClose, onSuccess, preselectedStud
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedStudents.includes(participant.id)}
-                            readOnly
+                            // readOnly not supported on Checkbox
                           />
                           <div className="flex-1">
                             <div className="font-medium">{participant.youthParticipant}</div>

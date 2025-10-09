@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import {
   collection,
   doc,
@@ -17,13 +17,23 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 // import { revalidatePath } from 'next/cache'; // Removed - not compatible with client-side usage
-import { hashSIN, extractSINLast4, validateSIN } from '@/lib/youth-empowerment';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { hashSIN, extractSINLast4, validateSINLenient } from '@/lib/youth-empowerment';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+
+// Helper: parse a YYYY-MM-DD string into a local Date at noon to avoid UTC shifts
+function parseLocalDateFromYMD(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map((v) => parseInt(v, 10));
+  // Use noon local time to avoid DST/UTC cross-over shifting date by one day
+  return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
+}
 
 // Validation Schemas
 const participantSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
   email: z.string().email('Valid email is required'),
+  etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
+  mailingAddress: z.string().optional(),
+  phoneNumber: z.string().optional(),
   region: z.string().min(2, 'Region is required'),
   approved: z.boolean().default(false),
   contractSigned: z.boolean().default(false),
@@ -32,12 +42,21 @@ const participantSchema = z.object({
   assignedMentor: z.string().optional(),
   idProvided: z.boolean().default(false),
   canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']),
+  canadianStatusOther: z.string().optional(),
   sin: z.string().optional(),
   youthProposal: z.string().optional(),
   proofOfAffiliationWithSCD: z.boolean().default(false),
   scagoCounterpart: z.string().optional(),
   dob: z.string().min(1, 'Date of birth is required'),
   file: z.instanceof(File).optional(),
+}).superRefine((data, ctx) => {
+  if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your status when "Other" is selected',
+      path: ['canadianStatusOther'],
+    });
+  }
 });
 
 const mentorSchema = z.object({
@@ -48,11 +67,8 @@ const mentorSchema = z.object({
 
 const workshopSchema = z.object({
   title: z.string().min(3, 'Title is required'),
-  description: z.string().min(10, 'Description is required'),
+  description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
-  location: z.string().optional(),
-  capacity: z.number().optional(),
-  feedbackSurveyId: z.string().optional(),
 });
 
 const attendanceSchema = z.object({
@@ -80,7 +96,7 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
     let sinLast4 = '';
     let sinHash = '';
     if (validatedData.sin) {
-      if (!validateSIN(validatedData.sin)) {
+      if (!validateSINLenient(validatedData.sin)) {
         return { error: 'Invalid SIN format' };
       }
       sinLast4 = extractSINLast4(validatedData.sin);
@@ -92,7 +108,6 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
     let fileName = '';
     let fileType = '';
     if (validatedData.file) {
-      const storage = getStorage();
       const fileRef = ref(storage, `yep-files/${Date.now()}-${validatedData.file.name}`);
       const snapshot = await uploadBytes(fileRef, validatedData.file);
       fileUrl = await getDownloadURL(snapshot.ref);
@@ -103,6 +118,9 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
     const participantData = {
       youthParticipant: validatedData.youthParticipant,
       email: validatedData.email,
+      etransferEmailAddress: validatedData.etransferEmailAddress || '',
+      mailingAddress: validatedData.mailingAddress || '',
+      phoneNumber: validatedData.phoneNumber || '',
       region: validatedData.region,
       approved: validatedData.approved,
       contractSigned: validatedData.contractSigned,
@@ -111,6 +129,7 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       assignedMentor: validatedData.assignedMentor || '',
       idProvided: validatedData.idProvided,
       canadianStatus: validatedData.canadianStatus,
+      canadianStatusOther: validatedData.canadianStatusOther || '',
       sinLast4,
       sinHash,
       youthProposal: validatedData.youthProposal || '',
@@ -136,24 +155,42 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
 
 export async function updateParticipant(id: string, data: Partial<z.infer<typeof participantSchema>>) {
   try {
+    // Clean the data to remove undefined values and only include fields that are actually provided
     const updateData: any = {
-      ...data,
       updatedAt: serverTimestamp(),
     };
 
+    // Only include fields that have values
+    if (data.youthParticipant !== undefined) updateData.youthParticipant = data.youthParticipant;
+    if (data.email !== undefined) updateData.email = data.email;
+    if (data.etransferEmailAddress !== undefined) updateData.etransferEmailAddress = data.etransferEmailAddress;
+    if (data.mailingAddress !== undefined) updateData.mailingAddress = data.mailingAddress;
+    if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber;
+    if (data.region !== undefined) updateData.region = data.region;
+    if (data.approved !== undefined) updateData.approved = data.approved;
+    if (data.contractSigned !== undefined) updateData.contractSigned = data.contractSigned;
+    if (data.signedSyllabus !== undefined) updateData.signedSyllabus = data.signedSyllabus;
+    if (data.availability !== undefined) updateData.availability = data.availability;
+    if (data.assignedMentor !== undefined) updateData.assignedMentor = data.assignedMentor;
+    if (data.idProvided !== undefined) updateData.idProvided = data.idProvided;
+    if (data.canadianStatus !== undefined) updateData.canadianStatus = data.canadianStatus;
+    if (data.canadianStatusOther !== undefined) updateData.canadianStatusOther = data.canadianStatusOther;
+    if (data.youthProposal !== undefined) updateData.youthProposal = data.youthProposal;
+    if (data.proofOfAffiliationWithSCD !== undefined) updateData.proofOfAffiliationWithSCD = data.proofOfAffiliationWithSCD;
+    if (data.scagoCounterpart !== undefined) updateData.scagoCounterpart = data.scagoCounterpart;
+    if (data.dob !== undefined) updateData.dob = data.dob;
+
     // Handle SIN update if provided
-    if (data.sin) {
-      if (!validateSIN(data.sin)) {
+    if (data.sin && data.sin.trim() !== '') {
+      if (!validateSINLenient(data.sin)) {
         return { error: 'Invalid SIN format' };
       }
       updateData.sinLast4 = extractSINLast4(data.sin);
       updateData.sinHash = await hashSIN(data.sin);
-      delete updateData.sin; // Remove raw SIN from update
     }
 
     // Handle file upload if provided
     if (data.file) {
-      const storage = getStorage();
       const fileRef = ref(storage, `yep-files/${Date.now()}-${data.file.name}`);
       const snapshot = await uploadBytes(fileRef, data.file);
       updateData.fileUrl = await getDownloadURL(snapshot.ref);
@@ -163,11 +200,45 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 
     await updateDoc(doc(db, 'yep_participants', id), updateData);
     
-    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error updating participant:', error);
     return { error: error instanceof Error ? error.message : 'Failed to update participant' };
+  }
+}
+
+// Upsert participant by unique email
+export async function upsertParticipantByEmail(data: z.infer<typeof participantSchema>) {
+  try {
+    const validatedData = participantSchema.parse(data);
+
+    // Try to find existing participant by email
+    const q = query(
+      collection(db, 'yep_participants'),
+      where('email', '==', validatedData.email),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      const existing = snapshot.docs[0];
+      const id = existing.id;
+
+      // Build partial update payload from validatedData
+      const updatePayload: Partial<z.infer<typeof participantSchema>> = { ...validatedData };
+      // updateParticipant handles hashing SIN and trimming undefineds
+      const result = await updateParticipant(id, updatePayload);
+      if (result?.error) return { error: result.error };
+      return { success: true, id, action: 'updated' as const };
+    }
+
+    // Create new if none exists
+    const created = await createParticipant(validatedData);
+    if ((created as any)?.error) return { error: (created as any).error };
+    return { success: true, id: (created as any).id as string, action: 'created' as const };
+  } catch (error) {
+    console.error('Error upserting participant by email:', error);
+    return { error: error instanceof Error ? error.message : 'Failed to upsert participant' };
   }
 }
 
@@ -178,7 +249,6 @@ export async function deleteParticipant(id: string) {
     if (participantDoc.exists()) {
       const data = participantDoc.data();
       if (data.fileUrl) {
-        const storage = getStorage();
         const fileRef = ref(storage, data.fileUrl);
         try {
           await deleteObject(fileRef);
@@ -217,12 +287,37 @@ export async function getParticipants(filters?: {
     }
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-      updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        youthParticipant: data.youthParticipant || '',
+        email: data.email || '',
+        etransferEmailAddress: data.etransferEmailAddress || '',
+        mailingAddress: data.mailingAddress || '',
+        phoneNumber: data.phoneNumber || '',
+        region: data.region || '',
+        approved: data.approved || false,
+        contractSigned: data.contractSigned || false,
+        signedSyllabus: data.signedSyllabus || false,
+        availability: data.availability || '',
+        assignedMentor: data.assignedMentor || '',
+        idProvided: data.idProvided || false,
+        canadianStatus: data.canadianStatus || 'Canadian Citizen',
+        canadianStatusOther: data.canadianStatusOther || '',
+        sinLast4: data.sinLast4 || '',
+        sinHash: data.sinHash || '',
+        youthProposal: data.youthProposal || '',
+        proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD || false,
+        scagoCounterpart: data.scagoCounterpart || '',
+        dob: data.dob || '',
+        fileUrl: data.fileUrl || '',
+        fileName: data.fileName || '',
+        fileType: data.fileType || '',
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
   } catch (error) {
     console.error('Error fetching participants:', error);
     return [];
@@ -252,12 +347,18 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
 
 export async function updateMentor(id: string, data: Partial<z.infer<typeof mentorSchema>>) {
   try {
-    await updateDoc(doc(db, 'yep_mentors', id), {
-      ...data,
+    // Clean the data to remove undefined values and only include fields that are actually provided
+    const updateData: any = {
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Only include fields that have values
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.assignedStudents !== undefined) updateData.assignedStudents = data.assignedStudents;
+
+    await updateDoc(doc(db, 'yep_mentors', id), updateData);
     
-    // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true };
   } catch (error) {
     console.error('Error updating mentor:', error);
@@ -281,12 +382,17 @@ export async function getMentors() {
   try {
     const q = query(collection(db, 'yep_mentors'), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-      updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name || '',
+        title: data.title || '',
+        assignedStudents: data.assignedStudents || [],
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
   } catch (error) {
     console.error('Error fetching mentors:', error);
     return [];
@@ -298,12 +404,19 @@ export async function createWorkshop(data: z.infer<typeof workshopSchema>) {
   try {
     const validatedData = workshopSchema.parse(data);
     
+    // Filter out undefined values to prevent Firebase errors
     const workshopData = {
-      ...validatedData,
-      date: new Date(validatedData.date),
+      title: validatedData.title,
+      // Store as local date to avoid off-by-one timezone issue
+      date: parseLocalDateFromYMD(validatedData.date),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
+    // Only add description if it's not undefined or empty
+    if (validatedData.description && validatedData.description.trim() !== '') {
+      workshopData.description = validatedData.description;
+    }
 
     const docRef = await addDoc(collection(db, 'yep_workshops'), workshopData);
     
@@ -318,12 +431,26 @@ export async function createWorkshop(data: z.infer<typeof workshopSchema>) {
 export async function updateWorkshop(id: string, data: Partial<z.infer<typeof workshopSchema>>) {
   try {
     const updateData: any = {
-      ...data,
       updatedAt: serverTimestamp(),
     };
 
+    // Only include fields that are defined and not empty
+    if (data.title) {
+      updateData.title = data.title;
+    }
+    
     if (data.date) {
-      updateData.date = new Date(data.date);
+      updateData.date = parseLocalDateFromYMD(data.date);
+    }
+
+    // Only update description if it's provided and not empty
+    if (data.description !== undefined) {
+      if (data.description && data.description.trim() !== '') {
+        updateData.description = data.description;
+      } else {
+        // If description is empty, remove it from the document
+        updateData.description = null;
+      }
     }
 
     await updateDoc(doc(db, 'yep_workshops', id), updateData);
@@ -352,13 +479,17 @@ export async function getWorkshops() {
   try {
     const q = query(collection(db, 'yep_workshops'), orderBy('date', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: doc.data().date?.toDate() || new Date(),
-      createdAt: doc.data().createdAt?.toDate() || new Date(),
-      updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title || '',
+        description: data.description || '',
+        date: data.date?.toDate() || new Date(),
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
   } catch (error) {
     console.error('Error fetching workshops:', error);
     return [];
@@ -462,6 +593,26 @@ export async function getAdvisorMeetings(filters?: {
   } catch (error) {
     console.error('Error fetching meetings:', error);
     return [];
+  }
+}
+
+export async function updateAdvisorMeeting(id: string, data: Partial<z.infer<typeof meetingSchema>>) {
+  try {
+    const updateData: any = {
+      ...data,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (data.meetingDate) {
+      updateData.meetingDate = new Date(data.meetingDate);
+    }
+
+    await updateDoc(doc(db, 'yep_advisor_meetings', id), updateData);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating meeting:', error);
+    return { error: error instanceof Error ? error.message : 'Failed to update meeting' };
   }
 }
 

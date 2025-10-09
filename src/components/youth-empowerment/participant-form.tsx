@@ -17,12 +17,18 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Upload, FileText, Eye, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createParticipant, updateParticipant, getMentors } from '@/app/youth-empowerment/actions';
-import { regionOptions, canadianStatusOptions, validateSIN } from '@/lib/youth-empowerment';
+import { regionOptions, canadianStatusOptions, validateSINLenient } from '@/lib/youth-empowerment';
+import { SINSecureField } from '@/components/yep-forms/sin-secure-field';
+import { SelectWithOther } from '@/components/ui/select-with-other';
+import { AvailabilitySelector } from '@/components/youth-empowerment/availability-selector';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 const participantFormSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
   email: z.string().email('Valid email is required'),
+  etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
+  mailingAddress: z.string().optional(),
+  phoneNumber: z.string().optional(),
   region: z.string().min(1, 'Region is required'),
   approved: z.boolean().default(false),
   contractSigned: z.boolean().default(false),
@@ -31,12 +37,25 @@ const participantFormSchema = z.object({
   assignedMentor: z.string().optional(),
   idProvided: z.boolean().default(false),
   canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']),
-  sin: z.string().optional().refine((val) => !val || validateSIN(val), 'Invalid SIN format'),
+  canadianStatusOther: z.string().optional(),
+  sin: z.string().optional().refine((val) => {
+    // Only validate if the value exists and is not empty
+    if (!val || val.trim() === '') return true;
+    return validateSINLenient(val);
+  }, 'Invalid SIN format'),
   youthProposal: z.string().optional(),
   proofOfAffiliationWithSCD: z.boolean().default(false),
   scagoCounterpart: z.string().optional(),
   dob: z.string().min(1, 'Date of birth is required'),
   file: z.instanceof(File).optional(),
+}).superRefine((data, ctx) => {
+  if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your status when "Other" is selected',
+      path: ['canadianStatusOther'],
+    });
+  }
 });
 
 type ParticipantFormData = z.infer<typeof participantFormSchema>;
@@ -57,9 +76,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
   const form = useForm<ParticipantFormData>({
     resolver: zodResolver(participantFormSchema),
+    mode: 'onSubmit', // Only validate on submit, not on every change
     defaultValues: {
       youthParticipant: participant?.youthParticipant || '',
       email: participant?.email || '',
+      etransferEmailAddress: participant?.etransferEmailAddress || '',
+      mailingAddress: participant?.mailingAddress || '',
+      phoneNumber: participant?.phoneNumber || '',
       region: participant?.region || '',
       approved: participant?.approved || false,
       contractSigned: participant?.contractSigned || false,
@@ -68,6 +91,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       assignedMentor: participant?.assignedMentor || '',
       idProvided: participant?.idProvided || false,
       canadianStatus: participant?.canadianStatus || 'Canadian Citizen',
+      canadianStatusOther: participant?.canadianStatusOther || '',
       sin: '', // Never pre-fill SIN for security
       youthProposal: participant?.youthProposal || '',
       proofOfAffiliationWithSCD: participant?.proofOfAffiliationWithSCD || false,
@@ -81,9 +105,73 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       loadMentors();
       if (participant?.fileUrl) {
         setExistingFileUrl(participant.fileUrl);
+      } else {
+        setExistingFileUrl(null);
       }
     }
   }, [isOpen, participant]);
+
+  // Reset form when participant changes
+  useEffect(() => {
+    if (participant) {
+      form.reset({
+        youthParticipant: participant.youthParticipant || '',
+        email: participant.email || '',
+        etransferEmailAddress: participant.etransferEmailAddress || '',
+        mailingAddress: participant.mailingAddress || '',
+        phoneNumber: participant.phoneNumber || '',
+        region: participant.region || '',
+        approved: participant.approved || false,
+        contractSigned: participant.contractSigned || false,
+        signedSyllabus: participant.signedSyllabus || false,
+        availability: participant.availability || '',
+        assignedMentor: participant.assignedMentor || '',
+        idProvided: participant.idProvided || false,
+        canadianStatus: participant.canadianStatus || 'Canadian Citizen',
+        canadianStatusOther: participant.canadianStatusOther || '',
+        sin: '', // Never pre-fill SIN for security - always empty when editing
+        youthProposal: participant.youthProposal || '',
+        proofOfAffiliationWithSCD: participant.proofOfAffiliationWithSCD || false,
+        scagoCounterpart: participant.scagoCounterpart || '',
+        dob: participant.dob || '',
+      });
+      // Explicitly clear the SIN field to ensure it's completely empty
+      form.setValue('sin', '');
+      // Clear any validation errors for SIN field
+      form.clearErrors('sin');
+      // Reset file states
+      setUploadedFile(null);
+      setExistingFileUrl(participant.fileUrl || null);
+    } else {
+      // Reset to default values for new participant
+      form.reset({
+        youthParticipant: '',
+        email: '',
+        etransferEmailAddress: '',
+        mailingAddress: '',
+        phoneNumber: '',
+        region: '',
+        approved: false,
+        contractSigned: false,
+        signedSyllabus: false,
+        availability: '',
+        assignedMentor: '',
+        idProvided: false,
+        canadianStatus: 'Canadian Citizen',
+        canadianStatusOther: '',
+        sin: '',
+        youthProposal: '',
+        proofOfAffiliationWithSCD: false,
+        scagoCounterpart: '',
+        dob: '',
+      });
+      // Reset file states for new participant
+      setUploadedFile(null);
+      setExistingFileUrl(null);
+      // Clear any validation errors for SIN field
+      form.clearErrors('sin');
+    }
+  }, [participant?.id, form]); // Only depend on participant ID, not the entire participant object
 
   const loadMentors = async () => {
     try {
@@ -111,10 +199,37 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   const onSubmit = async (data: ParticipantFormData) => {
     setIsLoading(true);
     try {
-      const formData = {
-        ...data,
-        file: uploadedFile || undefined,
+      // Clean the data to remove undefined values
+      const formData: any = {
+        youthParticipant: data.youthParticipant,
+        email: data.email,
+        etransferEmailAddress: data.etransferEmailAddress || '',
+        mailingAddress: data.mailingAddress || '',
+        phoneNumber: data.phoneNumber || '',
+        region: data.region,
+        approved: data.approved,
+        contractSigned: data.contractSigned,
+        signedSyllabus: data.signedSyllabus,
+        availability: data.availability || '',
+        assignedMentor: data.assignedMentor || '',
+        idProvided: data.idProvided,
+        canadianStatus: data.canadianStatus,
+        canadianStatusOther: data.canadianStatusOther || '',
+        youthProposal: data.youthProposal || '',
+        proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD,
+        scagoCounterpart: data.scagoCounterpart || '',
+        dob: data.dob,
       };
+
+      // Only include SIN if provided and not empty
+      if (data.sin && data.sin.trim() !== '') {
+        formData.sin = data.sin;
+      }
+
+      // Only include file if a new one is uploaded
+      if (uploadedFile) {
+        formData.file = uploadedFile;
+      }
 
       let result;
       if (participant) {
@@ -154,8 +269,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -202,6 +319,61 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                         <FormControl>
                           <Input type="email" {...field} placeholder="participant@example.com" />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="etransferEmailAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>E-transfer Email Address</FormLabel>
+                        <FormControl>
+                          <Input type="email" {...field} placeholder="etransfer@example.com" />
+                        </FormControl>
+                        <FormDescription>
+                          Email address for receiving e-transfers (optional)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input type="tel" {...field} placeholder="(555) 123-4567" />
+                        </FormControl>
+                        <FormDescription>
+                          Contact phone number (optional)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="mailingAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mailing Address</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field} 
+                            placeholder="123 Main St, City, Province, Postal Code"
+                            rows={3}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Full mailing address (optional)
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -380,10 +552,14 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                       <FormItem>
                         <FormLabel>Availability</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., Mon–Wed, 4:00–9:00" />
+                          <AvailabilitySelector
+                            value={field.value}
+                            onChange={field.onChange}
+                            disabled={false}
+                          />
                         </FormControl>
                         <FormDescription>
-                          Describe when the participant is available
+                          Select days and time slots when the participant is available
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -447,24 +623,43 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Canadian Status *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
+                        <FormControl>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {canadianStatusOptions.map((status) => (
-                              <SelectItem key={status} value={status}>
-                                {status}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            <SelectContent>
+                              {canadianStatusOptions.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  
+                  {form.watch('canadianStatus') === 'Other' && (
+                    <FormField
+                      control={form.control}
+                      name="canadianStatusOther"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Please specify your status</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder="Please specify your Canadian status"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}
@@ -472,15 +667,26 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>SIN (Social Insurance Number)</FormLabel>
+                        {participant?.sinLast4 && (
+                          <Alert className="mb-2">
+                            <AlertDescription>
+                              A SIN was previously provided (ending in: ••••{participant.sinLast4}). 
+                              Re-enter the full SIN to update it, or leave blank to keep the existing one.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                         <FormControl>
-                          <Input 
-                            {...field} 
-                            type="password" 
-                            placeholder="Enter SIN (will be securely hashed)"
+                          <SINSecureField
+                            value={participant ? '' : (field.value || '')}
+                            onChange={field.onChange}
+                            disabled={!form.watch('idProvided')}
+                            placeholder={participant?.sinLast4 ? "Re-enter SIN to update, or leave blank" : "Enter SIN (will be securely hashed)"}
+                            showValidation={true}
+                            isEditing={!!participant}
                           />
                         </FormControl>
                         <FormDescription>
-                          Only the last 4 digits will be stored for reference
+                          Only the last 4 digits will be stored for reference. Enable "ID Provided" to enter SIN.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

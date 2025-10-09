@@ -20,7 +20,7 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
-import { getParticipants, getWorkshops, getWorkshopAttendance, getAdvisorMeetings } from '@/app/youth-empowerment/actions';
+import { getParticipants, getWorkshops, getWorkshopAttendance, getAdvisorMeetings, getMentors } from '@/app/youth-empowerment/actions';
 import { YEPParticipant, YEPWorkshop } from '@/lib/youth-empowerment';
 
 interface AttendanceAnalytics {
@@ -68,11 +68,12 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
   const loadAnalytics = async () => {
     setIsLoading(true);
     try {
-      const [participants, workshops, attendance, meetings] = await Promise.all([
+      const [participants, workshops, attendance, meetings, mentors] = await Promise.all([
         getParticipants(),
         getWorkshops(),
         getWorkshopAttendance(),
         getAdvisorMeetings(),
+        getMentors(),
       ]);
 
       // Filter by time range
@@ -83,7 +84,7 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
       const filteredWorkshops = workshops.filter(w => new Date(w.date) >= startDate);
       const filteredMeetings = meetings.filter(m => new Date(m.meetingDate) >= startDate);
       const filteredAttendance = attendance.filter(a => {
-        const workshop = workshops.find(w => w.id === a.workshopId);
+        const workshop = workshops.find((w: any) => w.id === (a as any).workshopId);
         return workshop && new Date(workshop.date) >= startDate;
       });
 
@@ -111,8 +112,8 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
 
       // Top performers
       const topPerformers = filteredParticipants.map(participant => {
-        const participantAttendance = filteredAttendance.filter(a => a.participantId === participant.id);
-        const participantMeetings = filteredMeetings.filter(m => m.participantId === participant.id);
+        const participantAttendance = filteredAttendance.filter((a: any) => a.participantId === participant.id);
+        const participantMeetings = filteredMeetings.filter((m: any) => m.participantId === participant.id);
         const attendanceRate = filteredWorkshops.length > 0 
           ? (participantAttendance.length / filteredWorkshops.length) * 100 
           : 0;
@@ -131,10 +132,10 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
       regions.forEach(region => {
         const regionParticipants = filteredParticipants.filter(p => p.region === region);
         const regionAttendance = filteredAttendance.filter(a => 
-          regionParticipants.some(p => p.id === a.participantId)
+          regionParticipants.some((p: any) => p.id === (a as any).participantId)
         );
         const regionMeetings = filteredMeetings.filter(m => 
-          regionParticipants.some(p => p.id === m.participantId)
+          regionParticipants.some((p: any) => p.id === (m as any).participantId)
         );
 
         regionalStats[region] = {
@@ -148,21 +149,24 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
         };
       });
 
-      // Mentor stats (simplified - would need mentor data)
-      const mentorStats = [
-        {
-          mentorName: 'Sample Mentor 1',
-          assignedStudents: 5,
-          averageAttendance: 85,
-          meetingsConducted: 12,
-        },
-        {
-          mentorName: 'Sample Mentor 2',
-          assignedStudents: 3,
-          averageAttendance: 92,
-          meetingsConducted: 8,
-        },
-      ];
+      // Mentor stats - calculate from actual mentor data
+      const mentorStats = mentors.map(mentor => {
+        const mentorMeetings = filteredMeetings.filter((m: any) => m.advisorId === mentor.id);
+        const mentorAttendance = filteredAttendance.filter(a => 
+          mentor.assignedStudents?.includes((a as any).participantId)
+        );
+        
+        const averageAttendance = mentor.assignedStudents && mentor.assignedStudents.length > 0
+          ? (mentorAttendance.length / (filteredWorkshops.length * mentor.assignedStudents.length)) * 100
+          : 0;
+
+        return {
+          mentorName: mentor.name,
+          assignedStudents: mentor.assignedStudents?.length || 0,
+          averageAttendance: averageAttendance,
+          meetingsConducted: mentorMeetings.length,
+        };
+      });
 
       // Time-based trends (simplified)
       const timeBasedTrends = [];
@@ -179,7 +183,7 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
                  meetingDate.getFullYear() === monthDate.getFullYear();
         });
         const monthAttendance = filteredAttendance.filter(a => {
-          const workshop = workshops.find(w => w.id === a.workshopId);
+          const workshop = workshops.find((w: any) => w.id === (a as any).workshopId);
           if (!workshop) return false;
           const workshopDate = new Date(workshop.date);
           return workshopDate.getMonth() === monthDate.getMonth() && 
@@ -299,7 +303,13 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
             <p className="text-xs text-muted-foreground">
               Across all workshops and participants
             </p>
-            <Progress value={analytics.overallAttendanceRate} className="mt-2" />
+            {analytics.overallAttendanceRate === 0 ? (
+              <div className="h-2 w-full bg-muted rounded-full mt-2">
+                <div className="h-full w-0 bg-muted-foreground/20 rounded-full" />
+              </div>
+            ) : (
+              <Progress value={analytics.overallAttendanceRate} className="mt-2" />
+            )}
           </CardContent>
         </Card>
 
@@ -313,7 +323,13 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
             <p className="text-xs text-muted-foreground">
               Workshop participation rate
             </p>
-            <Progress value={analytics.workshopAttendanceRate} className="mt-2" />
+            {analytics.workshopAttendanceRate === 0 ? (
+              <div className="h-2 w-full bg-muted rounded-full mt-2">
+                <div className="h-full w-0 bg-muted-foreground/20 rounded-full" />
+              </div>
+            ) : (
+              <Progress value={analytics.workshopAttendanceRate} className="mt-2" />
+            )}
           </CardContent>
         </Card>
 
@@ -327,7 +343,13 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
             <p className="text-xs text-muted-foreground">
               Advisor meeting participation
             </p>
-            <Progress value={analytics.meetingAttendanceRate} className="mt-2" />
+            {analytics.meetingAttendanceRate === 0 ? (
+              <div className="h-2 w-full bg-muted rounded-full mt-2">
+                <div className="h-full w-0 bg-muted-foreground/20 rounded-full" />
+              </div>
+            ) : (
+              <Progress value={analytics.meetingAttendanceRate} className="mt-2" />
+            )}
           </CardContent>
         </Card>
       </div>

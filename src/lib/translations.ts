@@ -114,7 +114,7 @@ export interface Translation {
   myChildHasSickleCellDisease: string;
   iAmCaregiverOrFamilyMember: string;
   iAmHealthcareProvider: string;
-  other: string;
+  // other: string; // Duplicate removed
   ifApplicableListNames: string;
   individualName: string;
   dateOfBirth: string;
@@ -123,7 +123,7 @@ export interface Translation {
   stayConnected: string;
   mayWeContactYou: string;
   preferredMethodOfContact: string;
-  email: string;
+  // email: string; // Duplicate removed
   phoneTextPhonecall: string;
   either: string;
   wouldYouLikeToJoinMailingList: string;
@@ -353,7 +353,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     myChildHasSickleCellDisease: 'My child has sickle cell disease',
     iAmCaregiverOrFamilyMember: 'I am a caregiver or family member',
     iAmHealthcareProvider: 'I am a healthcare provider',
-    other: 'Other',
+    // Removed duplicate 'other'
     ifApplicableListNames: 'If applicable, list the names and birthdates of individuals with SCD in your household',
     individualName: 'Name',
     dateOfBirth: 'Date of Birth',
@@ -362,7 +362,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     stayConnected: 'Stay Connected',
     mayWeContactYou: 'May we contact you about SCAGO services, programs, or events?',
     preferredMethodOfContact: 'Preferred method of contact',
-    email: 'Email',
+    // Removed duplicate 'email'
     phoneTextPhonecall: 'Phone (Text/Phone call)',
     either: 'Either',
     wouldYouLikeToJoinMailingList: 'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?',
@@ -568,7 +568,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     myChildHasSickleCellDisease: 'Mon enfant a la drépanocytose',
     iAmCaregiverOrFamilyMember: 'Je suis un aidant ou un membre de la famille',
     iAmHealthcareProvider: 'Je suis un professionnel de la santé',
-    other: 'Autre',
+    // other: 'Autre', // Duplicate removed
     ifApplicableListNames: 'Si applicable, listez les noms et dates de naissance des personnes atteintes de drépanocytose dans votre foyer',
     individualName: 'Nom',
     dateOfBirth: 'Date de Naissance',
@@ -577,7 +577,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     stayConnected: 'Restez Connecté',
     mayWeContactYou: 'Pouvons-nous vous contacter au sujet des services, programmes ou événements de SCAGO?',
     preferredMethodOfContact: 'Méthode de contact préférée',
-    email: 'Courriel',
+    // email: 'Courriel', // Duplicate removed
     phoneTextPhonecall: 'Téléphone (SMS/Appel)',
     either: 'L\'un ou l\'autre',
     wouldYouLikeToJoinMailingList: 'Aimeriez-vous vous inscrire à la liste de diffusion de SCAGO pour les mises à jour, bulletins et nouvelles de plaidoyer?',
@@ -707,7 +707,7 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
     'Stay Connected': 'stayConnected',
     'May we contact you about SCAGO services, programs, or events?': 'mayWeContactYou',
     'Preferred method of contact': 'preferredMethodOfContact',
-    'Email': 'email',
+    // 'Email': 'email', // Duplicate removed
     'Phone (Text/Phone call)': 'phoneTextPhonecall',
     'Either': 'either',
     'Would you like to join SCAGO\'s mailing list for updates, newsletters, and advocacy news?': 'wouldYouLikeToJoinMailingList',
@@ -728,7 +728,7 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
     'Individual 3 - Name': 'individual3Name',
     'Individual 3 - Date of Birth': 'individual3DateOfBirth',
     'How should we contact you about support groups?': 'howShouldWeContactYouAboutSupportGroups',
-    'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?': 'doYouConsentToScagoStaffAdvocating'
+    // 'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?': 'doYouConsentToScagoStaffAdvocating' // Duplicate removed
   };
   
   const mappedKey = labelMappings[label];
