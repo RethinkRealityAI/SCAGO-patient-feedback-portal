@@ -26,6 +26,18 @@ export interface YEPParticipant {
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
+  // New fields from current participants data
+  age?: number;
+  citizenshipStatus?: string;
+  location?: string;
+  projectCategory?: string;
+  duties?: string;
+  affiliationWithSCD?: string;
+  notes?: string;
+  nextSteps?: string;
+  interviewed?: boolean;
+  interviewNotes?: string;
+  recruited?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

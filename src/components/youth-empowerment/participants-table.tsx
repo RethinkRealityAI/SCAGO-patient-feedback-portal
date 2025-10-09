@@ -281,6 +281,9 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                   <TableHead>Contact Info</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Region</TableHead>
+                  <TableHead>Age</TableHead>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Recruitment</TableHead>
                   <TableHead>Mentor</TableHead>
                   <TableHead>Documents</TableHead>
                   <TableHead>File</TableHead>
@@ -290,7 +293,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
               <TableBody>
                 {filteredParticipants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       No participants found
                     </TableCell>
                   </TableRow>
@@ -340,6 +343,44 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                         <div className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {participant.region}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {participant.age ? (
+                          <span className="text-sm">{participant.age}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {participant.projectCategory ? (
+                          <div className="text-sm">
+                            <div className="font-medium">{participant.projectCategory}</div>
+                            {participant.duties && (
+                              <div className="text-muted-foreground truncate max-w-[150px]" title={participant.duties}>
+                                {participant.duties}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {participant.recruited && (
+                            <Badge variant="default" className="text-xs">
+                              Recruited
+                            </Badge>
+                          )}
+                          {participant.interviewed && (
+                            <Badge variant="outline" className="text-xs">
+                              Interviewed
+                            </Badge>
+                          )}
+                          {!participant.recruited && !participant.interviewed && (
+                            <span className="text-muted-foreground text-sm">Pending</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

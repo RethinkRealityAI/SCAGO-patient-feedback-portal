@@ -73,14 +73,14 @@ export const yepFormTemplates: YEPFormTemplate[] = [
         description: 'Personal information and program details',
         fields: [
           {
-            id: 'fullName',
+            id: 'youthParticipant',
             label: 'Full Name',
             type: 'text',
             required: true,
             placeholder: 'Enter full name'
           },
           {
-            id: 'dateOfBirth',
+            id: 'dob',
             label: 'Date of Birth',
             type: 'date',
             required: true
@@ -93,14 +93,14 @@ export const yepFormTemplates: YEPFormTemplate[] = [
             placeholder: 'Enter email address'
           },
           {
-            id: 'phone',
+            id: 'phoneNumber',
             label: 'Phone Number',
             type: 'text',
             required: false,
             placeholder: 'Enter phone number'
           },
           {
-            id: 'address',
+            id: 'mailingAddress',
             label: 'Address',
             type: 'textarea',
             required: false,
@@ -128,6 +128,53 @@ export const yepFormTemplates: YEPFormTemplate[] = [
               { id: '2', label: 'Permanent Resident', value: 'permanent' },
               { id: '3', label: 'Other', value: 'other' }
             ]
+          },
+          {
+            id: 'age',
+            label: 'Age',
+            type: 'number',
+            required: false,
+            placeholder: 'Enter age'
+          },
+          {
+            id: 'location',
+            label: 'Location',
+            type: 'text',
+            required: false,
+            placeholder: 'City, Province'
+          },
+          {
+            id: 'projectCategory',
+            label: 'Project Category',
+            type: 'text',
+            required: false,
+            placeholder: 'e.g., Advocacy, Education, Community Engagement'
+          },
+          {
+            id: 'duties',
+            label: 'Duties/Responsibilities',
+            type: 'textarea',
+            required: false,
+            placeholder: 'Describe specific duties and responsibilities'
+          },
+          {
+            id: 'affiliationWithSCD',
+            label: 'Affiliation with SCD',
+            type: 'text',
+            required: false,
+            placeholder: 'e.g., Living with SCD, Advocate, Sibling of someone with SCD'
+          },
+          {
+            id: 'interviewed',
+            label: 'Interviewed',
+            type: 'checkbox',
+            required: false
+          },
+          {
+            id: 'recruited',
+            label: 'Recruited',
+            type: 'checkbox',
+            required: false
           }
         ]
       }
