@@ -69,11 +69,17 @@ export function WorkshopForm({ workshop, isOpen, onClose, onSuccess }: WorkshopF
   const onSubmit = async (data: WorkshopFormData) => {
     setIsLoading(true);
     try {
+      // Handle "none" value for feedbackSurveyId
+      const processedData = {
+        ...data,
+        feedbackSurveyId: data.feedbackSurveyId === 'none' ? undefined : data.feedbackSurveyId
+      };
+      
       let result;
       if (workshop) {
-        result = await updateWorkshop(workshop.id, data);
+        result = await updateWorkshop(workshop.id, processedData);
       } else {
-        result = await createWorkshop(data);
+        result = await createWorkshop(processedData);
       }
 
       if (result.success) {
@@ -256,7 +262,7 @@ export function WorkshopForm({ workshop, isOpen, onClose, onSuccess }: WorkshopF
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">No survey</SelectItem>
+                          <SelectItem value="none">No survey</SelectItem>
                           {surveys.map((survey) => (
                             <SelectItem key={survey.id} value={survey.id}>
                               {survey.title}
