@@ -403,7 +403,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedStudents.includes(participant.id)}
-                            readOnly
+                            disabled
                             className="pointer-events-none"
                           />
                           <div className="flex-1">
@@ -535,7 +535,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
-                        readOnly
+                        disabled
                         className="pointer-events-none"
                       />
                       <Label className="text-sm cursor-pointer pointer-events-none">{topic}</Label>

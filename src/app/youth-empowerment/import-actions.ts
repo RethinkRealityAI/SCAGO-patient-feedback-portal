@@ -16,7 +16,6 @@ import {
   createParticipant, 
   createMentor, 
   createWorkshop, 
-  createWorkshopAttendance, 
   createAdvisorMeeting,
   getParticipants,
   getMentors,
@@ -74,17 +73,13 @@ export async function importParticipants(
       if (Object.keys(duplicates).length > 0 && options.skipDuplicates) {
         result.skipped = Object.values(duplicates).flat().length;
         result.message = `Skipped ${result.skipped} duplicate records`;
-        return result; // Return early if skipping duplicates
       }
     }
 
-    // Process in batches - optimize batch size for large datasets
-    let batchSize = options.batchSize || 50;
-    if (convertedData.length > 1000) {
-      batchSize = Math.min(batchSize, 25); // Smaller batches for large datasets
-    }
-    
+    // Process in batches
+    const batchSize = options.batchSize || 50;
     const batches = [];
+    
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
