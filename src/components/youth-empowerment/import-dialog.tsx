@@ -393,14 +393,14 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
                           <TableCell className="font-medium">{column}</TableCell>
                           <TableCell>
                             <Select
-                              value={mapping[column] || ''}
+                              value={(mapping[column] as string) || 'skip'}
                               onValueChange={(value) => handleMappingChange(column, value)}
                             >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select field" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">Skip this column</SelectItem>
+                                <SelectItem value="skip">Skip this column</SelectItem>
                                 {selectedDataType?.requiredFields.map(field => (
                                   <SelectItem key={field} value={field}>
                                     {field} (Required)

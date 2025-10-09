@@ -38,6 +38,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useState, useEffect, useMemo } from "react"
+import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { provinces, ontarioCities } from "@/lib/location-data"
@@ -352,14 +353,14 @@ function SelectWithOtherField({ field, options, label, isFrench = false }: { fie
                 render={({ field: selectionField }) => (
                     <FormItem>
                         {/* label suppressed to avoid redundancy; placeholder covers */}
-                        <Select onValueChange={selectionField.onChange} defaultValue={selectionField.value ?? ''}>
+                        <Select onValueChange={selectionField.onChange} value={coerceSelectValue(selectionField.value)}>
                             <FormControl>
                                 <SelectTrigger className="max-w-md">
                                     <SelectValue placeholder={isFrench ? `Sélectionnez ${label.toLowerCase() === 'city' ? 'une ville' : label.toLowerCase() === 'department' ? 'un département' : 'une option'}` : `Select a ${label.toLowerCase()}`} />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                {options.map((option) => (
+                                {sanitizeOptions(options).map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
                                         {translateOption(option.label, isFrench ? 'fr' : 'en')}
                                     </SelectItem>
@@ -844,12 +845,12 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     case 'province-ca':
                         const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
                         return (
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={coerceSelectValue(field.value)}>
                                 <SelectTrigger className="max-w-md">
                                 <SelectValue placeholder={translateOption("Select an option", isFrench ? 'fr' : 'en')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                {options.map((option) => (
+                                {sanitizeOptions(options).map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
                                     {translateOption(option.label, isFrench ? 'fr' : 'en')}
                                     </SelectItem>

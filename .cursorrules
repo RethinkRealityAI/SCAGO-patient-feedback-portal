@@ -451,6 +451,160 @@ npm run lint
 - Loading states for all async operations
 - Toast notifications for user feedback
 
+## Import System Rules
+
+### Import System Architecture
+The YEP Data Import System provides comprehensive bulk data import functionality with intelligent field mapping, validation, and error reporting.
+
+#### Core Components
+- **`src/lib/import-utils.ts`**: Core import utilities, parsing, validation, and field mapping
+- **`src/app/youth-empowerment/import-actions.ts`**: Server-side import processing with batch operations
+- **`src/components/youth-empowerment/import-dialog.tsx`**: 5-step wizard UI for import process
+- **`src/app/admin/page.tsx`**: Admin panel integration
+
+#### Import System Rules
+1. **Always use existing CRUD functions** - Never bypass validation by directly manipulating Firestore
+2. **Use proper batch processing** - Configurable batch sizes for large datasets
+3. **Comprehensive error handling** - Detailed error reporting with row numbers and field names
+4. **Type-safe imports** - Never use `any` for import data, use proper TypeScript types
+5. **Field mapping intelligence** - Provide automatic mapping suggestions with fuzzy matching
+6. **Data validation** - Always validate against schemas before processing
+7. **Security compliance** - Use existing authentication and data sanitization
+
+#### Import Data Types
+```typescript
+// Supported import types
+type ImportTable = 'participants' | 'mentors' | 'workshops' | 'attendance' | 'meetings';
+
+// Required fields for each type
+const REQUIRED_FIELDS = {
+  participants: ['youthParticipant', 'email', 'region', 'dob', 'canadianStatus'],
+  mentors: ['name', 'title', 'email'],
+  workshops: ['title', 'date', 'description'],
+  attendance: ['participantId', 'workshopId', 'attended'],
+  meetings: ['participantId', 'mentorId', 'meetingDate', 'type']
+};
+```
+
+#### Import Processing Pattern
+```typescript
+// Always follow this pattern for import actions
+export async function importData(
+  data: any[],
+  options: ImportOptions,
+  mapping: ImportMapping
+): Promise<ImportResult> {
+  // 1. Map CSV columns to database fields
+  // 2. Validate data against schema
+  // 3. Convert data types safely
+  // 4. Process in configurable batches
+  // 5. Use existing CRUD functions
+  // 6. Return comprehensive results
+}
+```
+
+#### Field Mapping Rules
+```typescript
+// Always provide comprehensive field mapping options
+const fieldMappings = {
+  'youthParticipant': ['name', 'participant', 'youth', 'student', 'full name'],
+  'email': ['email', 'e-mail', 'email address'],
+  'phoneNumber': ['phone', 'telephone', 'mobile', 'cell', 'contact number'],
+  'region': ['region', 'province', 'state', 'location'],
+  'dob': ['dob', 'date of birth', 'birthday', 'birth date'],
+  'age': ['age', 'years old'],
+  'canadianStatus': ['citizenship', 'canadian', 'status', 'citizen']
+  // ... more mappings
+};
+```
+
+#### Import UI Rules
+```typescript
+// Always use 5-step wizard structure
+const steps = [
+  'select',    // Select data type
+  'upload',    // Upload file
+  'mapping',   // Field mapping
+  'preview',   // Data preview
+  'import'     // Import results
+];
+
+// Always provide comprehensive field options
+const fieldOptions = [
+  // Required fields first
+  ...requiredFields.map(field => `${field} (Required)`),
+  // Optional fields
+  ...optionalFields.map(field => `${field} (Optional)`)
+];
+```
+
+#### Error Handling Rules
+```typescript
+// Always provide detailed error information
+interface ImportError {
+  row: number;           // Row number for user reference
+  field?: string;       // Field name if applicable
+  message: string;      // Human-readable error message
+  value?: any;          // The problematic value
+}
+
+// Always show errors in user-friendly format
+{errors.length > 0 && (
+  <div className="error-display">
+    {errors.slice(0, 10).map((error, index) => (
+      <div key={index} className="error-item">
+        <span>Row {error.row}:</span> {error.message}
+      </div>
+    ))}
+  </div>
+)}
+```
+
+#### Security Rules for Imports
+1. **Admin-only access** for import functionality
+2. **Data sanitization** before processing
+3. **SIN hashing** for sensitive participant data
+4. **Audit logging** for all import operations
+5. **Role-based permissions** for different import types
+
+#### Performance Rules for Imports
+1. **Configurable batch sizes** - Default 50, smaller for large datasets
+2. **Memory-efficient processing** - Process in chunks
+3. **Progress tracking** - Show import progress to users
+4. **Error recovery** - Continue processing after individual record failures
+
+#### Common Import Patterns
+```typescript
+// Adding new import types
+// 1. Add to TABLE_SCHEMAS
+// 2. Add import function to import-actions.ts
+// 3. Add to dataTypes array in import-dialog.tsx
+// 4. Update field mapping options
+
+// Adding new field types
+// 1. Add to schema types
+// 2. Add validation logic
+// 3. Add conversion logic
+// 4. Update UI field options
+```
+
+#### Import System Anti-Patterns
+❌ **Don't**:
+- Use `any` types for import data
+- Bypass existing CRUD functions
+- Skip validation for performance
+- Process all data in a single batch
+- Ignore error handling
+- Use direct Firestore operations
+
+✅ **Do**:
+- Use proper TypeScript types
+- Leverage existing CRUD functions
+- Validate all data before processing
+- Use configurable batch sizes
+- Handle all error cases
+- Use server actions for database operations
+
 ## Rule Maintenance & Evolution
 
 ### How to Update These Rules

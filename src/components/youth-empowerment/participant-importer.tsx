@@ -33,7 +33,7 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
   const [rawCsv, setRawCsv] = useState('');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<RowObject[]>([]);
-  const [mapping, setMapping] = useState<Record<string, TargetField | ''>>({});
+  const [mapping, setMapping] = useState<Record<string, TargetField | 'skip'>>({});
   const [isMappingLoading, setIsMappingLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -49,7 +49,7 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
     const cols = result.meta.fields || Object.keys(data[0] || {});
     setHeaders(cols);
     setRows(data.slice(0, 500)); // safety cap
-    setMapping(Object.fromEntries(cols.map(h => [h, '' as const])));
+    setMapping(Object.fromEntries(cols.map(h => [h, 'skip' as const])));
   }, [toast]);
 
   const handleFile = useCallback((file: File) => {
@@ -65,7 +65,7 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
         const cols = res.meta.fields || Object.keys(data[0] || {});
         setHeaders(cols);
         setRows(data.slice(0, 500));
-        setMapping(Object.fromEntries(cols.map(h => [h, '' as const])));
+        setMapping(Object.fromEntries(cols.map(h => [h, 'skip' as const])));
       },
     });
   }, [toast]);
@@ -83,10 +83,10 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
       const json = await resp.json();
       if (!json.success) throw new Error(json.error || 'Mapping failed');
       const aiMap: Record<string, string> = json.data.mapping || {};
-      const next: Record<string, TargetField | ''> = {};
+      const next: Record<string, TargetField | 'skip'> = {};
       for (const h of headers) {
         const proposed = aiMap[h];
-        next[h] = (TargetFields as readonly string[]).includes(proposed) ? (proposed as TargetField) : '';
+        next[h] = (TargetFields as readonly string[]).includes(proposed) ? (proposed as TargetField) : 'skip';
       }
       setMapping(next);
     } catch (e) {
@@ -100,7 +100,7 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
     return rows.slice(0, 5).map((r) => {
       const obj: Record<string, string> = {};
       for (const [col, target] of Object.entries(mapping)) {
-        if (!target) continue;
+        if (!target || target === 'skip') continue;
         obj[target] = (r[col] ?? '').toString();
       }
       return obj;
@@ -123,7 +123,7 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
       for (const r of rows) {
         const obj: any = {};
         for (const [col, target] of Object.entries(mapping)) {
-          if (!target) continue;
+          if (!target || target === 'skip') continue;
           obj[target] = (r[col] ?? '').toString().trim();
         }
 
@@ -203,12 +203,12 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
                       <TableRow key={h}>
                         <TableCell>{h}</TableCell>
                         <TableCell>
-                          <Select value={mapping[h] || ''} onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v as TargetField }))}>
+                          <Select value={mapping[h] || 'skip'} onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v as TargetField | 'skip' }))}>
                             <SelectTrigger className="w-72">
                               <SelectValue placeholder="Do not import" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Do not import</SelectItem>
+                              <SelectItem value="skip">Do not import</SelectItem>
                               {TargetFields.map(tf => (
                                 <SelectItem key={tf} value={tf}>{tf}</SelectItem>
                               ))}

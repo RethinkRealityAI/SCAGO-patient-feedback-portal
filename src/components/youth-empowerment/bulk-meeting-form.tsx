@@ -304,7 +304,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                           </FormControl>
                           <SelectContent>
                             {mentors.length === 0 ? (
-                              <SelectItem value="" disabled>
+                              <SelectItem value="no-mentors" disabled>
                                 <div className="flex flex-col">
                                   <span className="font-medium text-muted-foreground">No mentors available</span>
                                   <span className="text-sm text-muted-foreground">

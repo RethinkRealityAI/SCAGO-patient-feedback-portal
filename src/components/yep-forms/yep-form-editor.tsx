@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useTransition } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray, Controller, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -43,6 +43,34 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
     control: form.control,
     name: 'sections',
   });
+
+  // Field management functions
+  const addField = (sectionIndex: number) => {
+    const newField: YEPField = {
+      id: `field_${Date.now()}`,
+      type: 'text',
+      label: 'New Field',
+      placeholder: '',
+      required: false,
+      validation: {},
+    };
+    
+    const currentSection = sections[sectionIndex];
+    if (currentSection) {
+      form.setValue(`sections.${sectionIndex}.fields`, [
+        ...(currentSection.fields || []),
+        newField
+      ]);
+    }
+  };
+
+  const removeField = (sectionIndex: number, fieldIndex: number) => {
+    const currentSection = sections[sectionIndex];
+    if (currentSection && currentSection.fields) {
+      const updatedFields = currentSection.fields.filter((_, index) => index !== fieldIndex);
+      form.setValue(`sections.${sectionIndex}.fields`, updatedFields);
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -115,8 +143,9 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
           <YEPFormRenderer formTemplate={form.watch()} />
         </Card>
       ) : (
-        <form onSubmit={form.handleSubmit(onSubmit as any, onInvalid)} className="space-y-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <FormProvider {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit as any, onInvalid)} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="details"><List className="mr-2 h-4 w-4" /> Details</TabsTrigger>
               <TabsTrigger value="sections"><Layout className="mr-2 h-4 w-4" /> Sections</TabsTrigger>
@@ -189,6 +218,8 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
                           control={form.control}
                           removeSection={removeSection}
                           formName="sections"
+                          addField={addField}
+                          removeField={removeField}
                         />
                       ))}
                     </SortableContext>
@@ -230,7 +261,7 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
                       control={form.control}
                       name="targetEntity"
                       render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <Select onValueChange={field.onChange} value={field.value || undefined}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select target entity (optional)" />
                           </SelectTrigger>
@@ -255,7 +286,8 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
               </Card>
             </TabsContent>
           </Tabs>
-        </form>
+          </form>
+        </FormProvider>
       )}
     </div>
   );

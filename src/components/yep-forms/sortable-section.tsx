@@ -16,6 +16,8 @@ interface SortableSectionProps {
   control: Control<any>;
   removeSection: (index: number) => void;
   formName: string;
+  removeField: (sectionIndex: number, fieldIndex: number) => void;
+  addField: (sectionIndex: number) => void;
 }
 
 export function SortableSection({ 
@@ -23,7 +25,9 @@ export function SortableSection({
   index, 
   control, 
   removeSection, 
-  formName 
+  formName,
+  removeField,
+  addField
 }: SortableSectionProps) {
   const {
     attributes,
@@ -63,9 +67,7 @@ export function SortableSection({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  // Add new field logic here
-                }}
+                onClick={() => addField(index)}
               >
                 <PlusCircle className="h-4 w-4 mr-2" />
                 Add Field
@@ -92,6 +94,7 @@ export function SortableSection({
                 fieldIndex={fieldIndex}
                 control={control}
                 formName={formName}
+                removeField={removeField}
               />
             ))}
             {section.fields.length === 0 && (

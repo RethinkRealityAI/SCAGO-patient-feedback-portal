@@ -36,7 +36,8 @@ service cloud.firestore {
     // Feedback submissions - Create by anyone, Read/Update/Delete by admin only
     match /feedback/{feedbackId} {
       allow create: if true;  // Anyone can submit feedback
-      allow read, update, delete: if isAdmin();  // Only admins can view/manage
+      allow read: if isAdminOrYEPManager() || request.auth == null;  // Admin/YEP Manager or server-side (no auth)
+      allow update, delete: if isAdmin();  // Only admins can modify
     }
     
     // Config collection - Read by authenticated users, Write by admin only

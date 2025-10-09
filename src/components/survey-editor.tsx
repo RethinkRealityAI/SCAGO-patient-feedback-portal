@@ -382,7 +382,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                     <FormField control={control} name={`${fieldPath}.conditionField` as any} render={({ field: formField }) => (
                         <FormItem><FormLabel>Show when</FormLabel>
                             <div className="flex items-center gap-2">
-                                <Select onValueChange={formField.onChange} value={formField.value ?? ''}>
+                                <Select onValueChange={formField.onChange} value={formField.value || undefined}>
                                     <FormControl><SelectTrigger onPointerDown={stopPropagation}><SelectValue placeholder="Select a question..." /></SelectTrigger></FormControl>
                                     <SelectContent>{availableConditionalFields.map(f => (<SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>))}</SelectContent>
                                 </Select>

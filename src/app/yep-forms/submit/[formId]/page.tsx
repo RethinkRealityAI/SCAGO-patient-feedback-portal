@@ -4,13 +4,13 @@ import { getYEPFormTemplate } from '../../actions';
 import YEPFormSubmission from '@/components/yep-forms/yep-form-submission';
 
 interface YEPFormSubmissionPageProps {
-  params: {
+  params: Promise<{
     formId: string;
-  };
+  }>;
 }
 
 export default async function YEPFormSubmissionPage({ params }: YEPFormSubmissionPageProps) {
-  const { formId } = params;
+  const { formId } = await params;
   
   const result = await getYEPFormTemplate(formId);
   
