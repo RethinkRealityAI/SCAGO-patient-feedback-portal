@@ -429,7 +429,7 @@ export async function createWorkshop(data: z.infer<typeof workshopSchema>) {
     const validatedData = workshopSchema.parse(data);
     
     // Filter out undefined values to prevent Firebase errors
-    const workshopData = {
+    const workshopData: any = {
       title: validatedData.title,
       // Store as local date to avoid off-by-one timezone issue
       date: parseLocalDateFromYMD(validatedData.date),

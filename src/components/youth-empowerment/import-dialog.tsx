@@ -178,21 +178,6 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
 
     setIsLoading(true);
     try {
-      // Validate required fields are mapped
-      const requiredFields = dataTypes.find(dt => dt.id === importOptions.targetTable)?.requiredFields || [];
-      const mappedFields = Object.values(mapping);
-      const missingRequired = requiredFields.filter(field => !mappedFields.includes(field));
-      
-      if (missingRequired.length > 0) {
-        toast({
-          title: 'Mapping Incomplete',
-          description: `Required fields not mapped: ${missingRequired.join(', ')}`,
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-
       const result = await importData(parsedData, importOptions, mapping);
       setImportResult(result);
       setCurrentStep('import');
@@ -200,18 +185,17 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
       if (result.success) {
         toast({
           title: 'Import Successful',
-          description: `Imported ${result.imported} records, updated ${result.updated}, skipped ${result.skipped}`,
+          description: result.message,
         });
         onSuccess?.();
       } else {
         toast({
           title: 'Import Failed',
-          description: result.message || 'Import failed with errors',
+          description: result.message,
           variant: 'destructive',
         });
       }
     } catch (error) {
-      console.error('Import error:', error);
       toast({
         title: 'Import Error',
         description: `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`,

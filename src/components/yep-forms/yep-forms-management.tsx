@@ -32,6 +32,7 @@ import {
 } from '@/app/yep-forms/actions';
 import { createYEPFormTemplateClient } from '@/app/yep-forms/client';
 import { duplicateYEPFormTemplate } from '@/app/yep-forms/duplicate-actions';
+import { deleteYEPFormTemplate } from '@/app/yep-forms/actions';
 import { yepFormTemplates } from '@/lib/yep-form-templates';
 import { YEPFormTemplate, YEPFormCategory } from '@/lib/yep-forms-types';
 import { CreateYEPFormDropdown, DeleteYEPFormButton, DuplicateYEPFormButton } from '@/app/yep-forms/client';

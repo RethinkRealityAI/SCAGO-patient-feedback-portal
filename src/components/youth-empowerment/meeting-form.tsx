@@ -433,7 +433,7 @@ export function MeetingForm({
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
-                        readOnly
+                        disabled
                         className="pointer-events-none"
                       />
                       <Label className="text-sm cursor-pointer pointer-events-none">{topic}</Label>

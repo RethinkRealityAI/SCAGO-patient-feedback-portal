@@ -239,7 +239,7 @@ export function convertDataTypes(data: any[], table: keyof typeof TABLE_SCHEMAS)
       } else if (type === 'boolean') {
         converted[key] = ['true', '1', 'yes'].includes(String(value).toLowerCase());
       } else if (type === 'date') {
-        converted[key] = value ? new Date(value).toISOString().split('T')[0] : null;
+        converted[key] = value ? new Date(String(value)).toISOString().split('T')[0] : null;
       } else {
         converted[key] = value;
       }
@@ -285,38 +285,17 @@ export function generateMappingSuggestions(
       return;
     }
     
-    // Fuzzy matches - comprehensive mapping for all YEP fields
+    // Fuzzy matches
     const fuzzyMatches: { [key: string]: string[] } = {
-      'youthParticipant': ['name', 'participant', 'youth', 'student', 'participant name', 'full name', 'fullname', 'full_name'],
-      'email': ['email', 'email_address', 'e_mail', 'e-mail'],
-      'etransferEmailAddress': ['etransfer', 'e-transfer', 'transfer email', 'payment email', 'etransfer_email'],
-      'mailingAddress': ['address', 'mailing', 'postal', 'street', 'home address', 'mailing_address'],
-      'phoneNumber': ['phone', 'telephone', 'mobile', 'cell', 'contact number', 'phone_number'],
-      'region': ['region', 'province', 'state', 'location'],
-      'approved': ['approved', 'status', 'active', 'enrolled'],
-      'contractSigned': ['contract', 'signed', 'agreement', 'contract_signed'],
-      'signedSyllabus': ['syllabus', 'signed syllabus', 'course agreement', 'signed_syllabus'],
-      'availability': ['availability', 'schedule', 'time', 'when available'],
-      'assignedMentor': ['mentor', 'assigned mentor', 'supervisor', 'assigned_mentor'],
-      'idProvided': ['id', 'identification', 'id provided', 'documents', 'id_provided'],
-      'canadianStatus': ['citizenship', 'canadian', 'status', 'citizen', 'canadian_status'],
-      'canadianStatusOther': ['other status', 'citizenship other', 'non-canadian', 'canadian_status_other'],
-      'sin': ['sin', 'social insurance', 'sin number', 'ssn'],
-      'youthProposal': ['proposal', 'project', 'idea', 'youth proposal', 'youth_proposal'],
-      'proofOfAffiliationWithSCD': ['affiliation', 'scd', 'proof', 'connection', 'proof_of_affiliation'],
-      'scagoCounterpart': ['counterpart', 'scago', 'partner', 'scago_counterpart'],
-      'dob': ['dob', 'date of birth', 'birthday', 'birth date', 'date_of_birth'],
-      'age': ['age', 'years old', 'years_old'],
-      'citizenshipStatus': ['citizenship', 'citizen status', 'immigration', 'citizenship_status'],
-      'location': ['location', 'city', 'town', 'place'],
-      'projectCategory': ['category', 'project type', 'field', 'project_category'],
-      'duties': ['duties', 'responsibilities', 'tasks'],
-      'affiliationWithSCD': ['scd affiliation', 'scd connection', 'scd relationship', 'affiliation_with_scd'],
-      'notes': ['notes', 'comments', 'remarks', 'additional'],
-      'nextSteps': ['next steps', 'follow up', 'action items', 'next_steps'],
-      'interviewed': ['interviewed', 'interview', 'meeting'],
-      'interviewNotes': ['interview notes', 'meeting notes', 'interview comments', 'interview_notes'],
-      'recruited': ['recruited', 'recruitment', 'source'],
+      'name': ['youthParticipant', 'participant', 'fullname', 'full_name'],
+      'email': ['email', 'email_address', 'e_mail'],
+      'phone': ['phone', 'phone_number', 'phoneNumber', 'telephone'],
+      'address': ['address', 'mailingAddress', 'mailing_address'],
+      'region': ['region', 'province', 'state'],
+      'dob': ['dob', 'date_of_birth', 'birthdate', 'birth_date'],
+      'age': ['age', 'years_old'],
+      'approved': ['approved', 'status', 'active'],
+      'mentor': ['mentor', 'assignedMentor', 'assigned_mentor'],
       'title': ['title', 'job_title', 'position'],
       'date': ['date', 'workshop_date', 'meeting_date'],
       'description': ['description', 'desc', 'details']

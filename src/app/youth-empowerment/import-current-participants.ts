@@ -637,7 +637,7 @@ export async function importCurrentParticipants(): Promise<{ success: boolean; m
         scagoCounterpart: '', // Not available in current data
         dob: dob,
         // New fields
-        age: participant.age,
+        age: participant.age || undefined,
         citizenshipStatus: participant.citizenshipStatus,
         location: participant.location,
         projectCategory: participant.projectCategory,
@@ -645,7 +645,7 @@ export async function importCurrentParticipants(): Promise<{ success: boolean; m
         affiliationWithSCD: participant.affiliationWithSCD,
         notes: participant.notes,
         nextSteps: participant.nextSteps,
-        interviewed: interviewed,
+        interviewed: interviewed || false,
         interviewNotes: participant.interviewNotes,
         recruited: participant.recruited || false,
         createdAt: new Date(),

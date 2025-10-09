@@ -91,7 +91,7 @@ export function WorkshopsTable({ onRefresh }: WorkshopsTableProps) {
     if (searchTerm) {
       filtered = filtered.filter(w => 
         w.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        w.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (w.description && w.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (w.location && w.location.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }

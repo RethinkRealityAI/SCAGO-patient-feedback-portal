@@ -278,15 +278,14 @@ export default function AdminPage() {
       </Tabs>
 
       {/* Import Dialog */}
-        <ImportDialog
-          isOpen={isImportDialogOpen}
-          onClose={() => setIsImportDialogOpen(false)}
-          onSuccess={() => {
-            setIsImportDialogOpen(false);
-            // Refresh data after successful import
-            window.location.reload();
-          }}
-        />
+      <ImportDialog 
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onSuccess={() => {
+          setIsImportDialogOpen(false);
+          // Optionally refresh data or show success message
+        }}
+      />
     </div>
   );
 }

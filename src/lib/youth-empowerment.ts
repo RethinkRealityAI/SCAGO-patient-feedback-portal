@@ -56,6 +56,12 @@ export interface YEPWorkshop {
   title: string;
   description?: string;
   date: Date;
+  time?: string;
+  location?: string;
+  capacity?: number;
+  mentor?: string;
+  notes?: string;
+  feedbackSurveyId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
