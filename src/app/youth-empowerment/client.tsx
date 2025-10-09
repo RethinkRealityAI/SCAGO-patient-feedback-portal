@@ -18,9 +18,19 @@ import {
   FileText,
   BarChart3,
   Activity,
-  Download
+  Download,
+  FormInput,
+  Settings,
+  Plus,
+  Edit,
+  Play,
+  Copy,
+  Trash2,
+  LogOut
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { signOut } from '@/lib/firebase-auth';
 import { 
   getParticipants, 
   getMentors, 
@@ -35,11 +45,11 @@ import { WorkshopsTable } from '@/components/youth-empowerment/workshops-table';
 import { MeetingsTable } from '@/components/youth-empowerment/meetings-table';
 import { MeetingForm } from '@/components/youth-empowerment/meeting-form';
 import { AttendanceForm } from '@/components/youth-empowerment/attendance-form';
-import { BulkAttendanceForm } from '@/components/youth-empowerment/bulk-attendance-form';
 import { BulkMeetingForm } from '@/components/youth-empowerment/bulk-meeting-form';
 import { AdvancedMetrics } from '@/components/youth-empowerment/advanced-metrics';
 import { ExportDialog } from '@/components/youth-empowerment/export-dialog';
 import { AttendanceAnalytics } from '@/components/youth-empowerment/attendance-analytics';
+import YEPFormsManagement from '@/components/yep-forms/yep-forms-management';
 
 export default function YouthEmpowermentClient() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -49,10 +59,10 @@ export default function YouthEmpowermentClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMeetingFormOpen, setIsMeetingFormOpen] = useState(false);
   const [isAttendanceFormOpen, setIsAttendanceFormOpen] = useState(false);
-  const [isBulkAttendanceFormOpen, setIsBulkAttendanceFormOpen] = useState(false);
   const [isBulkMeetingFormOpen, setIsBulkMeetingFormOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadData();
@@ -117,27 +127,49 @@ export default function YouthEmpowermentClient() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Youth Empowerment Program</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage participants, mentors, workshops, and program activities
-          </p>
+      {/* Header Section */}
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Youth Empowerment Program</h1>
+            <p className="text-muted-foreground mt-2">
+              Manage participants, mentors, workshops, and program activities
+            </p>
+          </div>
+          
+          {/* User Info and Sign Out */}
+          <div className="flex items-center gap-3">
+            {user?.email && (
+              <p className="text-sm text-muted-foreground">
+                Signed in as <span className="font-medium">{user.email}</span>
+              </p>
+            )}
+            <Button 
+              variant="destructive"
+              size="sm"
+              onClick={async () => {
+                const { error } = await signOut();
+                if (error) {
+                  toast({ title: 'Sign out failed', description: error, variant: 'destructive' });
+                } else {
+                  toast({ title: 'Signed out' });
+                }
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
+        
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={() => setIsAttendanceFormOpen(true)}
           >
             <Calendar className="h-4 w-4 mr-2" />
             Mark Attendance
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => setIsBulkAttendanceFormOpen(true)}
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Bulk Attendance
           </Button>
           <Button onClick={() => setIsMeetingFormOpen(true)}>
             <MessageSquare className="h-4 w-4 mr-2" />
@@ -152,6 +184,13 @@ export default function YouthEmpowermentClient() {
           </Button>
           <Button 
             variant="outline"
+            onClick={() => window.open('/yep-forms', '_blank')}
+          >
+            <FormInput className="h-4 w-4 mr-2" />
+            Manage Forms
+          </Button>
+          <Button 
+            variant="outline"
             onClick={() => setIsExportDialogOpen(true)}
           >
             <Download className="h-4 w-4 mr-2" />
@@ -161,12 +200,13 @@ export default function YouthEmpowermentClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
           <TabsTrigger value="mentors">Mentors</TabsTrigger>
           <TabsTrigger value="workshops">Workshops</TabsTrigger>
           <TabsTrigger value="meetings">Meetings</TabsTrigger>
+          <TabsTrigger value="forms">Forms</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -381,6 +421,10 @@ export default function YouthEmpowermentClient() {
         <TabsContent value="meetings">
           <MeetingsTable onRefresh={handleRefresh} />
         </TabsContent>
+
+        <TabsContent value="forms">
+          <YEPFormsManagement />
+        </TabsContent>
       </Tabs>
 
       {/* Forms */}
@@ -396,11 +440,6 @@ export default function YouthEmpowermentClient() {
         onSuccess={handleRefresh}
       />
 
-      <BulkAttendanceForm
-        isOpen={isBulkAttendanceFormOpen}
-        onClose={() => setIsBulkAttendanceFormOpen(false)}
-        onSuccess={handleRefresh}
-      />
 
       <BulkMeetingForm
         isOpen={isBulkMeetingFormOpen}

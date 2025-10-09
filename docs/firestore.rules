@@ -10,16 +10,16 @@ service cloud.firestore {
     
     // Helper function to check if user is admin
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
              exists(/databases/$(database)/documents/config/admins) &&
-             get(/databases/$(database)/documents/config/admins).data.emails.hasAny([request.auth.token.email]);
+             (request.auth.token.email in get(/databases/$(database)/documents/config/admins).data.emails);
     }
     
     // Helper function to check if user is YEP Manager
     function isYEPManager() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
              exists(/databases/$(database)/documents/config/yep_managers) &&
-             get(/databases/$(database)/documents/config/yep_managers).data.emails.hasAny([request.auth.token.email]);
+             (request.auth.token.email in get(/databases/$(database)/documents/config/yep_managers).data.emails);
     }
     
     // Helper function to check if user is admin or YEP Manager

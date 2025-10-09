@@ -36,10 +36,10 @@ export function SectionTemplateSelector({ onSelectTemplate }: SectionTemplateSel
   const handleSelect = (key: SectionTemplateKey) => {
     const template = {  ...sectionTemplates[key], id: nanoid() };
     // Ensure all nested fields have unique IDs
-    template.fields = template.fields.map(f => ({
+    template.fields = template.fields.map((f: any) => ({
       ...f,
       id: `${f.id}-${nanoid().substring(0, 6)}`,
-      fields: f.fields?.map(sf => ({
+      fields: f.fields?.map((sf: any) => ({
         ...sf,
         id: `${sf.id}-${nanoid().substring(0, 6)}`,
       })),

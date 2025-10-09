@@ -94,8 +94,8 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
 
       // Populate meeting records with names
       const populatedMeetings = meetingsData.map(meeting => {
-        const student = participantsData.find(p => p.id === meeting.studentId);
-        const advisor = mentorsData.find(m => m.id === meeting.advisorId);
+        const student = participantsData.find((p: any) => p.id === (meeting as any).studentId);
+        const advisor = mentorsData.find((m: any) => m.id === (meeting as any).advisorId);
         return {
           ...meeting,
           studentName: student?.youthParticipant || 'Unknown Student',
@@ -103,9 +103,9 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
         };
       });
 
-      setMeetings(populatedMeetings);
-      setParticipants(participantsData);
-      setMentors(mentorsData);
+      setMeetings(populatedMeetings as any);
+      setParticipants(participantsData as any);
+      setMentors(mentorsData as any);
     } catch (error) {
       console.error('Error loading meetings:', error);
       toast({

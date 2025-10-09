@@ -20,7 +20,7 @@ import { markWorkshopAttendance, getWorkshops, getParticipants } from '@/app/you
 import { YEPWorkshop, YEPParticipant } from '@/lib/youth-empowerment';
 
 const attendanceFormSchema = z.object({
-  workshopId: z.string().min(1, 'Workshop is required'),
+  workshopIds: z.array(z.string()).min(1, 'At least one workshop is required'),
   studentIds: z.array(z.string()).min(1, 'At least one student is required'),
   attendedAt: z.string().optional(),
   notes: z.string().optional(),
@@ -33,20 +33,22 @@ interface AttendanceFormProps {
   onClose: () => void;
   onSuccess: () => void;
   preselectedWorkshop?: string;
+  preselectedStudent?: string;
 }
 
-export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop }: AttendanceFormProps) {
+export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop, preselectedStudent }: AttendanceFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [workshops, setWorkshops] = useState<YEPWorkshop[]>([]);
   const [participants, setParticipants] = useState<YEPParticipant[]>([]);
+  const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const { toast } = useToast();
 
   const form = useForm<AttendanceFormData>({
     resolver: zodResolver(attendanceFormSchema),
     defaultValues: {
-      workshopId: preselectedWorkshop || '',
-      studentIds: [],
+      workshopIds: preselectedWorkshop ? [preselectedWorkshop] : [],
+      studentIds: preselectedStudent ? [preselectedStudent] : [],
       attendedAt: new Date().toISOString().slice(0, 16), // Current date/time
       notes: '',
     },
@@ -56,10 +58,15 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     if (isOpen) {
       loadData();
       if (preselectedWorkshop) {
-        form.setValue('workshopId', preselectedWorkshop);
+        setSelectedWorkshops([preselectedWorkshop]);
+        form.setValue('workshopIds', [preselectedWorkshop]);
+      }
+      if (preselectedStudent) {
+        setSelectedStudents([preselectedStudent]);
+        form.setValue('studentIds', [preselectedStudent]);
       }
     }
-  }, [isOpen, preselectedWorkshop]);
+  }, [isOpen, preselectedWorkshop, preselectedStudent]);
 
   const loadData = async () => {
     try {
@@ -74,6 +81,15 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     }
   };
 
+  const handleWorkshopToggle = (workshopId: string) => {
+    const newSelection = selectedWorkshops.includes(workshopId)
+      ? selectedWorkshops.filter(id => id !== workshopId)
+      : [...selectedWorkshops, workshopId];
+    
+    setSelectedWorkshops(newSelection);
+    form.setValue('workshopIds', newSelection);
+  };
+
   const handleStudentToggle = (studentId: string) => {
     const newSelection = selectedStudents.includes(studentId)
       ? selectedStudents.filter(id => id !== studentId)
@@ -83,13 +99,24 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     form.setValue('studentIds', newSelection);
   };
 
-  const handleSelectAll = () => {
+  const handleSelectAllWorkshops = () => {
+    const allIds = workshops.map(w => w.id);
+    setSelectedWorkshops(allIds);
+    form.setValue('workshopIds', allIds);
+  };
+
+  const handleSelectNoneWorkshops = () => {
+    setSelectedWorkshops([]);
+    form.setValue('workshopIds', []);
+  };
+
+  const handleSelectAllStudents = () => {
     const allIds = participants.map(p => p.id);
     setSelectedStudents(allIds);
     form.setValue('studentIds', allIds);
   };
 
-  const handleSelectNone = () => {
+  const handleSelectNoneStudents = () => {
     setSelectedStudents([]);
     form.setValue('studentIds', []);
   };
@@ -97,21 +124,49 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
   const onSubmit = async (data: AttendanceFormData) => {
     setIsLoading(true);
     try {
-      const result = await markWorkshopAttendance(data);
+      // Create attendance records for each workshop-student combination
+      const attendanceRecords = [];
+      
+      for (const workshopId of data.workshopIds) {
+        for (const studentId of data.studentIds) {
+          attendanceRecords.push({
+            workshopId,
+            studentId,
+            attendedAt: data.attendedAt ? new Date(data.attendedAt) : new Date(),
+            notes: data.notes || '',
+          });
+        }
+      }
 
-      if (result.success) {
+      // Process each attendance record
+      const results = [];
+      for (const record of attendanceRecords) {
+        const result = await markWorkshopAttendance({
+          workshopId: record.workshopId,
+          studentIds: [record.studentId],
+          attendedAt: record.attendedAt.toISOString(),
+          notes: record.notes,
+        });
+        results.push(result);
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const totalRecords = attendanceRecords.length;
+
+      if (successCount === totalRecords) {
         toast({
           title: 'Attendance Marked',
-          description: `Successfully marked attendance for ${data.studentIds.length} participant(s).`,
+          description: `Successfully marked attendance for ${totalRecords} workshop-student combinations.`,
         });
         onSuccess();
         onClose();
         form.reset();
+        setSelectedWorkshops([]);
         setSelectedStudents([]);
       } else {
         toast({
-          title: 'Error',
-          description: result.error || 'Failed to mark attendance',
+          title: 'Partial Success',
+          description: `Marked attendance for ${successCount} of ${totalRecords} combinations.`,
           variant: 'destructive',
         });
       }
@@ -127,18 +182,18 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     }
   };
 
-  const selectedWorkshop = workshops.find(w => w.id === form.watch('workshopId'));
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             Mark Workshop Attendance
           </DialogTitle>
           <DialogDescription>
-            Record which participants attended a workshop
+            Record which participants attended workshops
           </DialogDescription>
         </DialogHeader>
 
@@ -150,54 +205,105 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Calendar className="h-5 w-5" />
-                    Workshop Details
+                    Select Workshops
                   </CardTitle>
-                  <CardDescription>Select the workshop for attendance</CardDescription>
+                  <CardDescription>Choose which workshops to mark attendance for</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="workshopId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Workshop *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select workshop" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {workshops.map((workshop) => (
-                              <SelectItem key={workshop.id} value={workshop.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{workshop.title}</span>
-                                  <span className="text-sm text-muted-foreground">
-                                    {new Date(workshop.date).toLocaleDateString()}
-                                    {workshop.location && ` • ${workshop.location}`}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {selectedWorkshop && (
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <h4 className="font-medium">{selectedWorkshop.title}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {selectedWorkshop.description}
-                      </p>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span>{new Date(selectedWorkshop.date).toLocaleDateString()}</span>
-                        {selectedWorkshop.location && <span>{selectedWorkshop.location}</span>}
-                        {selectedWorkshop.capacity && <span>Capacity: {selectedWorkshop.capacity}</span>}
-                      </div>
+                  {workshops.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No workshops available</p>
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSelectAllWorkshops}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSelectNoneWorkshops}
+                        >
+                          Select None
+                        </Button>
+                      </div>
+
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workshops.map((workshop) => (
+                          <div
+                            key={workshop.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                              selectedWorkshops.includes(workshop.id)
+                                ? 'bg-primary/10 border-primary'
+                                : 'hover:bg-muted/50'
+                            }`}
+                            onClick={() => handleWorkshopToggle(workshop.id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                checked={selectedWorkshops.includes(workshop.id)}
+                              />
+                              <div className="flex-1">
+                                <div className="font-medium">{workshop.title}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {new Date(workshop.date).toLocaleDateString()}
+                                  {workshop.location && ` • ${workshop.location}`}
+                                </div>
+                                {workshop.capacity && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Capacity: {workshop.capacity}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              {selectedWorkshops.includes(workshop.id) ? (
+                                <CheckCircle className="h-5 w-5 text-primary" />
+                              ) : (
+                                <div className="w-5 h-5 rounded border-2 border-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {selectedWorkshops.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">
+                            Selected Workshops ({selectedWorkshops.length}):
+                          </Label>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedWorkshops.map((workshopId) => {
+                              const workshop = workshops.find(w => w.id === workshopId);
+                              return (
+                                <Badge
+                                  key={workshopId}
+                                  variant="secondary"
+                                  className="flex items-center gap-1"
+                                >
+                                  {workshop?.title}
+                                  <X
+                                    className="h-3 w-3 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleWorkshopToggle(workshopId);
+                                    }}
+                                  />
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <FormField
@@ -243,7 +349,7 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleSelectAll}
+                          onClick={handleSelectAllStudents}
                         >
                           Select All
                         </Button>
@@ -251,7 +357,7 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleSelectNone}
+                          onClick={handleSelectNoneStudents}
                         >
                           Select None
                         </Button>
@@ -271,7 +377,7 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                             <div className="flex items-center gap-3">
                               <Checkbox
                                 checked={selectedStudents.includes(participant.id)}
-                                readOnly
+                                // readOnly not supported on Checkbox component
                               />
                               <div className="flex-1">
                                 <div className="font-medium">{participant.youthParticipant}</div>
@@ -366,10 +472,10 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
               </Button>
               <Button 
                 type="submit" 
-                disabled={isLoading || selectedStudents.length === 0}
+                disabled={isLoading || selectedStudents.length === 0 || selectedWorkshops.length === 0}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Mark Attendance ({selectedStudents.length} participants)
+                Mark Attendance ({selectedWorkshops.length} workshops × {selectedStudents.length} participants)
               </Button>
             </DialogFooter>
           </form>

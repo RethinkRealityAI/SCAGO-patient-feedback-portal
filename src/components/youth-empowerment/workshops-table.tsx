@@ -31,10 +31,8 @@ import {
   Search, 
   Plus,
   Calendar,
-  MapPin,
   Users,
-  FileText,
-  ExternalLink
+  FileText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getWorkshops, deleteWorkshop, getWorkshopAttendance } from '@/app/youth-empowerment/actions';
@@ -256,16 +254,14 @@ export function WorkshopsTable({ onRefresh }: WorkshopsTableProps) {
                 <TableRow>
                   <TableHead>Workshop</TableHead>
                   <TableHead>Date & Time</TableHead>
-                  <TableHead>Location</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Feedback Survey</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredWorkshops.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                       No workshops found
                     </TableCell>
                   </TableRow>
@@ -287,31 +283,7 @@ export function WorkshopsTable({ onRefresh }: WorkshopsTableProps) {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {workshop.location ? (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{workshop.location}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Not specified</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
                         {getStatusBadge(workshop)}
-                      </TableCell>
-                      <TableCell>
-                        {workshop.feedbackSurveyId ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(`/survey/${workshop.feedbackSurveyId}`, '_blank')}
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            View Survey
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">No survey</span>
-                        )}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -356,11 +328,12 @@ export function WorkshopsTable({ onRefresh }: WorkshopsTableProps) {
 
       {/* Forms and Modals */}
       <WorkshopForm
-        workshop={selectedWorkshop}
+        workshop={selectedWorkshop || undefined}
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);
           setSelectedWorkshop(null);
+          handleFormSuccess(); // Refresh the data when form closes
         }}
         onSuccess={handleFormSuccess}
       />

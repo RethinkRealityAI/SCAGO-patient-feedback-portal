@@ -121,19 +121,48 @@ export function FormFieldRenderer({
         );
 
       case 'select':
+        return (
+          <div className="space-y-2">
+            <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={form.watch(fieldConfig.id) || ''}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder={t.selectAnOption} />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {translatedOptions?.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+                <SelectItem value="other">{isFrench ? 'Autre' : 'Other'}</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.watch(fieldConfig.id) === 'other' && (
+              <div className="space-y-1">
+                <label htmlFor={`${fieldConfig.id}-other-input`} className="text-sm text-muted-foreground">
+                  {isFrench ? 'Autre:' : 'Other:'}
+                </label>
+                <Input
+                  id={`${fieldConfig.id}-other-input`}
+                  placeholder={isFrench ? 'Veuillez préciser...' : 'Please specify...'}
+                  value={form.watch(`${fieldConfig.id}_other`) || ''}
+                  onChange={(e) => form.setValue(`${fieldConfig.id}_other`, e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        );
       case 'province-ca':
-        const selectOptions = fieldConfig.type === 'province-ca' ? provinces : translatedOptions;
         return (
           <Select onValueChange={(value) => form.setValue(fieldConfig.id, value)} value={form.watch(fieldConfig.id) || ''}>
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder={
-                  fieldConfig.type === 'province-ca' ? t.selectProvince : t.selectAnOption
-                } />
+                <SelectValue placeholder={t.selectProvince} />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              {selectOptions?.map((option) => (
+              {provinces?.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {translateOption(option.label, isFrench ? 'fr' : 'en')}
                 </SelectItem>
@@ -145,23 +174,47 @@ export function FormFieldRenderer({
       case 'radio':
         return (
           <FormControl>
-            <RadioGroup
-              onValueChange={(value) => form.setValue(fieldConfig.id, value)}
-              value={form.watch(fieldConfig.id) || ''}
-              className="flex flex-col space-y-1"
-            >
-              {translatedOptions?.map((option) => (
-                <div key={option.value} className="flex items-center space-x-2">
-                  <RadioGroupItem value={option.value} id={`${fieldConfig.id}-${option.value}`} />
+            <div className="space-y-2">
+              <RadioGroup
+                onValueChange={(value) => form.setValue(fieldConfig.id, value)}
+                value={form.watch(fieldConfig.id) || ''}
+                className="flex flex-col space-y-1"
+              >
+                {translatedOptions?.map((option) => (
+                  <div key={option.value} className="flex items-center space-x-2">
+                    <RadioGroupItem value={option.value} id={`${fieldConfig.id}-${option.value}`} />
+                    <label
+                      htmlFor={`${fieldConfig.id}-${option.value}`}
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      {option.label}
+                    </label>
+                  </div>
+                ))}
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="other" id={`${fieldConfig.id}-other`} />
                   <label
-                    htmlFor={`${fieldConfig.id}-${option.value}`}
+                    htmlFor={`${fieldConfig.id}-other`}
                     className="text-sm font-normal cursor-pointer"
                   >
-                    {option.label}
+                    {isFrench ? 'Autre' : 'Other'}
                   </label>
                 </div>
-              ))}
-            </RadioGroup>
+              </RadioGroup>
+              {form.watch(fieldConfig.id) === 'other' && (
+                <div className="ml-6 space-y-1">
+                  <label htmlFor={`${fieldConfig.id}-other-input`} className="text-sm text-muted-foreground">
+                    {isFrench ? 'Veuillez préciser:' : 'Please specify:'}
+                  </label>
+                  <Input
+                    id={`${fieldConfig.id}-other-input`}
+                    placeholder={isFrench ? 'Veuillez préciser...' : 'Please specify...'}
+                    value={form.watch(`${fieldConfig.id}_other`) || ''}
+                    onChange={(e) => form.setValue(`${fieldConfig.id}_other`, e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
           </FormControl>
         );
 

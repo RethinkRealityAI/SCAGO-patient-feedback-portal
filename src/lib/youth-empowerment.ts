@@ -5,6 +5,9 @@ export interface YEPParticipant {
   id: string;
   youthParticipant: string;
   email: string;
+  etransferEmailAddress?: string;
+  mailingAddress?: string;
+  phoneNumber?: string;
   region: string;
   approved: boolean;
   contractSigned: boolean;
@@ -13,6 +16,7 @@ export interface YEPParticipant {
   assignedMentor: string;
   idProvided: boolean;
   canadianStatus: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
+  canadianStatusOther: string;
   sinLast4: string;
   sinHash: string;
   youthProposal: string;
@@ -38,11 +42,8 @@ export interface YEPMentor {
 export interface YEPWorkshop {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   date: Date;
-  location?: string;
-  capacity?: number;
-  feedbackSurveyId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +86,9 @@ export function extractSINLast4(sin: string): string {
 }
 
 export function validateSIN(sin: string): boolean {
+  // Handle null, undefined, or empty string
+  if (!sin || typeof sin !== 'string') return false;
+  
   // Canadian SIN validation (9 digits, specific algorithm)
   const cleanSIN = sin.replace(/\D/g, '');
   
@@ -112,6 +116,21 @@ export function validateSIN(sin: string): boolean {
   }
   
   return sum % 10 === 0;
+}
+
+// Lenient SIN validation for form inputs (matches component validation)
+export function validateSINLenient(sin: string): boolean {
+  if (!sin || typeof sin !== 'string') return false;
+  
+  const cleanSIN = sin.replace(/\D/g, '');
+  
+  if (cleanSIN.length !== 9) return false;
+  
+  // Only flag obviously invalid patterns
+  if (/^(\d)\1{8}$/.test(cleanSIN)) return false; // All same digits
+  if (cleanSIN.startsWith('000') || cleanSIN.startsWith('999')) return false; // Invalid prefixes
+  
+  return true; // Allow other 9-digit numbers
 }
 
 // File Upload Utilities

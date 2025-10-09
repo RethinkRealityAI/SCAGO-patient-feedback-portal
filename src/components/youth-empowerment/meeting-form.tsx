@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,9 +23,22 @@ const meetingFormSchema = z.object({
   studentId: z.string().min(1, 'Student is required'),
   advisorId: z.string().min(1, 'Advisor is required'),
   meetingDate: z.string().min(1, 'Meeting date is required'),
-  duration: z.number().optional(),
+  duration: z.number().min(1, 'Duration must be at least 1 minute').max(480, 'Duration cannot exceed 8 hours').optional(),
   notes: z.string().optional(),
   topics: z.array(z.string()).optional(),
+}).refine((data) => {
+  // Validate that meeting date is not in the future by more than 1 year
+  const meetingDate = new Date(data.meetingDate);
+  const now = new Date();
+  const oneYearFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  
+  if (meetingDate > oneYearFromNow) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Meeting date cannot be more than 1 year in the future',
+  path: ['meetingDate']
 });
 
 type MeetingFormData = z.infer<typeof meetingFormSchema>;
@@ -60,6 +73,8 @@ export function MeetingForm({
   preselectedAdvisor 
 }: MeetingFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [participants, setParticipants] = useState<YEPParticipant[]>([]);
   const [mentors, setMentors] = useState<YEPMentor[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -71,45 +86,71 @@ export function MeetingForm({
       studentId: preselectedStudent || '',
       advisorId: preselectedAdvisor || '',
       meetingDate: new Date().toISOString().slice(0, 16), // Current date/time
-      duration: undefined,
+      duration: 0, // Changed from undefined to 0 to avoid controlled/uncontrolled issue
       notes: '',
       topics: [],
     },
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-      if (preselectedStudent) {
-        form.setValue('studentId', preselectedStudent);
-      }
-      if (preselectedAdvisor) {
-        form.setValue('advisorId', preselectedAdvisor);
-      }
-    }
-  }, [isOpen, preselectedStudent, preselectedAdvisor]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsDataLoading(true);
+    setDataError(null);
     try {
       const [participantsData, mentorsData] = await Promise.all([
         getParticipants({ approved: true }), // Only show approved participants
         getMentors(),
       ]);
+      
       setParticipants(participantsData);
       setMentors(mentorsData);
+      
+      // Check if we have the required data
+      if (participantsData.length === 0) {
+        setDataError('No approved participants found. Please add participants first.');
+      }
+      if (mentorsData.length === 0) {
+        setDataError('No mentors found. Please add mentors first.');
+      }
     } catch (error) {
       console.error('Error loading data:', error);
+      setDataError('Failed to load data. Please try again.');
+      toast({
+        title: 'Error',
+        description: 'Failed to load participants and mentors data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDataLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleTopicToggle = (topic: string) => {
-    const newTopics = selectedTopics.includes(topic)
-      ? selectedTopics.filter(t => t !== topic)
-      : [...selectedTopics, topic];
-    
-    setSelectedTopics(newTopics);
-    form.setValue('topics', newTopics);
-  };
+  useEffect(() => {
+    if (isOpen) {
+      loadData();
+    }
+  }, [isOpen]); // Removed loadData from dependencies to prevent infinite loop
+
+  useEffect(() => {
+    if (preselectedStudent) {
+      form.setValue('studentId', preselectedStudent);
+    }
+    if (preselectedAdvisor) {
+      form.setValue('advisorId', preselectedAdvisor);
+    }
+  }, [preselectedStudent, preselectedAdvisor]); // Removed form from dependencies to prevent infinite loop
+
+  const handleTopicToggle = useCallback((topic: string) => {
+    setSelectedTopics(prevTopics => {
+      const newTopics = prevTopics.includes(topic)
+        ? prevTopics.filter(t => t !== topic)
+        : [...prevTopics, topic];
+      
+      // Update form value immediately
+      form.setValue('topics', newTopics, { shouldValidate: true });
+      
+      return newTopics;
+    });
+  }, [form]);
 
   const onSubmit = async (data: MeetingFormData) => {
     setIsLoading(true);
@@ -124,10 +165,18 @@ export function MeetingForm({
           title: 'Meeting Recorded',
           description: 'Advisor meeting has been successfully recorded.',
         });
+        // Reset form and state
+        form.reset({
+          studentId: preselectedStudent || '',
+          advisorId: preselectedAdvisor || '',
+          meetingDate: new Date().toISOString().slice(0, 16),
+          duration: 0,
+          notes: '',
+          topics: [],
+        });
+        setSelectedTopics([]);
         onSuccess();
         onClose();
-        form.reset();
-        setSelectedTopics([]);
       } else {
         toast({
           title: 'Error',
@@ -147,11 +196,23 @@ export function MeetingForm({
     }
   };
 
-  const selectedStudent = participants.find(p => p.id === form.watch('studentId'));
-  const selectedAdvisor = mentors.find(m => m.id === form.watch('advisorId'));
+  const watchedStudentId = form.watch('studentId');
+  const watchedAdvisorId = form.watch('advisorId');
+  
+  const selectedStudent = useMemo(() => 
+    participants.find(p => p.id === watchedStudentId), 
+    [participants, watchedStudentId]
+  );
+  
+  const selectedAdvisor = useMemo(() => 
+    mentors.find(m => m.id === watchedAdvisorId), 
+    [mentors, watchedAdvisorId]
+  );
+
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -165,6 +226,23 @@ export function MeetingForm({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
+            {/* Data Loading and Error States */}
+            {isDataLoading && (
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Loading participants and mentors...</span>
+              </div>
+            )}
+            
+            {dataError && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                <div className="flex items-center">
+                  <div className="text-destructive font-medium">Data Loading Error</div>
+                </div>
+                <div className="text-destructive/80 text-sm mt-1">{dataError}</div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Meeting Participants */}
               <Card>
@@ -189,16 +267,27 @@ export function MeetingForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {participants.map((participant) => (
-                              <SelectItem key={participant.id} value={participant.id}>
+                            {participants.length === 0 ? (
+                              <SelectItem value="no-participants" disabled>
                                 <div className="flex flex-col">
-                                  <span className="font-medium">{participant.youthParticipant}</span>
+                                  <span className="font-medium text-muted-foreground">No participants available</span>
                                   <span className="text-sm text-muted-foreground">
-                                    {participant.region} • {participant.email}
+                                    Please add participants first
                                   </span>
                                 </div>
                               </SelectItem>
-                            ))}
+                            ) : (
+                              participants.map((participant) => (
+                                <SelectItem key={participant.id} value={participant.id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{participant.youthParticipant}</span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {participant.region} • {participant.email}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -231,16 +320,27 @@ export function MeetingForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {mentors.map((mentor) => (
-                              <SelectItem key={mentor.id} value={mentor.id}>
+                            {mentors.length === 0 ? (
+                              <SelectItem value="no-mentors" disabled>
                                 <div className="flex flex-col">
-                                  <span className="font-medium">{mentor.name}</span>
+                                  <span className="font-medium text-muted-foreground">No mentors available</span>
                                   <span className="text-sm text-muted-foreground">
-                                    {mentor.title}
+                                    Please add mentors first
                                   </span>
                                 </div>
                               </SelectItem>
-                            ))}
+                            ) : (
+                              mentors.map((mentor) => (
+                                <SelectItem key={mentor.id} value={mentor.id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{mentor.name}</span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {mentor.title}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -293,8 +393,8 @@ export function MeetingForm({
                         <FormControl>
                           <Input 
                             type="number" 
-                            {...field} 
-                            onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                            value={field.value || ''} 
+                            onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : 0)}
                             placeholder="e.g., 60"
                           />
                         </FormControl>
@@ -325,13 +425,18 @@ export function MeetingForm({
                           ? 'bg-primary/10 border-primary'
                           : 'hover:bg-muted/50'
                       }`}
-                      onClick={() => handleTopicToggle(topic)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleTopicToggle(topic);
+                      }}
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
                         readOnly
+                        className="pointer-events-none"
                       />
-                      <Label className="text-sm cursor-pointer">{topic}</Label>
+                      <Label className="text-sm cursor-pointer pointer-events-none">{topic}</Label>
                     </div>
                   ))}
                 </div>
@@ -388,7 +493,10 @@ export function MeetingForm({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button 
+                type="submit" 
+                disabled={isLoading || isDataLoading || participants.length === 0 || mentors.length === 0}
+              >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Record Meeting
               </Button>

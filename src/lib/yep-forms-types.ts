@@ -12,19 +12,17 @@ export enum YEPFormCategory {
 }
 
 // YEP-specific field types
-export const YEP_FIELD_TYPES = [
-  'yep-participant-lookup',
-  'yep-mentor-lookup', 
-  'yep-sin-secure',
-  'yep-mentor-assignment',
-  'yep-participant-assignment',
-  'yep-workshop-selector',
-  'yep-meeting-topics',
-  'yep-attendance-bulk',
-  'yep-file-secure'
-] as const;
-
-export type YEPFieldType = typeof YEP_FIELD_TYPES[number];
+export enum YEPFieldType {
+  yepParticipantLookup = 'yepParticipantLookup',
+  yepMentorLookup = 'yepMentorLookup',
+  yepSIN = 'yepSIN',
+  yepMentorAssignment = 'yepMentorAssignment',
+  yepParticipantAssignment = 'yepParticipantAssignment',
+  yepWorkshopSelector = 'yepWorkshopSelector',
+  yepMeetingTopics = 'yepMeetingTopics',
+  yepAttendanceBulk = 'yepAttendanceBulk',
+  yepFileSecure = 'yepFileSecure'
+}
 
 // Extended field type union (includes all survey types + YEP types)
 export type ExtendedFieldType = 
@@ -34,7 +32,7 @@ export type ExtendedFieldType =
   | 'department-on' | 'duration-hm' | 'duration-dh' | 'file-upload' | 'multi-text' | 'matrix-single' 
   | 'matrix-multiple' | 'likert-scale' | 'pain-scale' | 'calculated' | 'ranking' | 'datetime' 
   | 'color' | 'range' | 'percentage' | 'currency'
-  | YEPFieldType;
+  | keyof typeof YEPFieldType;
 
 // YEP Form Field Configuration
 export interface YEPFormField {
@@ -45,6 +43,7 @@ export interface YEPFormField {
   fields?: YEPFormField[]; // For group fields
   conditionField?: string;
   conditionValue?: string;
+  required?: boolean;
   validation?: {
     required?: boolean;
     pattern?: string;
@@ -78,6 +77,7 @@ export interface YEPFormField {
 export interface YEPFormSection {
   id: string;
   title: string;
+  description?: string;
   allRequired?: boolean;
   fields: YEPFormField[];
 }
@@ -121,15 +121,9 @@ export interface YEPFormSubmission {
 export const yepFormFieldSchema: z.ZodType<YEPFormField> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Field label is required'),
-  type: z.enum([
-    'text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number',
-    'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps',
-    'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on',
-    'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single',
-    'matrix-multiple', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime',
-    'color', 'range', 'percentage', 'currency',
-    ...YEP_FIELD_TYPES
-  ] as const),
+  type: z.custom<ExtendedFieldType>((val) => typeof val === 'string', {
+    message: 'Invalid field type'
+  }) as unknown as z.ZodType<ExtendedFieldType>,
   options: z.array(z.object({
     id: z.string(),
     label: z.string(),
@@ -204,43 +198,43 @@ export type YEPFormSubmissionData = z.infer<typeof yepFormSubmissionSchema>;
 
 // Utility functions
 export function isYEPFieldType(type: string): type is YEPFieldType {
-  return YEP_FIELD_TYPES.includes(type as YEPFieldType);
+  return Object.keys(YEPFieldType).includes(type as YEPFieldType);
 }
 
 export function getYEPFieldTypeConfig(type: YEPFieldType) {
   const configs: Record<YEPFieldType, Partial<YEPFormField['yepConfig']>> = {
-    'yep-participant-lookup': {
+    [YEPFieldType.yepParticipantLookup]: {
       targetEntity: 'participant',
       allowCreate: true,
       multipleSelection: false,
     },
-    'yep-mentor-lookup': {
+    [YEPFieldType.yepMentorLookup]: {
       targetEntity: 'mentor',
       allowCreate: true,
       multipleSelection: false,
     },
-    'yep-sin-secure': {
+    [YEPFieldType.yepSIN]: {
       secureField: true,
     },
-    'yep-mentor-assignment': {
+    [YEPFieldType.yepMentorAssignment]: {
       targetEntity: 'mentor',
       multipleSelection: true,
     },
-    'yep-participant-assignment': {
+    [YEPFieldType.yepParticipantAssignment]: {
       targetEntity: 'participant',
       multipleSelection: true,
     },
-    'yep-workshop-selector': {
+    [YEPFieldType.yepWorkshopSelector]: {
       targetEntity: 'workshop',
       multipleSelection: false,
     },
-    'yep-meeting-topics': {
+    [YEPFieldType.yepMeetingTopics]: {
       multipleSelection: true,
     },
-    'yep-attendance-bulk': {
+    [YEPFieldType.yepAttendanceBulk]: {
       bulkEntry: true,
     },
-    'yep-file-secure': {
+    [YEPFieldType.yepFileSecure]: {
       secureField: true,
     },
   };

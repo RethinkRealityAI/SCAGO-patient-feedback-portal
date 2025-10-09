@@ -1,0 +1,909 @@
+# SCAGO Patient Feedback Portal - Cursor Rules
+
+## Project Overview
+This is a Next.js 15 application with TypeScript, Firebase, and React for managing patient feedback and Youth Empowerment Program (YEP) data. The codebase includes survey management, YEP forms management, and comprehensive data processing.
+
+## Core Technologies
+- **Framework**: Next.js 15.3.3 with App Router
+- **Language**: TypeScript (strict mode)
+- **Database**: Firebase Firestore (Client SDK v9)
+- **UI**: React 18, Tailwind CSS, Shadcn UI components
+- **Forms**: React Hook Form with Zod validation
+- **State**: React hooks (useState, useEffect, useForm, useFieldArray)
+- **Drag & Drop**: dnd-kit library
+
+## File Structure & Conventions
+
+### Directory Structure
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── youth-empowerment/  # YEP dashboard and actions
+│   ├── yep-forms/         # YEP forms management
+│   └── api/               # API routes
+├── components/            # React components
+│   ├── youth-empowerment/ # YEP-specific components
+│   ├── yep-forms/         # YEP forms components
+│   └── ui/                # Reusable UI components
+├── lib/                   # Utilities and configurations
+│   ├── firebase.ts        # Firebase client configuration
+│   ├── youth-empowerment.ts # YEP types and utilities
+│   └── yep-forms-types.ts # YEP forms type definitions
+└── hooks/                 # Custom React hooks
+```
+
+### Naming Conventions
+- **Files**: kebab-case for directories, PascalCase for components
+- **Components**: PascalCase (e.g., `YEPFormEditor`)
+- **Actions**: camelCase with descriptive names (e.g., `createYEPFormTemplate`)
+- **Types**: PascalCase with descriptive prefixes (e.g., `YEPFormTemplate`)
+- **Enums**: PascalCase (e.g., `YEPFormCategory`)
+
+## TypeScript Best Practices
+
+### Type Safety Rules
+1. **Never use `any` unless absolutely necessary** - Use proper typing or `unknown`
+2. **Always define return types for functions** - Especially server actions
+3. **Use discriminated unions** for different form categories
+4. **Prefer interfaces over types** for object shapes
+5. **Use const assertions** for literal types: `as const`
+
+### Common Type Patterns
+```typescript
+// Server action return type
+type ActionResult<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+};
+
+// YEP entity with optional fields
+interface YEPParticipant {
+  id: string;
+  name: string;
+  email?: string;
+  // ... other fields
+}
+
+// Form field with validation
+interface YEPFormField {
+  id: string;
+  type: ExtendedFieldType;
+  label: string;
+  required?: boolean;
+  validation?: ValidationRules;
+}
+```
+
+### Type Import/Export Rules
+- **Always use named exports** for types and interfaces
+- **Group related types** in the same file
+- **Re-export commonly used types** from index files
+- **Use type-only imports** when importing only types: `import type { YEPFormTemplate }`
+
+## Firebase Integration Rules
+
+### Client SDK Usage
+- **Always use `@/lib/firebase`** - Never mix with admin SDK
+- **Use v9 modular syntax** - `import { doc, getDoc } from 'firebase/firestore'`
+- **Handle timestamps properly** - Convert Firestore timestamps to Date objects
+- **Use proper error handling** - Wrap all Firebase calls in try-catch
+
+### Firestore Patterns
+```typescript
+// Correct Firebase usage
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, collection, query, where, orderBy } from 'firebase/firestore';
+
+// Server action pattern
+export async function getYEPFormTemplate(id: string): Promise<ActionResult<YEPFormTemplate>> {
+  try {
+    const docRef = doc(db, 'yep-form-templates', id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Template not found' };
+    }
+    
+    const data = { id: docSnap.id, ...docSnap.data() } as YEPFormTemplate;
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error fetching template:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+```
+
+### Security Rules
+- **Always check user authentication** in Firestore rules
+- **Use role-based access control** - Admin, YEP Manager roles
+- **Validate data at database level** - Not just client-side
+- **Implement soft deletes** - Never permanently delete data
+
+## React Component Rules
+
+### Component Architecture
+1. **Separate server and client components** - Use 'use client' directive appropriately
+2. **Use React Hook Form** for all form handling
+3. **Implement proper error boundaries** - Wrap async operations
+4. **Use loading states** - Show feedback during async operations
+5. **Handle cleanup** - Use useEffect cleanup functions
+
+### Form Handling Patterns
+```typescript
+// Correct form setup with react-hook-form
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const formSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email'),
+});
+
+export function YEPFormEditor({ template }: { template: YEPFormTemplate }) {
+  const form = useForm<YEPFormTemplate>({
+    resolver: zodResolver(yepFormTemplateSchema),
+    defaultValues: template,
+  });
+
+  const onSubmit = async (data: YEPFormTemplate) => {
+    try {
+      const result = await updateYEPFormTemplate(data);
+      if (result.success) {
+        toast.success('Form updated successfully');
+      } else {
+        toast.error(result.error || 'Failed to update form');
+      }
+    } catch (error) {
+      toast.error('An unexpected error occurred');
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        {/* Form fields */}
+      </form>
+    </Form>
+  );
+}
+```
+
+### State Management Rules
+- **Use useState for local state** - Component-specific state
+- **Use useForm for form state** - React Hook Form handles this
+- **Use useEffect for side effects** - Data fetching, subscriptions
+- **Avoid prop drilling** - Use context for deeply nested state
+- **Implement optimistic updates** - Update UI before server confirmation
+
+## YEP Forms System Rules
+
+### Form Template Management
+1. **Always validate templates** - Use Zod schemas before saving
+2. **Implement versioning** - Increment version on updates
+3. **Use soft deletes** - Set `isActive: false` instead of deleting
+4. **Track audit information** - createdAt, updatedAt, createdBy
+5. **Support template duplication** - Clone with new name and version 1
+
+### Field Type Implementation
+```typescript
+// YEP-specific field types
+enum YEPFieldType {
+  yepParticipantLookup = 'yep-participant-lookup',
+  yepMentorLookup = 'yep-mentor-lookup',
+  yepSIN = 'yep-sin',
+  yepMentorAssignment = 'yep-mentor-assignment',
+  yepParticipantAssignment = 'yep-participant-assignment',
+  yepWorkshopSelector = 'yep-workshop-selector',
+  yepMeetingTopics = 'yep-meeting-topics',
+  yepAttendanceBulk = 'yep-attendance-bulk',
+  yepFileSecure = 'yep-file-secure',
+}
+
+// Field renderer pattern
+export function YEPFieldRenderer({ field, form }: YEPFieldRendererProps) {
+  switch (field.type) {
+    case YEPFieldType.yepParticipantLookup:
+      return <ParticipantLookupField field={field} form={form} />;
+    case YEPFieldType.yepMentorLookup:
+      return <MentorLookupField field={field} form={form} />;
+    // ... other cases
+    default:
+      return <StandardFieldRenderer field={field} form={form} />;
+  }
+}
+```
+
+### Data Processing Rules
+1. **Map form data to entities** - Use consistent field mapping
+2. **Handle SIN securely** - Hash before storage, never store raw
+3. **Process files securely** - Validate types, scan for viruses
+4. **Use transactions** - Ensure data consistency
+5. **Track processing status** - Pending, completed, failed states
+
+## Error Handling Rules
+
+### Common Error Patterns to Avoid
+1. **Firebase Admin SDK in client code** - Use `@/lib/firebase` not `@/lib/firebase-admin`
+2. **Type mismatches in action returns** - Check return shapes match expectations
+3. **Missing exports** - Always export types and interfaces
+4. **Field mapping errors** - Use correct field names (participantId vs participant)
+5. **Component prop mismatches** - Pass undefined not null for optional props
+6. **Unsupported component props** - Check Shadcn UI component APIs
+
+### Error Handling Patterns
+```typescript
+// Server action error handling
+export async function createYEPFormTemplate(data: YEPFormTemplate): Promise<ActionResult<YEPFormTemplate>> {
+  try {
+    // Validation
+    const validatedData = yepFormTemplateSchema.parse(data);
+    
+    // Firebase operation
+    const docRef = doc(collection(db, 'yep-form-templates'));
+    await setDoc(docRef, {
+      ...validatedData,
+      id: docRef.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    
+    return { success: true, data: { ...validatedData, id: docRef.id } };
+  } catch (error) {
+    console.error('Error creating template:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+// Client component error handling
+export function YEPFormEditor({ template }: { template: YEPFormTemplate }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleSubmit = async (data: YEPFormTemplate) => {
+    setIsLoading(true);
+    try {
+      const result = await updateYEPFormTemplate(data);
+      if (result.success) {
+        toast.success('Form updated successfully');
+      } else {
+        toast.error(result.error || 'Failed to update form');
+      }
+    } catch (error) {
+      toast.error('An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={form.handleSubmit(handleSubmit)}>
+      {/* Form content */}
+      <Button type="submit" disabled={isLoading}>
+        {isLoading ? 'Saving...' : 'Save Form'}
+      </Button>
+    </form>
+  );
+}
+```
+
+## Security Rules
+
+### Data Protection
+1. **Hash sensitive data** - SIN numbers, passwords
+2. **Validate file uploads** - Type, size, content scanning
+3. **Use secure storage** - Firebase Storage with proper rules
+4. **Implement access control** - Role-based permissions
+5. **Audit all operations** - Log create, update, delete actions
+
+### SIN Handling
+```typescript
+// Correct SIN processing
+import { hashSIN } from '@/lib/youth-empowerment';
+
+export async function processParticipantForm(data: any) {
+  // Hash SIN before storage
+  const hashedSIN = data.sin ? await hashSIN(data.sin) : null;
+  
+  const participantData = {
+    ...data,
+    sinHash: hashedSIN,
+    sinLastFour: data.sin ? data.sin.slice(-4) : null,
+    // Never store raw SIN
+  };
+  
+  return await createParticipant(participantData);
+}
+```
+
+## Performance Rules
+
+### Optimization Guidelines
+1. **Use React.memo** for expensive components
+2. **Implement useCallback** for event handlers
+3. **Use useMemo** for expensive calculations
+4. **Lazy load** heavy components
+5. **Optimize Firestore queries** - Use indexes, limit results
+
+### Query Optimization
+```typescript
+// Efficient Firestore queries
+export async function getYEPFormTemplates(): Promise<YEPFormTemplate[]> {
+  const q = query(
+    collection(db, 'yep-form-templates'),
+    where('isActive', '==', true),
+    orderBy('updatedAt', 'desc')
+  );
+  
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  } as YEPFormTemplate));
+}
+```
+
+## Testing Rules
+
+### Type Checking
+- **Always run `npx tsc --noEmit`** before committing
+- **Fix all TypeScript errors** - Never ignore type errors
+- **Use strict mode** - Enable all strict TypeScript options
+- **Test type inference** - Ensure types are properly inferred
+
+### Component Testing
+- **Test error states** - Network failures, validation errors
+- **Test loading states** - Async operations
+- **Test user interactions** - Form submissions, navigation
+- **Test accessibility** - Screen reader compatibility
+
+## Documentation Rules
+
+### Code Documentation
+1. **Document complex functions** - Use JSDoc comments
+2. **Explain business logic** - Why, not just what
+3. **Document type relationships** - How types connect
+4. **Include examples** - Usage patterns and examples
+5. **Update documentation** - Keep docs in sync with code
+
+### File Documentation
+```typescript
+/**
+ * Processes YEP form submissions and creates/updates YEP entities
+ * 
+ * @param submissionData - The form submission data
+ * @param formTemplate - The template that defines the form structure
+ * @returns Promise with processing result and created entity IDs
+ * 
+ * @example
+ * const result = await processYEPFormSubmission(submission, template);
+ * if (result.success) {
+ *   console.log('Created entities:', result.createdEntities);
+ * }
+ */
+export async function processYEPFormSubmission(
+  submissionData: YEPFormSubmission,
+  formTemplate: YEPFormTemplate
+): Promise<ActionResult<{ createdEntities: string[] }>> {
+  // Implementation
+}
+```
+
+## Common Pitfalls to Avoid
+
+### Firebase Issues
+- ❌ **Don't mix admin and client SDKs**
+- ❌ **Don't forget error handling**
+- ❌ **Don't ignore timestamp conversions**
+- ❌ **Don't skip validation**
+
+### React Issues
+- ❌ **Don't use useEffect for data fetching in server components**
+- ❌ **Don't forget cleanup functions**
+- ❌ **Don't mutate state directly**
+- ❌ **Don't ignore loading states**
+
+### TypeScript Issues
+- ❌ **Don't use `any` as a quick fix**
+- ❌ **Don't ignore type errors**
+- ❌ **Don't forget to export types**
+- ❌ **Don't mix null and undefined**
+
+### YEP Forms Issues
+- ❌ **Don't store raw SIN data**
+- ❌ **Don't skip form validation**
+- ❌ **Don't ignore processing status**
+- ❌ **Don't forget audit trails**
+
+## Quick Reference
+
+### Essential Commands
+```bash
+# Type checking
+npx tsc --noEmit
+
+# Development server
+npm run dev
+
+# Build
+npm run build
+
+# Lint check
+npm run lint
+```
+
+### Key Files to Know
+- `src/lib/firebase.ts` - Firebase configuration
+- `src/lib/youth-empowerment.ts` - YEP types and utilities
+- `src/lib/yep-forms-types.ts` - YEP forms type definitions
+- `src/app/youth-empowerment/actions.ts` - YEP entity CRUD
+- `src/app/yep-forms/actions.ts` - YEP forms CRUD
+- `docs/firestore.rules` - Database security rules
+
+### Common Patterns
+- Server actions return `{ success: boolean, data?, error? }`
+- Components use `useForm` with `zodResolver`
+- Firebase operations wrapped in try-catch
+- Loading states for all async operations
+- Toast notifications for user feedback
+
+## Rule Maintenance & Evolution
+
+### How to Update These Rules
+
+#### 1. **When to Update Rules**
+- **New Error Patterns**: When you encounter repeated errors that could be prevented
+- **New Best Practices**: When you discover better patterns or approaches
+- **New Technologies**: When adding new libraries or frameworks
+- **Performance Issues**: When you identify performance anti-patterns
+- **Security Vulnerabilities**: When new security concerns are discovered
+- **Code Quality Issues**: When you find patterns that improve maintainability
+
+#### 2. **How to Update Rules**
+
+**Step 1: Document the Issue**
+```markdown
+## New Pattern Discovered
+**Date**: [Current Date]
+**Issue**: [Description of the problem or improvement]
+**Solution**: [The pattern or rule that prevents/solves it]
+**Files Affected**: [List of files where this applies]
+**Example**: [Code example showing the pattern]
+```
+
+**Step 2: Add to Appropriate Section**
+- **Error Prevention**: Add to "Common Error Patterns to Avoid"
+- **Performance**: Add to "Performance Rules"
+- **Security**: Add to "Security Rules"
+- **Architecture**: Add to relevant architecture section
+
+**Step 3: Update Examples**
+- Add code examples showing the correct pattern
+- Include before/after comparisons
+- Reference specific files in the codebase
+
+**Step 4: Test the Rule**
+- Apply the rule to existing code
+- Verify it catches the intended issues
+- Ensure it doesn't create false positives
+
+#### 3. **Rule Maintenance Checklist**
+
+**Monthly Reviews:**
+- [ ] Review recent errors and add prevention rules
+- [ ] Check for new performance patterns
+- [ ] Update security rules based on new threats
+- [ ] Verify all examples still work
+- [ ] Remove outdated patterns
+
+**After Major Features:**
+- [ ] Document new architectural patterns
+- [ ] Add new field types and their usage
+- [ ] Update integration patterns
+- [ ] Add new error handling patterns
+
+**Before Releases:**
+- [ ] Verify all rules are current
+- [ ] Test rules against codebase
+- [ ] Update documentation references
+- [ ] Ensure consistency across sections
+
+## Performance Monitoring & System Health
+
+### Performance Patterns
+
+#### 1. **Database Performance**
+```typescript
+// Good: Efficient queries with proper indexing
+const q = query(
+  collection(db, 'yep-form-templates'),
+  where('isActive', '==', true),
+  orderBy('updatedAt', 'desc'),
+  limit(50) // Always limit results
+);
+
+// Bad: Unbounded queries
+const q = query(collection(db, 'yep-form-templates')); // No limits!
+```
+
+#### 2. **Component Performance**
+```typescript
+// Good: Memoized expensive components
+const ExpensiveComponent = React.memo(({ data }) => {
+  const processedData = useMemo(() => 
+    data.map(item => processItem(item)), [data]
+  );
+  return <div>{/* render */}</div>;
+});
+
+// Good: Optimized re-renders
+const handleSubmit = useCallback(async (data) => {
+  // submission logic
+}, [dependencies]);
+
+// Bad: Creating objects in render
+function BadComponent({ items }) {
+  return (
+    <div>
+      {items.map(item => (
+        <ItemComponent 
+          key={item.id}
+          config={{ type: 'default' }} // New object every render!
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+#### 3. **State Management Performance**
+```typescript
+// Good: Efficient state updates
+const [forms, setForms] = useState<YEPFormTemplate[]>([]);
+
+const addForm = useCallback((newForm: YEPFormTemplate) => {
+  setForms(prev => [...prev, newForm]); // Functional update
+}, []);
+
+// Bad: Inefficient state updates
+const addForm = (newForm: YEPFormTemplate) => {
+  setForms([...forms, newForm]); // Depends on forms, causes re-renders
+};
+```
+
+### System Health Monitoring
+
+#### 1. **Code Quality Metrics**
+```bash
+# Run these commands regularly
+npx tsc --noEmit                    # Type safety
+npm run lint                        # Code quality
+npm run build                       # Build success
+npm audit                          # Security vulnerabilities
+```
+
+#### 2. **Performance Monitoring**
+```typescript
+// Add performance monitoring to critical functions
+export async function processYEPFormSubmission(
+  submissionData: YEPFormSubmission,
+  formTemplate: YEPFormTemplate
+): Promise<ActionResult<{ createdEntities: string[] }>> {
+  const startTime = performance.now();
+  
+  try {
+    // Processing logic
+    const result = await processSubmission(submissionData, formTemplate);
+    
+    const endTime = performance.now();
+    console.log(`Processing took ${endTime - startTime} milliseconds`);
+    
+    return result;
+  } catch (error) {
+    console.error('Processing failed:', error);
+    return { success: false, error: 'Processing failed' };
+  }
+}
+```
+
+#### 3. **Error Tracking Patterns**
+```typescript
+// Comprehensive error logging
+export async function createYEPFormTemplate(data: YEPFormTemplate) {
+  try {
+    const result = await performCreation(data);
+    
+    // Log success metrics
+    console.log('Form template created successfully', {
+      templateId: result.id,
+      category: data.category,
+      fieldCount: data.sections.reduce((acc, section) => acc + section.fields.length, 0)
+    });
+    
+    return result;
+  } catch (error) {
+    // Log error with context
+    console.error('Failed to create form template', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      templateName: data.name,
+      category: data.category,
+      timestamp: new Date().toISOString()
+    });
+    
+    return { success: false, error: 'Failed to create template' };
+  }
+}
+```
+
+### Maintenance Best Practices
+
+#### 1. **Regular Health Checks**
+```bash
+# Weekly health check script
+#!/bin/bash
+echo "Running system health checks..."
+
+# Type checking
+echo "Type checking..."
+npx tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript errors found"
+  exit 1
+fi
+
+# Linting
+echo "Linting..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting errors found"
+  exit 1
+fi
+
+# Build test
+echo "Testing build..."
+npm run build
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed"
+  exit 1
+fi
+
+echo "✅ All health checks passed"
+```
+
+#### 2. **Performance Budgets**
+```typescript
+// Define performance budgets
+const PERFORMANCE_BUDGETS = {
+  formLoadTime: 2000,        // 2 seconds max
+  submissionTime: 5000,       // 5 seconds max
+  searchResponseTime: 500,    // 500ms max
+  componentRenderTime: 100,   // 100ms max
+} as const;
+
+// Monitor against budgets
+export function monitorPerformance<T>(
+  operation: () => Promise<T>,
+  budget: number,
+  operationName: string
+): Promise<T> {
+  const startTime = performance.now();
+  
+  return operation().then(result => {
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    if (duration > budget) {
+      console.warn(`⚠️ ${operationName} exceeded budget: ${duration}ms > ${budget}ms`);
+    }
+    
+    return result;
+  });
+}
+```
+
+#### 3. **Automated Quality Gates**
+```typescript
+// Pre-commit hooks for quality
+// .husky/pre-commit
+#!/bin/sh
+echo "Running pre-commit checks..."
+
+# Type check
+npx tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript errors found. Commit blocked."
+  exit 1
+fi
+
+# Lint check
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting errors found. Commit blocked."
+  exit 1
+fi
+
+echo "✅ Pre-commit checks passed"
+```
+
+### System Evolution Patterns
+
+#### 1. **Adding New Field Types**
+```typescript
+// When adding new YEP field types, follow this pattern:
+
+// 1. Add to enum
+enum YEPFieldType {
+  // ... existing types
+  newFieldType = 'new-field-type',
+}
+
+// 2. Add to renderer
+export function YEPFieldRenderer({ field, form }: YEPFieldRendererProps) {
+  switch (field.type) {
+    // ... existing cases
+    case YEPFieldType.newFieldType:
+      return <NewFieldTypeRenderer field={field} form={form} />;
+    default:
+      return <StandardFieldRenderer field={field} form={form} />;
+  }
+}
+
+// 3. Add to configuration
+export function getYEPFieldTypeConfig(type: YEPFieldType) {
+  const configs = {
+    // ... existing configs
+    [YEPFieldType.newFieldType]: {
+      label: 'New Field Type',
+      description: 'Description of the new field type',
+      icon: '🔧',
+      category: 'YEP Specific',
+      validation: { required: false },
+    },
+  };
+  
+  return configs[type];
+}
+
+// 4. Update processor if needed
+export function processNewFieldType(fieldData: any) {
+  // Handle the new field type in form processing
+  return processedData;
+}
+```
+
+#### 2. **Adding New Form Categories**
+```typescript
+// When adding new form categories:
+
+// 1. Add to enum
+enum YEPFormCategory {
+  // ... existing categories
+  newCategory = 'new-category',
+}
+
+// 2. Add processing logic
+export async function processYEPFormSubmission(
+  submissionData: YEPFormSubmission,
+  formTemplate: YEPFormTemplate
+): Promise<ActionResult<{ createdEntities: string[] }>> {
+  switch (formTemplate.category) {
+    // ... existing cases
+    case YEPFormCategory.newCategory:
+      return await processNewCategoryForm(submissionData, formTemplate);
+    default:
+      return { success: false, error: 'Unknown form category' };
+  }
+}
+
+// 3. Add to Firestore rules if needed
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     // ... existing rules
+//     match /new_entities/{document} {
+//       allow read, write: if request.auth != null && 
+//         hasRole(request.auth.uid, ['admin', 'yep-manager']);
+//     }
+//   }
+// }
+```
+
+#### 3. **Performance Optimization Patterns**
+```typescript
+// When optimizing performance:
+
+// 1. Identify bottlenecks
+const performanceProfiler = {
+  start: (label: string) => performance.mark(`${label}-start`),
+  end: (label: string) => {
+    performance.mark(`${label}-end`);
+    performance.measure(label, `${label}-start`, `${label}-end`);
+    const measure = performance.getEntriesByName(label)[0];
+    console.log(`${label}: ${measure.duration}ms`);
+  }
+};
+
+// 2. Implement optimizations
+// Use React.memo for expensive components
+const ExpensiveComponent = React.memo(({ data }) => {
+  // Component logic
+});
+
+// Use useMemo for expensive calculations
+const processedData = useMemo(() => 
+  expensiveCalculation(data), [data]
+);
+
+// Use useCallback for event handlers
+const handleSubmit = useCallback((formData) => {
+  // Handler logic
+}, [dependencies]);
+
+// 3. Monitor results
+performanceProfiler.start('form-processing');
+await processForm(data);
+performanceProfiler.end('form-processing');
+```
+
+### Rule Documentation Standards
+
+#### 1. **Rule Format**
+```markdown
+### [Rule Name]
+
+**Purpose**: [Why this rule exists]
+**When to Apply**: [When to use this rule]
+**Examples**: [Code examples]
+**Anti-patterns**: [What to avoid]
+**Related Rules**: [Links to related rules]
+```
+
+#### 2. **Example Documentation**
+```markdown
+### Firebase Client SDK Usage
+
+**Purpose**: Prevent mixing Firebase Admin SDK with Client SDK
+**When to Apply**: All Firebase operations in client components and server actions
+**Examples**: 
+```typescript
+// ✅ Good
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+
+// ❌ Bad
+import { db } from '@/lib/firebase-admin';
+```
+
+**Anti-patterns**: 
+- Using admin SDK in client code
+- Mixing SDK versions
+- Not handling errors properly
+
+**Related Rules**: Error Handling, Security Rules
+```
+
+### Continuous Improvement
+
+#### 1. **Monthly Rule Reviews**
+- Review error logs for new patterns
+- Check performance metrics for bottlenecks
+- Update security rules based on new threats
+- Refactor rules for clarity and accuracy
+
+#### 2. **Quarterly Architecture Reviews**
+- Assess rule effectiveness
+- Identify gaps in coverage
+- Update examples with current codebase
+- Remove outdated patterns
+
+#### 3. **Annual Rule Overhauls**
+- Complete rule system review
+- Update for new technologies
+- Consolidate related rules
+- Improve organization and navigation
+
+Remember: When in doubt, check existing patterns in the codebase and maintain consistency with established conventions. These rules should evolve with the system to maintain their effectiveness and relevance.

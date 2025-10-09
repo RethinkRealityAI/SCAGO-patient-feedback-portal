@@ -1,6 +1,20 @@
 'use server';
 
-import { db } from '@/lib/firebase-admin';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { 
   YEPFormTemplate, 
   YEPFormSubmission, 
@@ -24,7 +38,7 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
       version: 1,
     };
 
-    await db.collection('yep-form-templates').doc(formTemplate.id).set(formTemplate);
+    await setDoc(doc(db, 'yep-form-templates', formTemplate.id), formTemplate);
     
     return { success: true, data: formTemplate };
   } catch (error) {
@@ -39,10 +53,12 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
 // Get all YEP form templates
 export async function getYEPFormTemplates() {
   try {
-    const snapshot = await db.collection('yep-form-templates')
-      .where('isActive', '==', true)
-      .orderBy('updatedAt', 'desc')
-      .get();
+    const q = query(
+      collection(db, 'yep-form-templates'),
+      where('isActive', '==', true),
+      orderBy('updatedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
     
     const templates = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -62,13 +78,14 @@ export async function getYEPFormTemplates() {
 // Get a single YEP form template by ID
 export async function getYEPFormTemplate(id: string) {
   try {
-    const doc = await db.collection('yep-form-templates').doc(id).get();
+    const docRef = doc(db, 'yep-form-templates', id);
+    const docSnap = await getDoc(docRef);
     
-    if (!doc.exists) {
+    if (!docSnap.exists()) {
       return { success: false, error: 'Form template not found' };
     }
     
-    const template = { id: doc.id, ...doc.data() } as YEPFormTemplate;
+    const template = { id: docSnap.id, ...docSnap.data() } as YEPFormTemplate;
     return { success: true, data: template };
   } catch (error) {
     console.error('Error fetching YEP form template:', error);
@@ -90,7 +107,7 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
       version: (data.version || 1) + 1,
     };
 
-    await db.collection('yep-form-templates').doc(id).update(updateData);
+    await updateDoc(doc(db, 'yep-form-templates', id), updateData);
     
     return { success: true };
   } catch (error) {
@@ -105,7 +122,7 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
 // Delete a YEP form template (soft delete)
 export async function deleteYEPFormTemplate(id: string) {
   try {
-    await db.collection('yep-form-templates').doc(id).update({
+    await updateDoc(doc(db, 'yep-form-templates', id), {
       isActive: false,
       updatedAt: new Date(),
     });
@@ -167,7 +184,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
       processingStatus: 'pending',
     };
 
-    await db.collection('yep-form-submissions').doc(submission.id).set(submission);
+    await setDoc(doc(db, 'yep-form-submissions', submission.id), submission);
     
     return { success: true, data: submission };
   } catch (error) {
@@ -182,10 +199,12 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
 // Get form submissions for a template
 export async function getYEPFormSubmissions(formTemplateId: string) {
   try {
-    const snapshot = await db.collection('yep-form-submissions')
-      .where('formTemplateId', '==', formTemplateId)
-      .orderBy('submittedAt', 'desc')
-      .get();
+    const q = query(
+      collection(db, 'yep-form-submissions'),
+      where('formTemplateId', '==', formTemplateId),
+      orderBy('submittedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
     
     const submissions = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -205,11 +224,13 @@ export async function getYEPFormSubmissions(formTemplateId: string) {
 // Get form templates by category
 export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
   try {
-    const snapshot = await db.collection('yep-form-templates')
-      .where('category', '==', category)
-      .where('isActive', '==', true)
-      .orderBy('updatedAt', 'desc')
-      .get();
+    const q = query(
+      collection(db, 'yep-form-templates'),
+      where('category', '==', category),
+      where('isActive', '==', true),
+      orderBy('updatedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
     
     const templates = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -229,11 +250,13 @@ export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
 // Get form templates by target entity
 export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
   try {
-    const snapshot = await db.collection('yep-form-templates')
-      .where('targetEntity', '==', targetEntity)
-      .where('isActive', '==', true)
-      .orderBy('updatedAt', 'desc')
-      .get();
+    const q = query(
+      collection(db, 'yep-form-templates'),
+      where('targetEntity', '==', targetEntity),
+      where('isActive', '==', true),
+      orderBy('updatedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
     
     const templates = snapshot.docs.map(doc => ({
       id: doc.id,

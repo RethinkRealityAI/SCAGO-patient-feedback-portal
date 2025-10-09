@@ -125,7 +125,7 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
 
       // Sanitize data based on PII settings
       const sanitizedParticipants = filteredParticipants.map(p => 
-        sanitizeParticipantForExport(p, exportOptions.includePII)
+        sanitizeParticipantForExport(p as any, exportOptions.includePII)
       );
 
       // Generate filename
@@ -151,11 +151,11 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
         }
       } else if (exportOptions.format === 'json') {
         const exportData: ExportData = {
-          participants: sanitizedParticipants as YEPParticipant[],
-          mentors: filteredMentors,
-          workshops: filteredWorkshops,
-          attendance: filteredAttendance,
-          meetings: filteredMeetings,
+          participants: sanitizedParticipants as any,
+          mentors: filteredMentors as any,
+          workshops: filteredWorkshops as any,
+          attendance: filteredAttendance as any,
+          meetings: filteredMeetings as any,
         };
         exportToJSON(exportData, filename);
       } else if (exportOptions.format === 'xlsx') {
@@ -188,8 +188,10 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -229,7 +231,7 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
                     >
                       <Checkbox
                         checked={selectedDataTypes.includes(dataType.id)}
-                        readOnly
+                        
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">

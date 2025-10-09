@@ -247,7 +247,13 @@ export function AdvancedMetrics() {
                 <span className="text-sm font-medium">Workshop Attendance</span>
                 <span className="text-sm text-muted-foreground">{metrics.attendanceRate.toFixed(1)}%</span>
               </div>
-              <Progress value={metrics.attendanceRate} className="h-2" />
+              {metrics.attendanceRate === 0 ? (
+                <div className="h-2 w-full bg-muted rounded-full">
+                  <div className="h-full w-0 bg-muted-foreground/20 rounded-full" />
+                </div>
+              ) : (
+                <Progress value={metrics.attendanceRate} className="h-2" />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -255,7 +261,13 @@ export function AdvancedMetrics() {
                 <span className="text-sm font-medium">Mentor Engagement</span>
                 <span className="text-sm text-muted-foreground">{metrics.mentorUtilization.toFixed(1)}%</span>
               </div>
-              <Progress value={metrics.mentorUtilization} className="h-2" />
+              {metrics.mentorUtilization === 0 ? (
+                <div className="h-2 w-full bg-muted rounded-full">
+                  <div className="h-full w-0 bg-muted-foreground/20 rounded-full" />
+                </div>
+              ) : (
+                <Progress value={metrics.mentorUtilization} className="h-2" />
+              )}
             </div>
           </CardContent>
         </Card>

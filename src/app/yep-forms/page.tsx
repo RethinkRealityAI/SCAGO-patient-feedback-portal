@@ -76,7 +76,7 @@ async function YEPFormList() {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-      {forms.map((form: any) => (
+      {(forms || []).map((form: any) => (
         <div
           key={form.id}
           className="glass-card p-6 group hover:-translate-y-1 transition-all duration-300 hover:shadow-lg"

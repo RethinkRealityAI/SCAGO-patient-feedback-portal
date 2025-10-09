@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,9 +23,22 @@ const bulkMeetingFormSchema = z.object({
   advisorId: z.string().min(1, 'Advisor is required'),
   studentIds: z.array(z.string()).min(1, 'At least one student is required'),
   meetingDate: z.string().min(1, 'Meeting date is required'),
-  duration: z.number().optional(),
+  duration: z.number().min(1, 'Duration must be at least 1 minute').max(480, 'Duration cannot exceed 8 hours').optional(),
   notes: z.string().optional(),
   topics: z.array(z.string()).optional(),
+}).refine((data) => {
+  // Validate that meeting date is not in the future by more than 1 year
+  const meetingDate = new Date(data.meetingDate);
+  const now = new Date();
+  const oneYearFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  
+  if (meetingDate > oneYearFromNow) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Meeting date cannot be more than 1 year in the future',
+  path: ['meetingDate']
 });
 
 type BulkMeetingFormData = z.infer<typeof bulkMeetingFormSchema>;
@@ -53,6 +66,8 @@ const commonTopics = [
 
 export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor }: BulkMeetingFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [participants, setParticipants] = useState<YEPParticipant[]>([]);
   const [mentors, setMentors] = useState<YEPMentor[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
@@ -71,56 +86,86 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
     },
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-      if (preselectedAdvisor) {
-        form.setValue('advisorId', preselectedAdvisor);
-      }
-    }
-  }, [isOpen, preselectedAdvisor]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsDataLoading(true);
+    setDataError(null);
     try {
       const [participantsData, mentorsData] = await Promise.all([
         getParticipants({ approved: true }),
         getMentors(),
       ]);
+      
       setParticipants(participantsData);
       setMentors(mentorsData);
+      
+      // Check if we have the required data
+      if (participantsData.length === 0) {
+        setDataError('No approved participants found. Please add participants first.');
+      }
+      if (mentorsData.length === 0) {
+        setDataError('No mentors found. Please add mentors first.');
+      }
     } catch (error) {
       console.error('Error loading data:', error);
+      setDataError('Failed to load data. Please try again.');
+      toast({
+        title: 'Error',
+        description: 'Failed to load participants and mentors data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDataLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleStudentToggle = (studentId: string) => {
-    const newSelection = selectedStudents.includes(studentId)
-      ? selectedStudents.filter(id => id !== studentId)
-      : [...selectedStudents, studentId];
-    
-    setSelectedStudents(newSelection);
-    form.setValue('studentIds', newSelection);
-  };
+  useEffect(() => {
+    if (isOpen) {
+      loadData();
+    }
+  }, [isOpen, loadData]);
 
-  const handleTopicToggle = (topic: string) => {
-    const newTopics = selectedTopics.includes(topic)
-      ? selectedTopics.filter(t => t !== topic)
-      : [...selectedTopics, topic];
-    
-    setSelectedTopics(newTopics);
-    form.setValue('topics', newTopics);
-  };
+  useEffect(() => {
+    if (preselectedAdvisor) {
+      form.setValue('advisorId', preselectedAdvisor);
+    }
+  }, [preselectedAdvisor, form]);
 
-  const handleSelectAllStudents = () => {
+  const handleStudentToggle = useCallback((studentId: string) => {
+    setSelectedStudents(prevStudents => {
+      const newSelection = prevStudents.includes(studentId)
+        ? prevStudents.filter(id => id !== studentId)
+        : [...prevStudents, studentId];
+      
+      // Update form value immediately
+      form.setValue('studentIds', newSelection, { shouldValidate: true });
+      
+      return newSelection;
+    });
+  }, [form]);
+
+  const handleTopicToggle = useCallback((topic: string) => {
+    setSelectedTopics(prevTopics => {
+      const newTopics = prevTopics.includes(topic)
+        ? prevTopics.filter(t => t !== topic)
+        : [...prevTopics, topic];
+      
+      // Update form value immediately
+      form.setValue('topics', newTopics, { shouldValidate: true });
+      
+      return newTopics;
+    });
+  }, [form]);
+
+  const handleSelectAllStudents = useCallback(() => {
     const allIds = participants.map(p => p.id);
     setSelectedStudents(allIds);
-    form.setValue('studentIds', allIds);
-  };
+    form.setValue('studentIds', allIds, { shouldValidate: true });
+  }, [participants, form]);
 
-  const handleSelectNoneStudents = () => {
+  const handleSelectNoneStudents = useCallback(() => {
     setSelectedStudents([]);
-    form.setValue('studentIds', []);
-  };
+    form.setValue('studentIds', [], { shouldValidate: true });
+  }, [form]);
 
   const onSubmit = async (data: BulkMeetingFormData) => {
     setIsLoading(true);
@@ -150,11 +195,19 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
           title: 'Bulk Meetings Recorded',
           description: `Successfully recorded ${totalRecords} meetings with the same advisor.`,
         });
-        onSuccess();
-        onClose();
-        form.reset();
+        // Reset form and state
+        form.reset({
+          advisorId: preselectedAdvisor || '',
+          studentIds: [],
+          meetingDate: new Date().toISOString().slice(0, 16),
+          duration: undefined,
+          notes: '',
+          topics: [],
+        });
         setSelectedStudents([]);
         setSelectedTopics([]);
+        onSuccess();
+        onClose();
       } else {
         toast({
           title: 'Partial Success',
@@ -174,20 +227,26 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
     }
   };
 
-  const getStudentName = (studentId: string) => {
+  const getStudentName = useCallback((studentId: string) => {
     const student = participants.find(p => p.id === studentId);
     return student ? student.youthParticipant : 'Unknown Student';
-  };
+  }, [participants]);
 
-  const getAdvisorName = (advisorId: string) => {
+  const getAdvisorName = useCallback((advisorId: string) => {
     const advisor = mentors.find(m => m.id === advisorId);
     return advisor ? advisor.name : 'Unknown Advisor';
-  };
+  }, [mentors]);
 
-  const selectedAdvisor = mentors.find(m => m.id === form.watch('advisorId'));
+  const watchedAdvisorId = form.watch('advisorId');
+  const selectedAdvisor = useMemo(() => 
+    mentors.find(m => m.id === watchedAdvisorId), 
+    [mentors, watchedAdvisorId]
+  );
+
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -201,6 +260,23 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
+            {/* Data Loading and Error States */}
+            {isDataLoading && (
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <span>Loading participants and mentors...</span>
+              </div>
+            )}
+            
+            {dataError && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                <div className="flex items-center">
+                  <div className="text-destructive font-medium">Data Loading Error</div>
+                </div>
+                <div className="text-destructive/80 text-sm mt-1">{dataError}</div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Advisor Selection */}
               <Card>
@@ -220,23 +296,34 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Advisor *</FormLabel>
-                        <Select onValueChange={field.onValueChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} defaultValue={field.value as any}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select advisor" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {mentors.map((mentor) => (
-                              <SelectItem key={mentor.id} value={mentor.id}>
+                            {mentors.length === 0 ? (
+                              <SelectItem value="" disabled>
                                 <div className="flex flex-col">
-                                  <span className="font-medium">{mentor.name}</span>
+                                  <span className="font-medium text-muted-foreground">No mentors available</span>
                                   <span className="text-sm text-muted-foreground">
-                                    {mentor.title}
+                                    Please add mentors first
                                   </span>
                                 </div>
                               </SelectItem>
-                            ))}
+                            ) : (
+                              mentors.map((mentor) => (
+                                <SelectItem key={mentor.id} value={mentor.id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{mentor.name}</span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {mentor.title}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -288,7 +375,18 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                   </div>
 
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {participants.map((participant) => (
+                    {participants.length === 0 ? (
+                      <div className="flex items-center justify-center p-8 text-center">
+                        <div>
+                          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <p className="text-muted-foreground">No participants available</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Please add participants first
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      participants.map((participant) => (
                       <div
                         key={participant.id}
                         className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -296,12 +394,17 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                             ? 'bg-primary/10 border-primary'
                             : 'hover:bg-muted/50'
                         }`}
-                        onClick={() => handleStudentToggle(participant.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleStudentToggle(participant.id);
+                        }}
                       >
                         <div className="flex items-center gap-3">
                           <Checkbox
                             checked={selectedStudents.includes(participant.id)}
                             readOnly
+                            className="pointer-events-none"
                           />
                           <div className="flex-1">
                             <div className="font-medium">{participant.youthParticipant}</div>
@@ -323,7 +426,8 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                           )}
                         </div>
                       </div>
-                    ))}
+                      ))
+                    )}
                   </div>
 
                   {selectedStudents.length > 0 && (
@@ -423,13 +527,18 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                           ? 'bg-primary/10 border-primary'
                           : 'hover:bg-muted/50'
                       }`}
-                      onClick={() => handleTopicToggle(topic)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleTopicToggle(topic);
+                      }}
                     >
                       <Checkbox
                         checked={selectedTopics.includes(topic)}
                         readOnly
+                        className="pointer-events-none"
                       />
-                      <Label className="text-sm cursor-pointer">{topic}</Label>
+                      <Label className="text-sm cursor-pointer pointer-events-none">{topic}</Label>
                     </div>
                   ))}
                 </div>
@@ -515,7 +624,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
               </Button>
               <Button 
                 type="submit" 
-                disabled={isLoading || selectedStudents.length === 0}
+                disabled={isLoading || isDataLoading || participants.length === 0 || mentors.length === 0 || selectedStudents.length === 0}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Record Bulk Meetings ({selectedStudents.length} records)
