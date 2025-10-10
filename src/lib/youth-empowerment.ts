@@ -4,35 +4,46 @@ import bcrypt from 'bcryptjs';
 export interface YEPParticipant {
   id: string;
   youthParticipant: string;
-  email: string;
+  age?: number;
+  email?: string; // Made optional to handle empty submissions
   etransferEmailAddress?: string;
-  mailingAddress?: string;
   phoneNumber?: string;
-  region: string;
-  approved: boolean;
-  contractSigned: boolean;
-  signedSyllabus: boolean;
-  availability: string;
-  assignedMentor: string;
-  idProvided: boolean;
-  canadianStatus: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
-  canadianStatusOther: string;
-  sinLast4: string;
-  sinHash: string;
-  youthProposal: string;
-  proofOfAffiliationWithSCD: boolean;
-  scagoCounterpart: string;
-  dob: string;
+  emergencyContactRelationship?: string;
+  emergencyContactNumber?: string;
+  region?: string; // Made optional to handle empty submissions
+  mailingAddress?: string;
+  // Separate address fields
+  streetAddress?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  projectCategory?: string;
+  projectInANutshell?: string;
+  contractSigned?: boolean; // Made optional with default false
+  signedSyllabus?: boolean; // Made optional with default false
+  availability?: string; // Made optional to handle empty submissions
+  assignedMentor?: string; // Made optional to handle empty submissions
+  idProvided?: boolean; // Made optional with default false
+  canadianStatus?: 'Canadian Citizen' | 'Permanent Resident' | 'Other'; // Made optional
+  sin?: string;
+  sinNumber?: string;
+  sinLast4: string; // Required for security - always store last 4 digits
+  sinHash: string; // Required for security - always store hash
+  youthProposal?: string; // Made optional to handle empty submissions
+  affiliationWithSCD?: string;
+  proofOfAffiliationWithSCD?: boolean; // Made optional with default false
+  scagoCounterpart?: string; // Made optional to handle empty submissions
+  dob?: string; // Made optional to handle empty submissions
+  file?: string;
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
-  // New fields from current participants data
-  age?: number;
+  // Additional legacy fields
+  approved?: boolean; // Made optional with default false
+  canadianStatusOther?: string; // Made optional
   citizenshipStatus?: string;
   location?: string;
-  projectCategory?: string;
   duties?: string;
-  affiliationWithSCD?: string;
   notes?: string;
   nextSteps?: string;
   interviewed?: boolean;

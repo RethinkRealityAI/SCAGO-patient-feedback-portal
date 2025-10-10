@@ -62,6 +62,9 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending'>('all');
   const [regionFilter, setRegionFilter] = useState('all');
+  const [ageFilter, setAgeFilter] = useState<'all' | 'under18' | '18-25' | 'over25'>('all');
+  const [documentFilter, setDocumentFilter] = useState<'all' | 'complete' | 'incomplete'>('all');
+  const [recruitmentFilter, setRecruitmentFilter] = useState<'all' | 'recruited' | 'interviewed' | 'pending'>('all');
   const [selectedParticipant, setSelectedParticipant] = useState<YEPParticipant | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -76,7 +79,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
   useEffect(() => {
     filterParticipants();
-  }, [participants, searchTerm, statusFilter, regionFilter]);
+  }, [participants, searchTerm, statusFilter, regionFilter, ageFilter, documentFilter, recruitmentFilter]);
 
   const loadParticipants = async () => {
     setIsLoading(true);
@@ -106,7 +109,11 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
         p.etransferEmailAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.phoneNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.mailingAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.region.toLowerCase().includes(searchTerm.toLowerCase())
+        p.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.projectCategory?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.emergencyContactRelationship?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.emergencyContactNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.assignedMentor?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -120,6 +127,39 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
     // Region filter
     if (regionFilter !== 'all') {
       filtered = filtered.filter(p => p.region === regionFilter);
+    }
+
+    // Age filter
+    if (ageFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        if (!p.age) return ageFilter === 'pending'; // No age data
+        switch (ageFilter) {
+          case 'under18': return p.age < 18;
+          case '18-25': return p.age >= 18 && p.age <= 25;
+          case 'over25': return p.age > 25;
+          default: return true;
+        }
+      });
+    }
+
+    // Document filter
+    if (documentFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        const hasDocuments = p.contractSigned || p.signedSyllabus || p.idProvided || p.proofOfAffiliationWithSCD;
+        return documentFilter === 'complete' ? hasDocuments : !hasDocuments;
+      });
+    }
+
+    // Recruitment filter
+    if (recruitmentFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        switch (recruitmentFilter) {
+          case 'recruited': return p.recruited;
+          case 'interviewed': return p.interviewed;
+          case 'pending': return !p.recruited && !p.interviewed;
+          default: return true;
+        }
+      });
     }
 
     setFilteredParticipants(filtered);
@@ -186,12 +226,60 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
   const getDocumentStatus = (participant: YEPParticipant) => {
     const statuses = [];
-    if (participant.contractSigned) statuses.push('Contract');
-    if (participant.signedSyllabus) statuses.push('Syllabus');
-    if (participant.idProvided) statuses.push('ID');
-    if (participant.proofOfAffiliationWithSCD) statuses.push('SCD Proof');
+    if (participant.contractSigned) statuses.push('✓ Contract');
+    if (participant.signedSyllabus) statuses.push('✓ Syllabus');
+    if (participant.idProvided) statuses.push('✓ ID');
+    if (participant.proofOfAffiliationWithSCD) statuses.push('✓ SCD Proof');
+    if (participant.youthProposal) statuses.push('✓ Proposal');
+    if (participant.affiliationWithSCD) statuses.push('✓ SCD Affil');
     
-    return statuses.length > 0 ? statuses.join(', ') : 'None';
+    return statuses.length > 0 ? statuses.join(' ') : 'No docs';
+  };
+
+  const getRecruitmentStatus = (participant: YEPParticipant) => {
+    const statuses = [];
+    if (participant.recruited) statuses.push('✓ Recruited');
+    if (participant.interviewed) statuses.push('✓ Interviewed');
+    if (participant.approved) statuses.push('✓ Approved');
+    
+    return statuses.length > 0 ? statuses.join(' ') : 'Pending';
+  };
+
+  const getDocumentStatusBadges = (participant: YEPParticipant) => {
+    const badges = [];
+    if (participant.contractSigned) {
+      badges.push(<Badge key="contract" variant="outline" className="text-xs">Contract Signed</Badge>);
+    }
+    if (participant.signedSyllabus) {
+      badges.push(<Badge key="syllabus" variant="outline" className="text-xs">Signed Syllabus</Badge>);
+    }
+    if (participant.idProvided) {
+      badges.push(<Badge key="id" variant="outline" className="text-xs">ID Provided</Badge>);
+    }
+    if (participant.proofOfAffiliationWithSCD) {
+      badges.push(<Badge key="scd" variant="outline" className="text-xs">SCD Affiliation</Badge>);
+    }
+    if (participant.youthProposal) {
+      badges.push(<Badge key="proposal" variant="outline" className="text-xs">Youth Proposal</Badge>);
+    }
+    if (participant.affiliationWithSCD) {
+      badges.push(<Badge key="affil" variant="outline" className="text-xs">SCD Affiliation</Badge>);
+    }
+    
+    return badges.length > 0 ? badges : [<span key="none" className="text-xs text-muted-foreground">No docs</span>];
+  };
+
+  const getRecruitmentStatusBadges = (participant: YEPParticipant) => {
+    const badges = [];
+    if (participant.recruited) {
+      badges.push(<Badge key="recruited" variant="default" className="text-xs bg-blue-100 text-blue-800">Recruited</Badge>);
+    }
+    if (participant.interviewed) {
+      badges.push(<Badge key="interviewed" variant="default" className="text-xs bg-purple-100 text-purple-800">Interviewed</Badge>);
+    }
+    // Note: Approved status is already shown in the main status badge, so we don't duplicate it here
+    
+    return badges.length > 0 ? badges : [<span key="pending" className="text-xs text-muted-foreground">Pending</span>];
   };
 
   const regions = Array.from(new Set(participants.map(p => p.region)));
@@ -226,18 +314,21 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                 Manage youth participants in the empowerment program
               </CardDescription>
             </div>
-            <Button onClick={() => setIsFormOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Participant
-            </Button>
-            <Button variant="secondary" onClick={() => setIsImporterOpen(true)}>
-              Import CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setIsFormOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Participant
+              </Button>
+              <Button variant="secondary" onClick={() => setIsImporterOpen(true)}>
+                Import CSV
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="space-y-4 mb-6">
+            {/* Search */}
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -249,27 +340,87 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={regionFilter} onValueChange={setRegionFilter}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Region" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Regions</SelectItem>
-                {regions.map(region => (
-                  <SelectItem key={region} value={region}>{region}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            
+            {/* All Filters in One Row */}
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+              <div className="flex flex-wrap gap-4 flex-1">
+                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select value={regionFilter} onValueChange={setRegionFilter}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Regions</SelectItem>
+                    {regions.map(region => (
+                      <SelectItem key={region} value={region}>{region}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={ageFilter} onValueChange={(value: any) => setAgeFilter(value)}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Age" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Ages</SelectItem>
+                    <SelectItem value="under18">Under 18</SelectItem>
+                    <SelectItem value="18-25">18-25</SelectItem>
+                    <SelectItem value="over25">Over 25</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select value={documentFilter} onValueChange={(value: any) => setDocumentFilter(value)}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Documents" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Documents</SelectItem>
+                    <SelectItem value="complete">Complete</SelectItem>
+                    <SelectItem value="incomplete">Incomplete</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select value={recruitmentFilter} onValueChange={(value: any) => setRecruitmentFilter(value)}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Recruitment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Recruitment</SelectItem>
+                    <SelectItem value="recruited">Recruited</SelectItem>
+                    <SelectItem value="interviewed">Interviewed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Clear Filters Button */}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                  setRegionFilter('all');
+                  setAgeFilter('all');
+                  setDocumentFilter('all');
+                  setRecruitmentFilter('all');
+                }}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Clear Filters
+              </Button>
+            </div>
           </div>
 
           {/* Table */}
@@ -279,13 +430,12 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                 <TableRow>
                   <TableHead>Participant</TableHead>
                   <TableHead>Contact Info</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Status & Documents</TableHead>
                   <TableHead>Region</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead>Project</TableHead>
-                  <TableHead>Recruitment</TableHead>
+                  <TableHead>Emergency Contact</TableHead>
                   <TableHead>Mentor</TableHead>
-                  <TableHead>Documents</TableHead>
                   <TableHead>File</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
@@ -337,7 +487,15 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {getStatusBadge(participant)}
+                        <div className="space-y-2">
+                          {getStatusBadge(participant)}
+                          <div className="flex flex-wrap gap-1">
+                            {getDocumentStatusBadges(participant)}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {getRecruitmentStatusBadges(participant)}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -355,10 +513,12 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                       <TableCell>
                         {participant.projectCategory ? (
                           <div className="text-sm">
-                            <div className="font-medium">{participant.projectCategory}</div>
-                            {participant.duties && (
-                              <div className="text-muted-foreground truncate max-w-[150px]" title={participant.duties}>
-                                {participant.duties}
+                            <div className="font-medium truncate max-w-[120px]" title={participant.projectCategory}>
+                              {participant.projectCategory}
+                            </div>
+                            {participant.projectInANutshell && (
+                              <div className="text-muted-foreground truncate max-w-[120px]" title={participant.projectInANutshell}>
+                                {participant.projectInANutshell}
                               </div>
                             )}
                           </div>
@@ -367,31 +527,19 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {participant.recruited && (
-                            <Badge variant="default" className="text-xs">
-                              Recruited
-                            </Badge>
-                          )}
-                          {participant.interviewed && (
-                            <Badge variant="outline" className="text-xs">
-                              Interviewed
-                            </Badge>
-                          )}
-                          {!participant.recruited && !participant.interviewed && (
-                            <span className="text-muted-foreground text-sm">Pending</span>
-                          )}
-                        </div>
+                        {participant.emergencyContactRelationship && participant.emergencyContactNumber ? (
+                          <div className="text-sm">
+                            <div className="font-medium">{participant.emergencyContactRelationship}</div>
+                            <div className="text-muted-foreground">{participant.emergencyContactNumber}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {participant.assignedMentor || (
                           <span className="text-muted-foreground">Not assigned</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {getDocumentStatus(participant)}
-                        </div>
                       </TableCell>
                       <TableCell>
                         {participant.fileUrl ? (
@@ -471,58 +619,159 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
             </DialogDescription>
           </DialogHeader>
           {selectedParticipant && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Name</label>
-                  <p className="text-sm">{selectedParticipant.youthParticipant}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Email</label>
-                  <p className="text-sm">{selectedParticipant.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
-                  <p className="text-sm">{selectedParticipant.phoneNumber || 'Not provided'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">E-transfer Email</label>
-                  <p className="text-sm">{selectedParticipant.etransferEmailAddress || 'Not provided'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Mailing Address</label>
-                  <p className="text-sm">{selectedParticipant.mailingAddress || 'Not provided'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Region</label>
-                  <p className="text-sm">{selectedParticipant.region}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <div className="text-sm">{getStatusBadge(selectedParticipant)}</div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Canadian Status</label>
-                  <p className="text-sm">{selectedParticipant.canadianStatus}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
-                  <p className="text-sm">{new Date(selectedParticipant.dob).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Assigned Mentor</label>
-                  <p className="text-sm">{selectedParticipant.assignedMentor || 'Not assigned'}</p>
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Name</label>
+                    <p className="text-sm">{selectedParticipant.youthParticipant}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Age</label>
+                    <p className="text-sm">{selectedParticipant.age || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Email</label>
+                    <p className="text-sm">{selectedParticipant.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                    <p className="text-sm">{selectedParticipant.phoneNumber || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">E-transfer Email</label>
+                    <p className="text-sm">{selectedParticipant.etransferEmailAddress || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Region</label>
+                    <p className="text-sm">{selectedParticipant.region}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Mailing Address</label>
+                    <p className="text-sm">{selectedParticipant.mailingAddress || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
+                    <p className="text-sm">{selectedParticipant.dob ? new Date(selectedParticipant.dob).toLocaleDateString() : 'Not provided'}</p>
+                  </div>
                 </div>
               </div>
-              {selectedParticipant.youthProposal && (
+
+              {/* Emergency Contact */}
+              {(selectedParticipant.emergencyContactRelationship || selectedParticipant.emergencyContactNumber) && (
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Youth Proposal</label>
-                  <p className="text-sm mt-1">{selectedParticipant.youthProposal}</p>
+                  <h3 className="text-lg font-semibold mb-3">Emergency Contact</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Relationship</label>
+                      <p className="text-sm">{selectedParticipant.emergencyContactRelationship || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                      <p className="text-sm">{selectedParticipant.emergencyContactNumber || 'Not provided'}</p>
+                    </div>
+                  </div>
                 </div>
               )}
+
+              {/* Project Information */}
+              {(selectedParticipant.projectCategory || selectedParticipant.projectInANutshell || selectedParticipant.duties) && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Project Information</h3>
+                  <div className="space-y-3">
+                    {selectedParticipant.projectCategory && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Project Category</label>
+                        <p className="text-sm">{selectedParticipant.projectCategory}</p>
+                      </div>
+                    )}
+                    {selectedParticipant.projectInANutshell && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Project in a Nutshell</label>
+                        <p className="text-sm">{selectedParticipant.projectInANutshell}</p>
+                      </div>
+                    )}
+                    {selectedParticipant.duties && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Duties</label>
+                        <p className="text-sm">{selectedParticipant.duties}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Status and Documents */}
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Document Status</label>
-                <p className="text-sm mt-1">{getDocumentStatus(selectedParticipant)}</p>
+                <h3 className="text-lg font-semibold mb-3">Status & Documents</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Approval Status</label>
+                    <div className="text-sm">{getStatusBadge(selectedParticipant)}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Canadian Status</label>
+                    <p className="text-sm">{selectedParticipant.canadianStatus}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Document Status</label>
+                    <p className="text-sm">{getDocumentStatus(selectedParticipant)}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Recruitment Status</label>
+                    <p className="text-sm">{getRecruitmentStatus(selectedParticipant)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information */}
+              {(selectedParticipant.youthProposal || selectedParticipant.affiliationWithSCD || selectedParticipant.scagoCounterpart || selectedParticipant.notes) && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Additional Information</h3>
+                  <div className="space-y-3">
+                    {selectedParticipant.youthProposal && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Youth Proposal</label>
+                        <p className="text-sm">{selectedParticipant.youthProposal}</p>
+                      </div>
+                    )}
+                    {selectedParticipant.affiliationWithSCD && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Affiliation with SCD</label>
+                        <p className="text-sm">{selectedParticipant.affiliationWithSCD}</p>
+                      </div>
+                    )}
+                    {selectedParticipant.scagoCounterpart && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">SCAGO Counterpart</label>
+                        <p className="text-sm">{selectedParticipant.scagoCounterpart}</p>
+                      </div>
+                    )}
+                    {selectedParticipant.notes && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Notes</label>
+                        <p className="text-sm">{selectedParticipant.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Mentor Assignment */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Mentor Assignment</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Assigned Mentor</label>
+                    <p className="text-sm">{selectedParticipant.assignedMentor || 'Not assigned'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Availability</label>
+                    <p className="text-sm">{selectedParticipant.availability || 'Not provided'}</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

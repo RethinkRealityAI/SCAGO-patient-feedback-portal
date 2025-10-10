@@ -27,39 +27,49 @@ function parseLocalDateFromYMD(ymd: string): Date {
   return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
 }
 
-// Validation Schemas
+// Validation Schemas - Updated to handle empty data gracefully
 const participantSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
-  email: z.string().email('Valid email is required'),
+  age: z.number().min(16).max(30).optional(),
+  email: z.string().email('Valid email is required').optional().or(z.literal('')),
   etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
-  mailingAddress: z.string().optional(),
-  phoneNumber: z.string().optional(),
-  region: z.string().min(2, 'Region is required'),
-  approved: z.boolean().default(false),
-  contractSigned: z.boolean().default(false),
-  signedSyllabus: z.boolean().default(false),
-  availability: z.string().optional(),
-  assignedMentor: z.string().optional(),
-  idProvided: z.boolean().default(false),
-  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']),
-  canadianStatusOther: z.string().optional(),
-  sin: z.string().optional(),
-  youthProposal: z.string().optional(),
-  proofOfAffiliationWithSCD: z.boolean().default(false),
-  scagoCounterpart: z.string().optional(),
-  dob: z.string().min(1, 'Date of birth is required'),
-  file: z.instanceof(File).optional(),
-  // New fields from current participants data
-  age: z.number().optional(),
-  citizenshipStatus: z.string().optional(),
-  location: z.string().optional(),
-  projectCategory: z.string().optional(),
-  duties: z.string().optional(),
-  affiliationWithSCD: z.string().optional(),
-  notes: z.string().optional(),
-  nextSteps: z.string().optional(),
+  phoneNumber: z.string().optional().or(z.literal('')),
+  emergencyContactRelationship: z.string().optional().or(z.literal('')),
+  emergencyContactNumber: z.string().optional().or(z.literal('')),
+  region: z.string().optional().or(z.literal('')),
+  mailingAddress: z.string().optional().or(z.literal('')),
+  // Separate address fields
+  streetAddress: z.string().optional().or(z.literal('')),
+  city: z.string().optional().or(z.literal('')),
+  province: z.string().optional().or(z.literal('')),
+  postalCode: z.string().optional().or(z.literal('')),
+  projectCategory: z.string().optional().or(z.literal('')),
+  projectInANutshell: z.string().optional().or(z.literal('')),
+  contractSigned: z.boolean().optional().default(false),
+  signedSyllabus: z.boolean().optional().default(false),
+  availability: z.string().optional().or(z.literal('')),
+  assignedMentor: z.string().optional().or(z.literal('')),
+  idProvided: z.boolean().optional().default(false),
+  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).optional(),
+  sin: z.string().optional().or(z.literal('')),
+  sinNumber: z.string().optional().or(z.literal('')),
+  youthProposal: z.string().optional().or(z.literal('')),
+  affiliationWithSCD: z.string().optional().or(z.literal('')),
+  proofOfAffiliationWithSCD: z.boolean().optional().default(false),
+  scagoCounterpart: z.string().optional().or(z.literal('')),
+  dob: z.string().optional().or(z.literal('')),
+  file: z.string().optional().or(z.literal('')),
+  fileUpload: z.instanceof(File).optional(),
+  // Additional legacy fields
+  approved: z.boolean().optional().default(false),
+  canadianStatusOther: z.string().optional().or(z.literal('')),
+  citizenshipStatus: z.string().optional().or(z.literal('')),
+  location: z.string().optional().or(z.literal('')),
+  duties: z.string().optional().or(z.literal('')),
+  notes: z.string().optional().or(z.literal('')),
+  nextSteps: z.string().optional().or(z.literal('')),
   interviewed: z.boolean().optional(),
-  interviewNotes: z.string().optional(),
+  interviewNotes: z.string().optional().or(z.literal('')),
   recruited: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
@@ -104,10 +114,10 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
   try {
     const validatedData = participantSchema.parse(data);
     
-    // Handle SIN if provided
-    let sinLast4 = '';
-    let sinHash = '';
-    if (validatedData.sin) {
+    // Handle SIN if provided - always provide defaults for security
+    let sinLast4 = 'N/A';
+    let sinHash = 'N/A';
+    if (validatedData.sin && validatedData.sin.trim() !== '') {
       if (!validateSINLenient(validatedData.sin)) {
         return { error: 'Invalid SIN format' };
       }
@@ -129,28 +139,51 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
 
     const participantData = {
       youthParticipant: validatedData.youthParticipant,
-      email: validatedData.email,
+      age: validatedData.age,
+      email: validatedData.email || '',
       etransferEmailAddress: validatedData.etransferEmailAddress || '',
-      mailingAddress: validatedData.mailingAddress || '',
       phoneNumber: validatedData.phoneNumber || '',
-      region: validatedData.region,
-      approved: validatedData.approved,
-      contractSigned: validatedData.contractSigned,
-      signedSyllabus: validatedData.signedSyllabus,
+      emergencyContactRelationship: validatedData.emergencyContactRelationship || '',
+      emergencyContactNumber: validatedData.emergencyContactNumber || '',
+      region: validatedData.region || '',
+      mailingAddress: validatedData.mailingAddress || '',
+      // Address fields
+      streetAddress: validatedData.streetAddress || '',
+      city: validatedData.city || '',
+      province: validatedData.province || '',
+      postalCode: validatedData.postalCode || '',
+      projectCategory: validatedData.projectCategory || '',
+      projectInANutshell: validatedData.projectInANutshell || '',
+      contractSigned: validatedData.contractSigned ?? false,
+      signedSyllabus: validatedData.signedSyllabus ?? false,
       availability: validatedData.availability || '',
       assignedMentor: validatedData.assignedMentor || '',
-      idProvided: validatedData.idProvided,
-      canadianStatus: validatedData.canadianStatus,
-      canadianStatusOther: validatedData.canadianStatusOther || '',
-      sinLast4,
-      sinHash,
+      idProvided: validatedData.idProvided ?? false,
+      canadianStatus: validatedData.canadianStatus || 'Other',
+      sin: validatedData.sin || '',
+      sinNumber: validatedData.sinNumber || '',
+      sinLast4: sinLast4,
+      sinHash: sinHash,
       youthProposal: validatedData.youthProposal || '',
-      proofOfAffiliationWithSCD: validatedData.proofOfAffiliationWithSCD,
+      affiliationWithSCD: validatedData.affiliationWithSCD || '',
+      proofOfAffiliationWithSCD: validatedData.proofOfAffiliationWithSCD ?? false,
       scagoCounterpart: validatedData.scagoCounterpart || '',
-      dob: validatedData.dob,
-      fileUrl,
-      fileName,
-      fileType,
+      dob: validatedData.dob || '',
+      file: validatedData.file || '',
+      fileUrl: fileUrl || '',
+      fileName: fileName || '',
+      fileType: fileType || '',
+      // Additional legacy fields
+      approved: validatedData.approved ?? false,
+      canadianStatusOther: validatedData.canadianStatusOther || '',
+      citizenshipStatus: validatedData.citizenshipStatus || '',
+      location: validatedData.location || '',
+      duties: validatedData.duties || '',
+      notes: validatedData.notes || '',
+      nextSteps: validatedData.nextSteps || '',
+      interviewed: validatedData.interviewed,
+      interviewNotes: validatedData.interviewNotes || '',
+      recruited: validatedData.recruited,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -174,23 +207,42 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 
     // Only include fields that have values
     if (data.youthParticipant !== undefined) updateData.youthParticipant = data.youthParticipant;
+    if (data.age !== undefined) updateData.age = data.age;
     if (data.email !== undefined) updateData.email = data.email;
     if (data.etransferEmailAddress !== undefined) updateData.etransferEmailAddress = data.etransferEmailAddress;
-    if (data.mailingAddress !== undefined) updateData.mailingAddress = data.mailingAddress;
     if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber;
+    if (data.emergencyContactRelationship !== undefined) updateData.emergencyContactRelationship = data.emergencyContactRelationship;
+    if (data.emergencyContactNumber !== undefined) updateData.emergencyContactNumber = data.emergencyContactNumber;
     if (data.region !== undefined) updateData.region = data.region;
-    if (data.approved !== undefined) updateData.approved = data.approved;
+    if (data.mailingAddress !== undefined) updateData.mailingAddress = data.mailingAddress;
+    if (data.projectCategory !== undefined) updateData.projectCategory = data.projectCategory;
+    if (data.projectInANutshell !== undefined) updateData.projectInANutshell = data.projectInANutshell;
     if (data.contractSigned !== undefined) updateData.contractSigned = data.contractSigned;
     if (data.signedSyllabus !== undefined) updateData.signedSyllabus = data.signedSyllabus;
     if (data.availability !== undefined) updateData.availability = data.availability;
     if (data.assignedMentor !== undefined) updateData.assignedMentor = data.assignedMentor;
     if (data.idProvided !== undefined) updateData.idProvided = data.idProvided;
     if (data.canadianStatus !== undefined) updateData.canadianStatus = data.canadianStatus;
-    if (data.canadianStatusOther !== undefined) updateData.canadianStatusOther = data.canadianStatusOther;
+    if (data.sin !== undefined) updateData.sin = data.sin;
+    if (data.sinNumber !== undefined) updateData.sinNumber = data.sinNumber;
     if (data.youthProposal !== undefined) updateData.youthProposal = data.youthProposal;
+    if (data.affiliationWithSCD !== undefined) updateData.affiliationWithSCD = data.affiliationWithSCD;
     if (data.proofOfAffiliationWithSCD !== undefined) updateData.proofOfAffiliationWithSCD = data.proofOfAffiliationWithSCD;
     if (data.scagoCounterpart !== undefined) updateData.scagoCounterpart = data.scagoCounterpart;
     if (data.dob !== undefined) updateData.dob = data.dob;
+    if (data.file !== undefined) updateData.file = data.file;
+    
+    // Additional legacy fields
+    if (data.approved !== undefined) updateData.approved = data.approved;
+    if (data.canadianStatusOther !== undefined) updateData.canadianStatusOther = data.canadianStatusOther;
+    if (data.citizenshipStatus !== undefined) updateData.citizenshipStatus = data.citizenshipStatus;
+    if (data.location !== undefined) updateData.location = data.location;
+    if (data.duties !== undefined) updateData.duties = data.duties;
+    if (data.notes !== undefined) updateData.notes = data.notes;
+    if (data.nextSteps !== undefined) updateData.nextSteps = data.nextSteps;
+    if (data.interviewed !== undefined) updateData.interviewed = data.interviewed;
+    if (data.interviewNotes !== undefined) updateData.interviewNotes = data.interviewNotes;
+    if (data.recruited !== undefined) updateData.recruited = data.recruited;
 
     // Handle SIN update if provided
     if (data.sin && data.sin.trim() !== '') {
@@ -309,6 +361,11 @@ export async function getParticipants(filters?: {
         mailingAddress: data.mailingAddress || '',
         phoneNumber: data.phoneNumber || '',
         region: data.region || '',
+        // Address fields
+        streetAddress: data.streetAddress || '',
+        city: data.city || '',
+        province: data.province || '',
+        postalCode: data.postalCode || '',
         approved: data.approved || false,
         contractSigned: data.contractSigned || false,
         signedSyllabus: data.signedSyllabus || false,
@@ -328,11 +385,17 @@ export async function getParticipants(filters?: {
         fileType: data.fileType || '',
         // New fields from current participants data
         age: data.age || null,
+        emergencyContactRelationship: data.emergencyContactRelationship || '',
+        emergencyContactNumber: data.emergencyContactNumber || '',
+        projectCategory: data.projectCategory || '',
+        projectInANutshell: data.projectInANutshell || '',
+        sin: data.sin || '',
+        sinNumber: data.sinNumber || '',
+        affiliationWithSCD: data.affiliationWithSCD || '',
+        file: data.file || '',
         citizenshipStatus: data.citizenshipStatus || '',
         location: data.location || '',
-        projectCategory: data.projectCategory || '',
         duties: data.duties || '',
-        affiliationWithSCD: data.affiliationWithSCD || '',
         notes: data.notes || '',
         nextSteps: data.nextSteps || '',
         interviewed: data.interviewed || false,

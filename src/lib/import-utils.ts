@@ -44,30 +44,46 @@ export type SupportedFormat = typeof SUPPORTED_FORMATS[number];
 // Table schemas for validation
 export const TABLE_SCHEMAS = {
   participants: {
-    required: ['youthParticipant', 'email', 'region', 'dob', 'canadianStatus'],
+    required: ['youthParticipant'], // Only name is required
     optional: [
-      'etransferEmailAddress', 'mailingAddress', 'phoneNumber', 'approved', 
-      'contractSigned', 'signedSyllabus', 'availability', 'assignedMentor', 
-      'idProvided', 'canadianStatusOther', 'sin', 'sinLast4', 'sinHash',
-      'youthProposal', 'proofOfAffiliationWithSCD', 'scagoCounterpart',
-      'age', 'citizenshipStatus', 'location', 'projectCategory', 'duties',
-      'affiliationWithSCD', 'notes', 'nextSteps', 'interviewed', 
-      'interviewNotes', 'recruited', 'fileUrl', 'fileName', 'fileType'
+      'age', 'email', 'etransferEmailAddress', 'phoneNumber', 'emergencyContactRelationship',
+      'emergencyContactNumber', 'region', 'mailingAddress', 'projectCategory', 'projectInANutshell',
+      'contractSigned', 'signedSyllabus', 'availability', 'assignedMentor', 'idProvided',
+      'canadianStatus', 'sin', 'sinNumber', 'sinLast4', 'sinHash', 'youthProposal',
+      'affiliationWithSCD', 'proofOfAffiliationWithSCD', 'scagoCounterpart', 'dob', 'file',
+      'approved', 'canadianStatusOther', 'citizenshipStatus', 'location', 'duties',
+      'notes', 'nextSteps', 'interviewed', 'interviewNotes', 'recruited',
+      'fileUrl', 'fileName', 'fileType'
     ],
     types: {
       youthParticipant: 'string',
-      email: 'email',
-      region: 'string',
-      dob: 'date',
       age: 'number',
-      approved: 'boolean',
+      email: 'email',
+      etransferEmailAddress: 'email',
+      phoneNumber: 'phone',
+      emergencyContactRelationship: 'string',
+      emergencyContactNumber: 'phone',
+      region: 'string',
+      mailingAddress: 'string',
+      projectCategory: 'string',
+      projectInANutshell: 'string',
       contractSigned: 'boolean',
       signedSyllabus: 'boolean',
+      availability: 'string',
+      assignedMentor: 'string',
       idProvided: 'boolean',
+      canadianStatus: 'enum:Canadian Citizen,Permanent Resident,Other',
+      sin: 'string',
+      sinNumber: 'string',
+      youthProposal: 'string',
+      affiliationWithSCD: 'string',
       proofOfAffiliationWithSCD: 'boolean',
+      scagoCounterpart: 'string',
+      dob: 'date',
+      file: 'string',
+      approved: 'boolean',
       interviewed: 'boolean',
-      recruited: 'boolean',
-      canadianStatus: 'enum:Canadian Citizen,Permanent Resident,Other'
+      recruited: 'boolean'
     }
   },
   mentors: {
@@ -267,7 +283,41 @@ export function convertDataTypes(data: any[], table: keyof typeof TABLE_SCHEMAS)
   });
 }
 
-// Generate field mapping suggestions
+// Helper function to safely handle empty data
+export function sanitizeEmptyData(data: any): any {
+  if (data === null || data === undefined) return '';
+  if (typeof data === 'string' && data.trim() === '') return '';
+  if (typeof data === 'boolean') return data;
+  if (typeof data === 'number') return data;
+  return data;
+}
+
+// Helper function to provide safe defaults for required fields
+export function getSafeDefaults(): Record<string, any> {
+  return {
+    youthParticipant: '',
+    email: '',
+    region: '',
+    dob: '',
+    canadianStatus: 'Other',
+    contractSigned: false,
+    signedSyllabus: false,
+    availability: '',
+    assignedMentor: '',
+    idProvided: false,
+    proofOfAffiliationWithSCD: false,
+    scagoCounterpart: '',
+    youthProposal: '',
+    approved: false,
+    canadianStatusOther: '',
+    sinLast4: '',
+    sinHash: '',
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+}
+
+// Enhanced field mapping suggestions with intelligent matching
 export function generateMappingSuggestions(
   csvHeaders: string[], 
   table: keyof typeof TABLE_SCHEMAS
@@ -275,40 +325,112 @@ export function generateMappingSuggestions(
   const schema = TABLE_SCHEMAS[table];
   const mapping: ImportMapping = {};
   
+  // Enhanced fuzzy matching with more comprehensive patterns
+  const fuzzyMatches: { [key: string]: string[] } = {
+    // Core participant fields
+    'youthParticipant': ['name', 'participant', 'youth', 'student', 'participant name', 'full name', 'fullname', 'first name', 'last name', 'given name', 'surname', 'family name'],
+    'email': ['email', 'e-mail', 'email address', 'e-mail address', 'mail', 'electronic mail', 'contact email', 'primary email', 'email id', 'email_id', 'emailaddress'],
+    'etransferEmailAddress': ['etransfer', 'e-transfer', 'transfer email', 'payment email', 'etransfer email', 'e transfer', 'electronic transfer', 'money transfer email', 'payment address'],
+    'mailingAddress': ['address', 'mailing', 'postal', 'street', 'home address', 'mailing address', 'postal address', 'street address', 'home', 'residence', 'location address', 'physical address', 'mail address', 'postal code', 'zip code'],
+    'phoneNumber': ['phone', 'telephone', 'mobile', 'cell', 'contact number', 'phone number', 'mobile number', 'cell phone', 'telephone number', 'contact', 'phone_no', 'mobile_phone', 'cell_phone', 'telephone_no', 'contact_phone'],
+    'region': ['region', 'province', 'state', 'location', 'geographic region', 'area', 'territory', 'jurisdiction', 'administrative region', 'geographic area', 'provincial', 'regional', 'location region', 'geographic location'],
+    
+    // Status and approval fields
+    'approved': ['approved', 'status', 'active', 'enrolled', 'accepted', 'confirmed', 'verified', 'validated', 'authorized', 'cleared', 'passed', 'qualified', 'eligible', 'admitted', 'registered', 'enrolled status'],
+    'contractSigned': ['contract', 'signed', 'agreement', 'contract signed', 'signed contract', 'agreement signed', 'contractual agreement', 'legal agreement', 'signed agreement', 'contract status', 'agreement status', 'signed status', 'contractual'],
+    'signedSyllabus': ['syllabus', 'signed syllabus', 'course agreement', 'syllabus signed', 'course syllabus', 'program syllabus', 'curriculum agreement', 'syllabus status', 'course agreement signed', 'program agreement', 'curriculum signed'],
+    'idProvided': ['id', 'identification', 'id provided', 'documents', 'id documents', 'identification provided', 'id status', 'documentation', 'id verification', 'identification status', 'documents provided', 'id_verified', 'identification_verified'],
+    
+    // Assignment and availability
+    'availability': ['availability', 'schedule', 'time', 'when available', 'available times', 'schedule availability', 'time availability', 'available hours', 'free time', 'schedule preferences', 'time preferences', 'availability schedule'],
+    'assignedMentor': ['mentor', 'assigned mentor', 'supervisor', 'mentor assigned', 'supervisor assigned', 'mentor name', 'supervisor name', 'assigned supervisor', 'mentor assignment', 'supervisor assignment', 'mentor_id', 'supervisor_id', 'assigned_to'],
+    
+    // Canadian status and citizenship
+    'canadianStatus': ['citizenship', 'canadian', 'status', 'citizen', 'canadian status', 'citizenship status', 'citizen status', 'immigration status', 'residency status', 'citizenship type', 'canadian citizen', 'citizen type', 'immigration', 'residency'],
+    'canadianStatusOther': ['other status', 'citizenship other', 'non-canadian', 'other citizenship', 'alternative status', 'other immigration status', 'non-citizen status', 'other residency', 'alternative citizenship', 'other citizen type'],
+    'citizenshipStatus': ['citizenship', 'citizen status', 'immigration', 'citizenship status', 'immigration status', 'citizen type', 'citizenship type', 'residency', 'residency status', 'immigration type', 'citizenship_category'],
+    
+    // Personal information
+    'dob': ['dob', 'date of birth', 'birthday', 'birth date', 'date_of_birth', 'birthday_date', 'birth_date', 'date_of_birth', 'birthday_date', 'birthday', 'born', 'birth', 'date born', 'birthday date', 'date of birth', 'birthday_date'],
+    'age': ['age', 'years old', 'age_years', 'current_age', 'age_in_years', 'years', 'age group', 'age_range', 'age category', 'age_bracket', 'age_class'],
+    'sin': ['sin', 'social insurance', 'sin number', 'ssn', 'social insurance number', 'sin_code', 'social_security', 'insurance_number', 'sin_no', 'ssn_number', 'social_insurance_no', 'insurance_code', 'sin_id'],
+    
+    // Project and affiliation
+    'youthProposal': ['proposal', 'project', 'idea', 'youth proposal', 'project proposal', 'youth project', 'proposed project', 'project idea', 'youth idea', 'proposal description', 'project description', 'youth project idea'],
+    'proofOfAffiliationWithSCD': ['affiliation', 'scd', 'proof', 'connection', 'scd affiliation', 'scd proof', 'affiliation proof', 'scd connection', 'scd relationship', 'scd affiliation proof', 'sickle cell affiliation', 'scd connection proof', 'affiliation with scd'],
+    'scagoCounterpart': ['counterpart', 'scago', 'partner', 'scago counterpart', 'scago partner', 'counterpart name', 'partner name', 'scago contact', 'scago representative', 'scago counterpart name', 'scago partner name', 'scago_contact'],
+    'affiliationWithSCD': ['scd affiliation', 'scd connection', 'scd relationship', 'affiliation with scd', 'sickle cell affiliation', 'scd connection type', 'scd relationship type', 'scd_affiliation', 'scd_connection', 'scd_relationship', 'sickle_cell_affiliation'],
+    
+    // Location and project details
+    'location': ['location', 'city', 'town', 'place', 'geographic location', 'physical location', 'current location', 'residence location', 'home location', 'address location', 'city_name', 'town_name', 'place_name', 'location_name'],
+    'projectCategory': ['category', 'project type', 'field', 'project category', 'category type', 'project field', 'category field', 'project classification', 'category_class', 'project_type', 'field_type', 'category_type', 'project_field'],
+    'duties': ['duties', 'responsibilities', 'tasks', 'job duties', 'role duties', 'responsibility', 'task list', 'job responsibilities', 'role responsibilities', 'duty_list', 'responsibility_list', 'task_list', 'job_duties'],
+    
+    // Notes and follow-up
+    'notes': ['notes', 'comments', 'remarks', 'additional', 'additional notes', 'comments notes', 'remarks notes', 'additional comments', 'extra notes', 'supplementary notes', 'note', 'comment', 'remark', 'additional_info', 'extra_info'],
+    'nextSteps': ['next steps', 'follow up', 'action items', 'next actions', 'follow-up', 'action plan', 'next actions', 'follow up items', 'action items list', 'next_steps', 'follow_up', 'action_items', 'next_actions'],
+    
+    // Interview and recruitment
+    'interviewed': ['interviewed', 'interview', 'meeting', 'interview status', 'interviewed status', 'interview completed', 'interview done', 'interviewed_flag', 'interview_status', 'interview_completed', 'interview_done', 'interview_flag'],
+    'interviewNotes': ['interview notes', 'meeting notes', 'interview comments', 'interview remarks', 'interview feedback', 'interview summary', 'interview details', 'interview_record', 'meeting_comments', 'interview_comments', 'interview_feedback'],
+    'recruited': ['recruited', 'recruitment', 'source', 'recruitment source', 'recruited from', 'recruitment method', 'recruitment channel', 'recruitment_source', 'recruited_flag', 'recruitment_status', 'recruitment_method']
+  };
+  
   // Try to match headers to schema fields
   csvHeaders.forEach(header => {
-    const lowerHeader = header.toLowerCase();
+    const lowerHeader = header.toLowerCase().trim();
     
-    // Direct matches
+    // Direct matches (highest priority)
     if (schema.required.includes(header) || schema.optional.includes(header)) {
       mapping[header] = header;
       return;
     }
     
-    // Fuzzy matches
-    const fuzzyMatches: { [key: string]: string[] } = {
-      'name': ['youthParticipant', 'participant', 'fullname', 'full_name'],
-      'email': ['email', 'email_address', 'e_mail'],
-      'phone': ['phone', 'phone_number', 'phoneNumber', 'telephone'],
-      'address': ['address', 'mailingAddress', 'mailing_address'],
-      'region': ['region', 'province', 'state'],
-      'dob': ['dob', 'date_of_birth', 'birthdate', 'birth_date'],
-      'age': ['age', 'years_old'],
-      'approved': ['approved', 'status', 'active'],
-      'mentor': ['mentor', 'assignedMentor', 'assigned_mentor'],
-      'title': ['title', 'job_title', 'position'],
-      'date': ['date', 'workshop_date', 'meeting_date'],
-      'description': ['description', 'desc', 'details']
-    };
+    // Enhanced fuzzy matching with scoring
+    let bestMatch = '';
+    let bestScore = 0;
     
     Object.entries(fuzzyMatches).forEach(([schemaField, variations]) => {
-      if (variations.some(variation => 
-        lowerHeader.includes(variation.toLowerCase()) || 
-        variation.toLowerCase().includes(lowerHeader)
-      )) {
-        mapping[header] = schemaField;
+      let fieldScore = 0;
+      
+      for (const variation of variations) {
+        const variationLower = variation.toLowerCase();
+        
+        // Exact match (highest score)
+        if (lowerHeader === variationLower) {
+          fieldScore += 20;
+        }
+        // Substring match (high score)
+        else if (lowerHeader.includes(variationLower) || variationLower.includes(lowerHeader)) {
+          fieldScore += 10;
+        }
+        // Word boundary match (medium score)
+        else {
+          const headerWords = lowerHeader.split(/[\s_-]+/);
+          const variationWords = variationLower.split(/[\s_-]+/);
+          
+          for (const hWord of headerWords) {
+            for (const vWord of variationWords) {
+              if (hWord === vWord && hWord.length > 2) {
+                fieldScore += 5;
+              } else if (hWord.includes(vWord) || vWord.includes(hWord)) {
+                fieldScore += 3;
+              }
+            }
+          }
+        }
+      }
+      
+      if (fieldScore > bestScore) {
+        bestScore = fieldScore;
+        bestMatch = schemaField;
       }
     });
+    
+    // Only map if we have a confident match
+    if (bestScore >= 5) {
+      mapping[header] = bestMatch;
+    }
   });
   
   return mapping;
