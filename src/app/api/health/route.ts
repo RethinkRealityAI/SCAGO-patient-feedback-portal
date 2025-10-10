@@ -57,6 +57,16 @@ export async function GET() {
     'GOOGLE_API_KEY',
   ];
 
+  // Debug logging for environment variables
+  console.log('Health check - Environment variables:');
+  requiredEnvVars.forEach(varName => {
+    const value = process.env[varName];
+    console.log(`${varName}: ${value ? `exists (length: ${value.length})` : 'missing'}`);
+    if (varName === 'GOOGLE_API_KEY' && value) {
+      console.log(`GOOGLE_API_KEY starts with AIza: ${value.startsWith('AIza')}`);
+    }
+  });
+
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
   
   if (missingEnvVars.length > 0) {
