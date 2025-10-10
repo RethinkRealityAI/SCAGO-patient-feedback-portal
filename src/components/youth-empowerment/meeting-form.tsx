@@ -150,7 +150,7 @@ export function MeetingForm({
       
       return newTopics;
     });
-  }, [form]);
+  }, []); // Removed form from dependencies to prevent infinite loop - form is stable
 
   const onSubmit = async (data: MeetingFormData) => {
     setIsLoading(true);

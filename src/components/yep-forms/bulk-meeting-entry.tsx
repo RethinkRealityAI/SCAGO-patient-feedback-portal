@@ -73,7 +73,7 @@ export function BulkMeetingEntry({
 
   useEffect(() => {
     onChange?.(meetingRecords);
-  }, [meetingRecords, onChange]);
+  }, [meetingRecords]); // Removed onChange from dependencies to prevent infinite loop
 
   const loadData = async () => {
     try {
