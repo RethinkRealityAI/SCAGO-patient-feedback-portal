@@ -225,6 +225,10 @@ export const regionOptions = [
   'Toronto',
   'Etobicoke',
   'Ottawa',
+  'Oakville',
+  'Edmonton',
+  'Mississauga',
+  'London',
   'Other'
 ];
 

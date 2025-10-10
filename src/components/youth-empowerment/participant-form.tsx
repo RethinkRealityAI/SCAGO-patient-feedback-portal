@@ -25,7 +25,7 @@ import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 const participantFormSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
-  age: z.number().min(16).max(30).optional(),
+  age: z.number().max(30).optional(),
   email: z.string().email('Valid email is required').optional().or(z.literal('')),
   etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
   phoneNumber: z.string().optional().or(z.literal('')),
