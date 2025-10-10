@@ -25,40 +25,50 @@ import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 const participantFormSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
-  email: z.string().email('Valid email is required'),
+  age: z.number().min(16).max(30).optional(),
+  email: z.string().email('Valid email is required').optional().or(z.literal('')),
   etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
-  mailingAddress: z.string().optional(),
-  phoneNumber: z.string().optional(),
-  region: z.string().min(1, 'Region is required'),
-  approved: z.boolean().default(false),
-  contractSigned: z.boolean().default(false),
-  signedSyllabus: z.boolean().default(false),
-  availability: z.string().optional(),
-  assignedMentor: z.string().optional(),
-  idProvided: z.boolean().default(false),
-  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']),
-  canadianStatusOther: z.string().optional(),
+  phoneNumber: z.string().optional().or(z.literal('')),
+  emergencyContactRelationship: z.string().optional().or(z.literal('')),
+  emergencyContactNumber: z.string().optional().or(z.literal('')),
+  region: z.string().optional().or(z.literal('')),
+  mailingAddress: z.string().optional().or(z.literal('')),
+  // Separate address fields
+  streetAddress: z.string().optional().or(z.literal('')),
+  city: z.string().optional().or(z.literal('')),
+  province: z.string().optional().or(z.literal('')),
+  postalCode: z.string().optional().or(z.literal('')),
+  projectCategory: z.string().optional().or(z.literal('')),
+  projectInANutshell: z.string().optional().or(z.literal('')),
+  contractSigned: z.boolean().optional().default(false),
+  signedSyllabus: z.boolean().optional().default(false),
+  availability: z.string().optional().or(z.literal('')),
+  assignedMentor: z.string().optional().or(z.literal('')),
+  idProvided: z.boolean().optional().default(false),
+  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).default('Other'),
   sin: z.string().optional().refine((val) => {
     // Only validate if the value exists and is not empty
     if (!val || val.trim() === '') return true;
     return validateSINLenient(val);
-  }, 'Invalid SIN format'),
-  youthProposal: z.string().optional(),
-  proofOfAffiliationWithSCD: z.boolean().default(false),
-  scagoCounterpart: z.string().optional(),
-  dob: z.string().min(1, 'Date of birth is required'),
-  file: z.instanceof(File).optional(),
-  // New fields from current participants data
-  age: z.number().optional(),
-  citizenshipStatus: z.string().optional(),
-  location: z.string().optional(),
-  projectCategory: z.string().optional(),
-  duties: z.string().optional(),
-  affiliationWithSCD: z.string().optional(),
-  notes: z.string().optional(),
-  nextSteps: z.string().optional(),
+  }, 'Invalid SIN format').or(z.literal('')),
+  sinNumber: z.string().optional().or(z.literal('')),
+  youthProposal: z.string().optional().or(z.literal('')),
+  affiliationWithSCD: z.string().optional().or(z.literal('')),
+  proofOfAffiliationWithSCD: z.boolean().optional().default(false),
+  scagoCounterpart: z.string().optional().or(z.literal('')),
+  dob: z.string().optional().or(z.literal('')),
+  file: z.string().optional().or(z.literal('')),
+  fileUpload: z.instanceof(File).optional(),
+  // Additional legacy fields
+  approved: z.boolean().optional().default(false),
+  canadianStatusOther: z.string().optional().or(z.literal('')),
+  citizenshipStatus: z.string().optional().or(z.literal('')),
+  location: z.string().optional().or(z.literal('')),
+  duties: z.string().optional().or(z.literal('')),
+  notes: z.string().optional().or(z.literal('')),
+  nextSteps: z.string().optional().or(z.literal('')),
   interviewed: z.boolean().optional(),
-  interviewNotes: z.string().optional(),
+  interviewNotes: z.string().optional().or(z.literal('')),
   recruited: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
@@ -96,6 +106,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       mailingAddress: participant?.mailingAddress || '',
       phoneNumber: participant?.phoneNumber || '',
       region: participant?.region || '',
+      streetAddress: participant?.streetAddress || '',
+      city: participant?.city || '',
+      province: participant?.province || '',
+      postalCode: participant?.postalCode || '',
       approved: participant?.approved || false,
       contractSigned: participant?.contractSigned || false,
       signedSyllabus: participant?.signedSyllabus || false,
@@ -187,6 +201,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         mailingAddress: '',
         phoneNumber: '',
         region: '',
+        streetAddress: '',
+        city: '',
+        province: '',
+        postalCode: '',
         approved: false,
         contractSigned: false,
         signedSyllabus: false,
@@ -348,14 +366,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Basic Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Basic Information</CardTitle>
-                  <CardDescription>Personal details and contact information</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            {/* Basic Information - Full Width */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Basic Information</CardTitle>
+                <CardDescription>Personal details and contact information</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                   <FormField
                     control={form.control}
                     name="youthParticipant"
@@ -418,26 +435,70 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="mailingAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mailing Address</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            {...field} 
-                            placeholder="123 Main St, City, Province, Postal Code"
-                            rows={3}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Full mailing address (optional)
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Address Fields */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium text-gray-900">Mailing Address</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="streetAddress"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>Street Address</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="123 Main Street" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="city"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>City</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Toronto" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="province"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Province</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Ontario" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="postalCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Postal Code</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="M5V 3A8" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormDescription>
+                      Complete mailing address (all fields optional)
+                    </FormDescription>
+                  </div>
 
                   <FormField
                     control={form.control}
@@ -477,11 +538,72 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                       </FormItem>
                     )}
                   />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="age"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Age</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              {...field} 
+                              value={field.value || ''} 
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === '') {
+                                  field.onChange(undefined);
+                                } else {
+                                  const numValue = parseInt(value);
+                                  field.onChange(isNaN(numValue) ? undefined : numValue);
+                                }
+                              }}
+                              placeholder="Enter age"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="location"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Location</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="City, Province" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="affiliationWithSCD"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Affiliation with SCD</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g., Living with SCD, Advocate, Sibling of someone with SCD" />
+                        </FormControl>
+                        <FormDescription>
+                          Connection to Sickle Cell Disease
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </CardContent>
               </Card>
 
-              {/* Right column with Status & Documents and Program Details stacked */}
-              <div className="space-y-6">
+            {/* Status & Documents and Program Details - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Status and Documents - Compact */}
                 <Card>
                   <CardHeader className="pb-3">
@@ -657,9 +779,9 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                   </CardContent>
                 </Card>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Legal & Security and Document Upload - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Legal and Security */}
               <Card>
                 <CardHeader>
@@ -820,8 +942,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
               </Card>
             </div>
 
-            {/* Project Information */}
-            <Card>
+            {/* Project Information and Program Status & Notes - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Project Information */}
+              <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Project Information</CardTitle>
                 <CardDescription>Youth proposal and project details</CardDescription>
@@ -886,97 +1010,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
               </CardContent>
             </Card>
 
-            {/* Additional Information */}
-            <Card>
+              {/* Program Status & Notes */}
+              <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Additional Information</CardTitle>
-                <CardDescription>Additional participant details and status</CardDescription>
+                <CardTitle className="text-lg">Program Status & Notes</CardTitle>
+                <CardDescription>Recruitment status and additional notes</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="age"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Age</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            {...field} 
-                            value={field.value || ''} 
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value === '') {
-                                field.onChange(undefined);
-                              } else {
-                                const numValue = parseInt(value);
-                                field.onChange(isNaN(numValue) ? undefined : numValue);
-                              }
-                            }}
-                            placeholder="Enter age"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Participant's age
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Location</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="City, Province" />
-                        </FormControl>
-                        <FormDescription>
-                          Specific location or city
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="citizenshipStatus"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Citizenship Status</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="e.g., Canadian Citizen, Permanent Resident" />
-                      </FormControl>
-                      <FormDescription>
-                        Original citizenship status from application
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="affiliationWithSCD"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Affiliation with SCD</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="e.g., Living with SCD, Advocate, Sibling of someone with SCD" />
-                      </FormControl>
-                      <FormDescription>
-                        Connection to Sickle Cell Disease
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -1081,6 +1121,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 />
               </CardContent>
             </Card>
+            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>

@@ -1,1063 +1,309 @@
-# SCAGO Patient Feedback Portal - Cursor Rules
+# SCAGO Patient Feedback Portal - AI System Management Rules
 
-## Project Overview
-This is a Next.js 15 application with TypeScript, Firebase, and React for managing patient feedback and Youth Empowerment Program (YEP) data. The codebase includes survey management, YEP forms management, and comprehensive data processing.
+## AI System Architecture Overview
 
-## Core Technologies
-- **Framework**: Next.js 15.3.3 with App Router
-- **Language**: TypeScript (strict mode)
-- **Database**: Firebase Firestore (Client SDK v9)
-- **UI**: React 18, Tailwind CSS, Shadcn UI components
-- **Forms**: React Hook Form with Zod validation
-- **State**: React hooks (useState, useEffect, useForm, useFieldArray)
-- **Drag & Drop**: dnd-kit library
+### Core AI Components
+- **Model**: Gemini 2.5 Flash Lite (cost-efficient, high-throughput)
+- **Framework**: Google Genkit with Firebase integration
+- **Configuration**: Server-side only (secure API key management)
+- **Features**: Analysis, Chat, Report Generation, CSV Mapping
 
-## File Structure & Conventions
+### File Structure & Responsibilities
 
-### Directory Structure
+#### AI Configuration Files
 ```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── youth-empowerment/  # YEP dashboard and actions
-│   ├── yep-forms/         # YEP forms management
-│   └── api/               # API routes
-├── components/            # React components
-│   ├── youth-empowerment/ # YEP-specific components
-│   ├── yep-forms/         # YEP forms components
-│   └── ui/                # Reusable UI components
-├── lib/                   # Utilities and configurations
-│   ├── firebase.ts        # Firebase client configuration
-│   ├── youth-empowerment.ts # YEP types and utilities
-│   └── yep-forms-types.ts # YEP forms type definitions
-└── hooks/                 # Custom React hooks
+src/ai/
+├── genkit.ts              # Main Genkit configuration (Gemini 2.5 Flash Lite)
+├── client.ts              # Virtual assistant client
+├── dev.ts                 # Development server entry point
+└── flows/
+    ├── analyze-feedback-flow.ts    # Individual feedback analysis
+    ├── chat-with-data-flow.ts      # Interactive data chat
+    ├── generate-report-flow.ts     # Comprehensive report generation
+    ├── csv-participant-mapper-flow.ts  # CSV import mapping
+    └── types.ts                    # AI flow type definitions
 ```
 
-### Naming Conventions
-- **Files**: kebab-case for directories, PascalCase for components
-- **Components**: PascalCase (e.g., `YEPFormEditor`)
-- **Actions**: camelCase with descriptive names (e.g., `createYEPFormTemplate`)
-- **Types**: PascalCase with descriptive prefixes (e.g., `YEPFormTemplate`)
-- **Enums**: PascalCase (e.g., `YEPFormCategory`)
+#### Integration Points
+```
+src/app/dashboard/actions.ts        # AI analysis server actions
+src/components/ai-chat-interface.tsx # Chat UI component
+src/components/floating-chat-button.tsx # Chat trigger button
+```
 
-## TypeScript Best Practices
+## AI System Rules & Best Practices
 
-### Type Safety Rules
-1. **Never use `any` unless absolutely necessary** - Use proper typing or `unknown`
-2. **Always define return types for functions** - Especially server actions
-3. **Use discriminated unions** for different form categories
-4. **Prefer interfaces over types** for object shapes
-5. **Use const assertions** for literal types: `as const`
+### 🔐 Security & Configuration
 
-### Common Type Patterns
+#### DO:
+- ✅ **Always use server-side AI calls** - All AI functions must use `'use server'` directive
+- ✅ **Keep API keys in `.env.local`** - Never commit actual API keys to version control
+- ✅ **Use environment variables** - `GOOGLE_API_KEY` for authentication
+- ✅ **Validate AI inputs** - Always validate data before sending to AI models
+- ✅ **Handle AI errors gracefully** - Provide fallback responses for AI failures
+
+#### DON'T:
+- ❌ **Never expose API keys client-side** - AI calls must be server-side only
+- ❌ **Don't hardcode AI responses** - Use dynamic AI generation
+- ❌ **Don't skip error handling** - AI services can fail, always handle gracefully
+- ❌ **Don't bypass validation** - Always validate inputs before AI processing
+
+### 🏗️ Architecture Patterns
+
+#### AI Flow Structure
 ```typescript
-// Server action return type
-type ActionResult<T> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-};
-
-// YEP entity with optional fields
-interface YEPParticipant {
-  id: string;
-  name: string;
-  email?: string;
-  // ... other fields
-}
-
-// Form field with validation
-interface YEPFormField {
-  id: string;
-  type: ExtendedFieldType;
-  label: string;
-  required?: boolean;
-  validation?: ValidationRules;
-}
-```
-
-### Type Import/Export Rules
-- **Always use named exports** for types and interfaces
-- **Group related types** in the same file
-- **Re-export commonly used types** from index files
-- **Use type-only imports** when importing only types: `import type { YEPFormTemplate }`
-
-## Firebase Integration Rules
-
-### Client SDK Usage
-- **Always use `@/lib/firebase`** - Never mix with admin SDK
-- **Use v9 modular syntax** - `import { doc, getDoc } from 'firebase/firestore'`
-- **Handle timestamps properly** - Convert Firestore timestamps to Date objects
-- **Use proper error handling** - Wrap all Firebase calls in try-catch
-
-### Firestore Patterns
-```typescript
-// Correct Firebase usage
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, collection, query, where, orderBy } from 'firebase/firestore';
-
-// Server action pattern
-export async function getYEPFormTemplate(id: string): Promise<ActionResult<YEPFormTemplate>> {
+// ✅ CORRECT: Standard AI flow pattern
+export async function aiFunction(input: InputType): Promise<OutputType> {
   try {
-    const docRef = doc(db, 'yep-form-templates', id);
-    const docSnap = await getDoc(docRef);
+    // 1. Validate input
+    const validatedInput = inputSchema.parse(input);
     
-    if (!docSnap.exists()) {
-      return { success: false, error: 'Template not found' };
-    }
+    // 2. Process with AI
+    const result = await aiFlow(validatedInput);
     
-    const data = { id: docSnap.id, ...docSnap.data() } as YEPFormTemplate;
-    return { success: true, data };
+    // 3. Return structured response
+    return { success: true, data: result };
   } catch (error) {
-    console.error('Error fetching template:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    console.error('AI processing error:', error);
+    return { success: false, error: 'AI processing failed' };
   }
 }
 ```
 
-### Security Rules
-- **Always check user authentication** in Firestore rules
-- **Use role-based access control** - Admin, YEP Manager roles
-- **Validate data at database level** - Not just client-side
-- **Implement soft deletes** - Never permanently delete data
-
-## React Component Rules
-
-### Component Architecture
-1. **Separate server and client components** - Use 'use client' directive appropriately
-2. **Use React Hook Form** for all form handling
-3. **Implement proper error boundaries** - Wrap async operations
-4. **Use loading states** - Show feedback during async operations
-5. **Handle cleanup** - Use useEffect cleanup functions
-
-### Form Handling Patterns
+#### Server Action Integration
 ```typescript
-// Correct form setup with react-hook-form
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+// ✅ CORRECT: Server action with AI integration
+export async function analyzeData(data: any): Promise<ActionResult> {
+  try {
+    // Import AI function dynamically to avoid build issues
+    const { analyzeFeedback } = await import('@/ai/flows/analyze-feedback-flow');
+    const result = await analyzeFeedback(data);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: 'Analysis failed' };
+  }
+}
+```
 
-const formSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email'),
+### 🎯 AI Feature Implementation
+
+#### Survey Analysis Features
+- **Individual Feedback Analysis**: `analyzeSingleFeedback()` - Analyzes single submission
+- **Bulk Survey Analysis**: `analyzeFeedbackForSurvey()` - Analyzes entire survey dataset
+- **Interactive Chat**: `chatWithFeedbackData()` - Natural language queries
+- **Report Generation**: `generateReport()` - Comprehensive markdown reports
+
+#### Context-Aware AI
+- **Survey Type Detection**: Automatically adapts to feedback vs consent vs overview
+- **Dynamic Prompts**: Survey-specific analysis prompts and questions
+- **Predefined Queries**: Smart questions based on survey type
+
+### 🔧 Development & Testing
+
+#### AI Development Workflow
+1. **Update AI flows** in `src/ai/flows/`
+2. **Test with Genkit dev server**: `npm run genkit:dev`
+3. **Integrate with server actions** in `src/app/dashboard/actions.ts`
+4. **Update UI components** in `src/components/`
+5. **Test end-to-end** functionality
+
+#### Testing AI Features
+```bash
+# Start AI development server
+npm run genkit:dev
+
+# Test AI flows independently
+npm run genkit:watch
+
+# Test full application
+npm run dev
+```
+
+### 📊 AI Data Processing Rules
+
+#### Input Validation
+```typescript
+// ✅ CORRECT: Always validate AI inputs
+const aiInputSchema = z.object({
+  query: z.string().min(1, 'Query cannot be empty'),
+  data: z.array(z.any()).min(1, 'Data cannot be empty'),
+  context: z.string().optional()
 });
+```
 
-export function YEPFormEditor({ template }: { template: YEPFormTemplate }) {
-  const form = useForm<YEPFormTemplate>({
-    resolver: zodResolver(yepFormTemplateSchema),
-    defaultValues: template,
-  });
-
-  const onSubmit = async (data: YEPFormTemplate) => {
-    try {
-      const result = await updateYEPFormTemplate(data);
-      if (result.success) {
-        toast.success('Form updated successfully');
-      } else {
-        toast.error(result.error || 'Failed to update form');
-      }
-    } catch (error) {
-      toast.error('An unexpected error occurred');
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        {/* Form fields */}
-      </form>
-    </Form>
-  );
+#### Output Processing
+```typescript
+// ✅ CORRECT: Structure AI outputs consistently
+interface AIAnalysisResult {
+  summary: string;
+  sentiment: 'Positive' | 'Negative' | 'Neutral';
+  keyTopics: string[];
+  suggestedActions: string[];
 }
 ```
 
-### State Management Rules
-- **Use useState for local state** - Component-specific state
-- **Use useForm for form state** - React Hook Form handles this
-- **Use useEffect for side effects** - Data fetching, subscriptions
-- **Avoid prop drilling** - Use context for deeply nested state
-- **Implement optimistic updates** - Update UI before server confirmation
+### 🚀 Performance & Optimization
 
-## YEP Forms System Rules
+#### AI Model Configuration
+- **Model**: Always use `gemini25FlashLite` for cost efficiency
+- **Batch Processing**: Process multiple items together when possible
+- **Caching**: Cache AI results for repeated queries
+- **Rate Limiting**: Implement rate limiting for AI requests
 
-### Form Template Management
-1. **Always validate templates** - Use Zod schemas before saving
-2. **Implement versioning** - Increment version on updates
-3. **Use soft deletes** - Set `isActive: false` instead of deleting
-4. **Track audit information** - createdAt, updatedAt, createdBy
-5. **Support template duplication** - Clone with new name and version 1
-
-### Field Type Implementation
+#### Memory Management
 ```typescript
-// YEP-specific field types
-enum YEPFieldType {
-  yepParticipantLookup = 'yep-participant-lookup',
-  yepMentorLookup = 'yep-mentor-lookup',
-  yepSIN = 'yep-sin',
-  yepMentorAssignment = 'yep-mentor-assignment',
-  yepParticipantAssignment = 'yep-participant-assignment',
-  yepWorkshopSelector = 'yep-workshop-selector',
-  yepMeetingTopics = 'yep-meeting-topics',
-  yepAttendanceBulk = 'yep-attendance-bulk',
-  yepFileSecure = 'yep-file-secure',
-}
-
-// Field renderer pattern
-export function YEPFieldRenderer({ field, form }: YEPFieldRendererProps) {
-  switch (field.type) {
-    case YEPFieldType.yepParticipantLookup:
-      return <ParticipantLookupField field={field} form={form} />;
-    case YEPFieldType.yepMentorLookup:
-      return <MentorLookupField field={field} form={form} />;
-    // ... other cases
-    default:
-      return <StandardFieldRenderer field={field} form={form} />;
+// ✅ CORRECT: Efficient AI data handling
+const processLargeDataset = async (data: any[]) => {
+  const batchSize = 50; // Process in batches
+  const results = [];
+  
+  for (let i = 0; i < data.length; i += batchSize) {
+    const batch = data.slice(i, i + batchSize);
+    const batchResult = await processBatch(batch);
+    results.push(...batchResult);
   }
-}
+  
+  return results;
+};
 ```
 
-### Data Processing Rules
-1. **Map form data to entities** - Use consistent field mapping
-2. **Handle SIN securely** - Hash before storage, never store raw
-3. **Process files securely** - Validate types, scan for viruses
-4. **Use transactions** - Ensure data consistency
-5. **Track processing status** - Pending, completed, failed states
+### 🔍 Error Handling & Monitoring
 
-## Error Handling Rules
-
-### Common Error Patterns to Avoid
-1. **Firebase Admin SDK in client code** - Use `@/lib/firebase` not `@/lib/firebase-admin`
-2. **Type mismatches in action returns** - Check return shapes match expectations
-3. **Missing exports** - Always export types and interfaces
-4. **Field mapping errors** - Use correct field names (participantId vs participant)
-5. **Component prop mismatches** - Pass undefined not null for optional props
-6. **Unsupported component props** - Check Shadcn UI component APIs
-
-### Error Handling Patterns
+#### AI Error Patterns
 ```typescript
-// Server action error handling
-export async function createYEPFormTemplate(data: YEPFormTemplate): Promise<ActionResult<YEPFormTemplate>> {
+// ✅ CORRECT: Comprehensive AI error handling
+export async function safeAICall<T>(aiFunction: () => Promise<T>): Promise<ActionResult<T>> {
   try {
-    // Validation
-    const validatedData = yepFormTemplateSchema.parse(data);
-    
-    // Firebase operation
-    const docRef = doc(collection(db, 'yep-form-templates'));
-    await setDoc(docRef, {
-      ...validatedData,
-      id: docRef.id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    
-    return { success: true, data: { ...validatedData, id: docRef.id } };
+    const result = await aiFunction();
+    return { success: true, data: result };
   } catch (error) {
-    console.error('Error creating template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    };
+    console.error('AI call failed:', error);
+    
+    // Provide fallback based on error type
+    if (error.message.includes('permission')) {
+      return { success: false, error: 'Insufficient permissions for AI analysis' };
+    } else if (error.message.includes('quota')) {
+      return { success: false, error: 'AI service quota exceeded' };
+    } else {
+      return { success: false, error: 'AI analysis temporarily unavailable' };
+    }
   }
 }
-
-// Client component error handling
-export function YEPFormEditor({ template }: { template: YEPFormTemplate }) {
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
-
-  const handleSubmit = async (data: YEPFormTemplate) => {
-    setIsLoading(true);
-    try {
-      const result = await updateYEPFormTemplate(data);
-      if (result.success) {
-        toast.success('Form updated successfully');
-      } else {
-        toast.error(result.error || 'Failed to update form');
-      }
-    } catch (error) {
-      toast.error('An unexpected error occurred');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={form.handleSubmit(handleSubmit)}>
-      {/* Form content */}
-      <Button type="submit" disabled={isLoading}>
-        {isLoading ? 'Saving...' : 'Save Form'}
-      </Button>
-    </form>
-  );
-}
 ```
 
-## Security Rules
+#### Monitoring AI Usage
+- **Log AI requests** for debugging and monitoring
+- **Track AI response times** for performance optimization
+- **Monitor AI error rates** for reliability
+- **Alert on AI service failures** for quick resolution
 
-### Data Protection
-1. **Hash sensitive data** - SIN numbers, passwords
-2. **Validate file uploads** - Type, size, content scanning
-3. **Use secure storage** - Firebase Storage with proper rules
-4. **Implement access control** - Role-based permissions
-5. **Audit all operations** - Log create, update, delete actions
+### 🎨 UI/UX Integration
 
-### SIN Handling
-```typescript
-// Correct SIN processing
-import { hashSIN } from '@/lib/youth-empowerment';
+#### AI Chat Interface
+- **Floating Chat Button**: Always visible, context-aware
+- **Predefined Questions**: Survey-type specific suggestions
+- **Loading States**: Clear feedback during AI processing
+- **Error States**: User-friendly error messages
 
-export async function processParticipantForm(data: any) {
-  // Hash SIN before storage
-  const hashedSIN = data.sin ? await hashSIN(data.sin) : null;
-  
-  const participantData = {
-    ...data,
-    sinHash: hashedSIN,
-    sinLastFour: data.sin ? data.sin.slice(-4) : null,
-    // Never store raw SIN
-  };
-  
-  return await createParticipant(participantData);
-}
-```
+#### AI Analysis Display
+- **Markdown Rendering**: Rich formatting for AI reports
+- **Progressive Loading**: Show partial results as available
+- **Export Options**: PDF generation for AI reports
+- **Responsive Design**: Mobile-friendly AI interfaces
 
-## Performance Rules
+### 🔄 Maintenance & Updates
 
-### Optimization Guidelines
-1. **Use React.memo** for expensive components
-2. **Implement useCallback** for event handlers
-3. **Use useMemo** for expensive calculations
-4. **Lazy load** heavy components
-5. **Optimize Firestore queries** - Use indexes, limit results
+#### AI Model Updates
+1. **Test new models** in development environment
+2. **Update model references** in `src/ai/genkit.ts`
+3. **Verify AI flows** still work with new model
+4. **Update documentation** for new capabilities
+5. **Deploy with monitoring** for performance tracking
 
-### Query Optimization
-```typescript
-// Efficient Firestore queries
-export async function getYEPFormTemplates(): Promise<YEPFormTemplate[]> {
-  const q = query(
-    collection(db, 'yep-form-templates'),
-    where('isActive', '==', true),
-    orderBy('updatedAt', 'desc')
-  );
-  
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  } as YEPFormTemplate));
-}
-```
+#### AI Feature Additions
+1. **Create new AI flow** in `src/ai/flows/`
+2. **Add TypeScript types** in `src/ai/flows/types.ts`
+3. **Integrate with server actions** in `src/app/dashboard/actions.ts`
+4. **Update UI components** for new features
+5. **Test end-to-end** functionality
 
-## Testing Rules
+### 🚨 Common Pitfalls & Solutions
 
-### Type Checking
-- **Always run `npx tsc --noEmit`** before committing
-- **Fix all TypeScript errors** - Never ignore type errors
-- **Use strict mode** - Enable all strict TypeScript options
-- **Test type inference** - Ensure types are properly inferred
+#### ❌ Common Mistakes
+- **Client-side AI calls** - Always use server actions
+- **Missing error handling** - AI services can fail
+- **Hardcoded responses** - Use dynamic AI generation
+- **Ignoring context** - Survey-specific AI prompts
+- **No fallbacks** - Provide alternatives when AI fails
 
-### Component Testing
-- **Test error states** - Network failures, validation errors
-- **Test loading states** - Async operations
-- **Test user interactions** - Form submissions, navigation
-- **Test accessibility** - Screen reader compatibility
+#### ✅ Best Practices
+- **Server-side only** - All AI calls through server actions
+- **Comprehensive error handling** - Graceful degradation
+- **Context-aware prompts** - Survey-specific AI responses
+- **Performance monitoring** - Track AI usage and errors
+- **User feedback** - Clear loading and error states
 
-## Documentation Rules
+### 📋 AI System Checklist
 
-### Code Documentation
-1. **Document complex functions** - Use JSDoc comments
-2. **Explain business logic** - Why, not just what
-3. **Document type relationships** - How types connect
-4. **Include examples** - Usage patterns and examples
-5. **Update documentation** - Keep docs in sync with code
+#### Before Adding New AI Features
+- [ ] Define clear input/output schemas
+- [ ] Implement proper error handling
+- [ ] Add TypeScript types
+- [ ] Test with Genkit dev server
+- [ ] Integrate with server actions
+- [ ] Update UI components
+- [ ] Test end-to-end functionality
 
-### File Documentation
-```typescript
-/**
- * Processes YEP form submissions and creates/updates YEP entities
- * 
- * @param submissionData - The form submission data
- * @param formTemplate - The template that defines the form structure
- * @returns Promise with processing result and created entity IDs
- * 
- * @example
- * const result = await processYEPFormSubmission(submission, template);
- * if (result.success) {
- *   console.log('Created entities:', result.createdEntities);
- * }
- */
-export async function processYEPFormSubmission(
-  submissionData: YEPFormSubmission,
-  formTemplate: YEPFormTemplate
-): Promise<ActionResult<{ createdEntities: string[] }>> {
-  // Implementation
-}
-```
+#### Before Deploying AI Changes
+- [ ] Verify API key configuration
+- [ ] Test all AI flows
+- [ ] Check error handling
+- [ ] Validate UI integration
+- [ ] Monitor performance
+- [ ] Update documentation
 
-## Common Pitfalls to Avoid
+### 🎯 AI Feature Roadmap
 
-### Firebase Issues
-- ❌ **Don't mix admin and client SDKs**
-- ❌ **Don't forget error handling**
-- ❌ **Don't ignore timestamp conversions**
-- ❌ **Don't skip validation**
+#### Current Features
+- ✅ Individual feedback analysis
+- ✅ Survey-wide analysis
+- ✅ Interactive AI chat
+- ✅ Report generation
+- ✅ CSV import mapping
 
-### React Issues
-- ❌ **Don't use useEffect for data fetching in server components**
-- ❌ **Don't forget cleanup functions**
-- ❌ **Don't mutate state directly**
-- ❌ **Don't ignore loading states**
+#### Planned Enhancements
+- 🔄 Real-time AI insights
+- 🔄 Advanced analytics
+- 🔄 Predictive modeling
+- 🔄 Automated recommendations
+- 🔄 Multi-language support
 
-### TypeScript Issues
-- ❌ **Don't use `any` as a quick fix**
-- ❌ **Don't ignore type errors**
-- ❌ **Don't forget to export types**
-- ❌ **Don't mix null and undefined**
-
-### YEP Forms Issues
-- ❌ **Don't store raw SIN data**
-- ❌ **Don't skip form validation**
-- ❌ **Don't ignore processing status**
-- ❌ **Don't forget audit trails**
+---
 
 ## Quick Reference
 
 ### Essential Commands
 ```bash
-# Type checking
-npx tsc --noEmit
+# AI development
+npm run genkit:dev          # Start AI dev server
+npm run genkit:watch        # Watch mode for AI development
 
-# Development server
-npm run dev
-
-# Build
-npm run build
-
-# Lint check
-npm run lint
+# Testing
+npm run dev                 # Full application with AI
+npm run build              # Production build with AI
 ```
 
 ### Key Files to Know
-- `src/lib/firebase.ts` - Firebase configuration
-- `src/lib/youth-empowerment.ts` - YEP types and utilities
-- `src/lib/yep-forms-types.ts` - YEP forms type definitions
-- `src/app/youth-empowerment/actions.ts` - YEP entity CRUD
-- `src/app/yep-forms/actions.ts` - YEP forms CRUD
-- `docs/firestore.rules` - Database security rules
-
-### Common Patterns
-- Server actions return `{ success: boolean, data?, error? }`
-- Components use `useForm` with `zodResolver`
-- Firebase operations wrapped in try-catch
-- Loading states for all async operations
-- Toast notifications for user feedback
-
-## Import System Rules
-
-### Import System Architecture
-The YEP Data Import System provides comprehensive bulk data import functionality with intelligent field mapping, validation, and error reporting.
-
-#### Core Components
-- **`src/lib/import-utils.ts`**: Core import utilities, parsing, validation, and field mapping
-- **`src/app/youth-empowerment/import-actions.ts`**: Server-side import processing with batch operations
-- **`src/components/youth-empowerment/import-dialog.tsx`**: 5-step wizard UI for import process
-- **`src/app/admin/page.tsx`**: Admin panel integration
-
-#### Import System Rules
-1. **Always use existing CRUD functions** - Never bypass validation by directly manipulating Firestore
-2. **Use proper batch processing** - Configurable batch sizes for large datasets
-3. **Comprehensive error handling** - Detailed error reporting with row numbers and field names
-4. **Type-safe imports** - Never use `any` for import data, use proper TypeScript types
-5. **Field mapping intelligence** - Provide automatic mapping suggestions with fuzzy matching
-6. **Data validation** - Always validate against schemas before processing
-7. **Security compliance** - Use existing authentication and data sanitization
-
-#### Import Data Types
-```typescript
-// Supported import types
-type ImportTable = 'participants' | 'mentors' | 'workshops' | 'attendance' | 'meetings';
-
-// Required fields for each type
-const REQUIRED_FIELDS = {
-  participants: ['youthParticipant', 'email', 'region', 'dob', 'canadianStatus'],
-  mentors: ['name', 'title', 'email'],
-  workshops: ['title', 'date', 'description'],
-  attendance: ['participantId', 'workshopId', 'attended'],
-  meetings: ['participantId', 'mentorId', 'meetingDate', 'type']
-};
-```
-
-#### Import Processing Pattern
-```typescript
-// Always follow this pattern for import actions
-export async function importData(
-  data: any[],
-  options: ImportOptions,
-  mapping: ImportMapping
-): Promise<ImportResult> {
-  // 1. Map CSV columns to database fields
-  // 2. Validate data against schema
-  // 3. Convert data types safely
-  // 4. Process in configurable batches
-  // 5. Use existing CRUD functions
-  // 6. Return comprehensive results
-}
-```
-
-#### Field Mapping Rules
-```typescript
-// Always provide comprehensive field mapping options
-const fieldMappings = {
-  'youthParticipant': ['name', 'participant', 'youth', 'student', 'full name'],
-  'email': ['email', 'e-mail', 'email address'],
-  'phoneNumber': ['phone', 'telephone', 'mobile', 'cell', 'contact number'],
-  'region': ['region', 'province', 'state', 'location'],
-  'dob': ['dob', 'date of birth', 'birthday', 'birth date'],
-  'age': ['age', 'years old'],
-  'canadianStatus': ['citizenship', 'canadian', 'status', 'citizen']
-  // ... more mappings
-};
-```
-
-#### Import UI Rules
-```typescript
-// Always use 5-step wizard structure
-const steps = [
-  'select',    // Select data type
-  'upload',    // Upload file
-  'mapping',   // Field mapping
-  'preview',   // Data preview
-  'import'     // Import results
-];
-
-// Always provide comprehensive field options
-const fieldOptions = [
-  // Required fields first
-  ...requiredFields.map(field => `${field} (Required)`),
-  // Optional fields
-  ...optionalFields.map(field => `${field} (Optional)`)
-];
-```
-
-#### Error Handling Rules
-```typescript
-// Always provide detailed error information
-interface ImportError {
-  row: number;           // Row number for user reference
-  field?: string;       // Field name if applicable
-  message: string;      // Human-readable error message
-  value?: any;          // The problematic value
-}
-
-// Always show errors in user-friendly format
-{errors.length > 0 && (
-  <div className="error-display">
-    {errors.slice(0, 10).map((error, index) => (
-      <div key={index} className="error-item">
-        <span>Row {error.row}:</span> {error.message}
-      </div>
-    ))}
-  </div>
-)}
-```
-
-#### Security Rules for Imports
-1. **Admin-only access** for import functionality
-2. **Data sanitization** before processing
-3. **SIN hashing** for sensitive participant data
-4. **Audit logging** for all import operations
-5. **Role-based permissions** for different import types
-
-#### Performance Rules for Imports
-1. **Configurable batch sizes** - Default 50, smaller for large datasets
-2. **Memory-efficient processing** - Process in chunks
-3. **Progress tracking** - Show import progress to users
-4. **Error recovery** - Continue processing after individual record failures
-
-#### Common Import Patterns
-```typescript
-// Adding new import types
-// 1. Add to TABLE_SCHEMAS
-// 2. Add import function to import-actions.ts
-// 3. Add to dataTypes array in import-dialog.tsx
-// 4. Update field mapping options
-
-// Adding new field types
-// 1. Add to schema types
-// 2. Add validation logic
-// 3. Add conversion logic
-// 4. Update UI field options
-```
-
-#### Import System Anti-Patterns
-❌ **Don't**:
-- Use `any` types for import data
-- Bypass existing CRUD functions
-- Skip validation for performance
-- Process all data in a single batch
-- Ignore error handling
-- Use direct Firestore operations
-
-✅ **Do**:
-- Use proper TypeScript types
-- Leverage existing CRUD functions
-- Validate all data before processing
-- Use configurable batch sizes
-- Handle all error cases
-- Use server actions for database operations
-
-## Rule Maintenance & Evolution
-
-### How to Update These Rules
-
-#### 1. **When to Update Rules**
-- **New Error Patterns**: When you encounter repeated errors that could be prevented
-- **New Best Practices**: When you discover better patterns or approaches
-- **New Technologies**: When adding new libraries or frameworks
-- **Performance Issues**: When you identify performance anti-patterns
-- **Security Vulnerabilities**: When new security concerns are discovered
-- **Code Quality Issues**: When you find patterns that improve maintainability
-
-#### 2. **How to Update Rules**
-
-**Step 1: Document the Issue**
-```markdown
-## New Pattern Discovered
-**Date**: [Current Date]
-**Issue**: [Description of the problem or improvement]
-**Solution**: [The pattern or rule that prevents/solves it]
-**Files Affected**: [List of files where this applies]
-**Example**: [Code example showing the pattern]
-```
-
-**Step 2: Add to Appropriate Section**
-- **Error Prevention**: Add to "Common Error Patterns to Avoid"
-- **Performance**: Add to "Performance Rules"
-- **Security**: Add to "Security Rules"
-- **Architecture**: Add to relevant architecture section
-
-**Step 3: Update Examples**
-- Add code examples showing the correct pattern
-- Include before/after comparisons
-- Reference specific files in the codebase
-
-**Step 4: Test the Rule**
-- Apply the rule to existing code
-- Verify it catches the intended issues
-- Ensure it doesn't create false positives
-
-#### 3. **Rule Maintenance Checklist**
-
-**Monthly Reviews:**
-- [ ] Review recent errors and add prevention rules
-- [ ] Check for new performance patterns
-- [ ] Update security rules based on new threats
-- [ ] Verify all examples still work
-- [ ] Remove outdated patterns
-
-**After Major Features:**
-- [ ] Document new architectural patterns
-- [ ] Add new field types and their usage
-- [ ] Update integration patterns
-- [ ] Add new error handling patterns
-
-**Before Releases:**
-- [ ] Verify all rules are current
-- [ ] Test rules against codebase
-- [ ] Update documentation references
-- [ ] Ensure consistency across sections
-
-## Performance Monitoring & System Health
-
-### Performance Patterns
-
-#### 1. **Database Performance**
-```typescript
-// Good: Efficient queries with proper indexing
-const q = query(
-  collection(db, 'yep-form-templates'),
-  where('isActive', '==', true),
-  orderBy('updatedAt', 'desc'),
-  limit(50) // Always limit results
-);
-
-// Bad: Unbounded queries
-const q = query(collection(db, 'yep-form-templates')); // No limits!
-```
-
-#### 2. **Component Performance**
-```typescript
-// Good: Memoized expensive components
-const ExpensiveComponent = React.memo(({ data }) => {
-  const processedData = useMemo(() => 
-    data.map(item => processItem(item)), [data]
-  );
-  return <div>{/* render */}</div>;
-});
-
-// Good: Optimized re-renders
-const handleSubmit = useCallback(async (data) => {
-  // submission logic
-}, [dependencies]);
-
-// Bad: Creating objects in render
-function BadComponent({ items }) {
-  return (
-    <div>
-      {items.map(item => (
-        <ItemComponent 
-          key={item.id}
-          config={{ type: 'default' }} // New object every render!
-        />
-      ))}
-    </div>
-  );
-}
-```
-
-#### 3. **State Management Performance**
-```typescript
-// Good: Efficient state updates
-const [forms, setForms] = useState<YEPFormTemplate[]>([]);
-
-const addForm = useCallback((newForm: YEPFormTemplate) => {
-  setForms(prev => [...prev, newForm]); // Functional update
-}, []);
-
-// Bad: Inefficient state updates
-const addForm = (newForm: YEPFormTemplate) => {
-  setForms([...forms, newForm]); // Depends on forms, causes re-renders
-};
-```
-
-### System Health Monitoring
-
-#### 1. **Code Quality Metrics**
-```bash
-# Run these commands regularly
-npx tsc --noEmit                    # Type safety
-npm run lint                        # Code quality
-npm run build                       # Build success
-npm audit                          # Security vulnerabilities
-```
-
-#### 2. **Performance Monitoring**
-```typescript
-// Add performance monitoring to critical functions
-export async function processYEPFormSubmission(
-  submissionData: YEPFormSubmission,
-  formTemplate: YEPFormTemplate
-): Promise<ActionResult<{ createdEntities: string[] }>> {
-  const startTime = performance.now();
-  
-  try {
-    // Processing logic
-    const result = await processSubmission(submissionData, formTemplate);
-    
-    const endTime = performance.now();
-    console.log(`Processing took ${endTime - startTime} milliseconds`);
-    
-    return result;
-  } catch (error) {
-    console.error('Processing failed:', error);
-    return { success: false, error: 'Processing failed' };
-  }
-}
-```
-
-#### 3. **Error Tracking Patterns**
-```typescript
-// Comprehensive error logging
-export async function createYEPFormTemplate(data: YEPFormTemplate) {
-  try {
-    const result = await performCreation(data);
-    
-    // Log success metrics
-    console.log('Form template created successfully', {
-      templateId: result.id,
-      category: data.category,
-      fieldCount: data.sections.reduce((acc, section) => acc + section.fields.length, 0)
-    });
-    
-    return result;
-  } catch (error) {
-    // Log error with context
-    console.error('Failed to create form template', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      templateName: data.name,
-      category: data.category,
-      timestamp: new Date().toISOString()
-    });
-    
-    return { success: false, error: 'Failed to create template' };
-  }
-}
-```
-
-### Maintenance Best Practices
-
-#### 1. **Regular Health Checks**
-```bash
-# Weekly health check script
-#!/bin/bash
-echo "Running system health checks..."
-
-# Type checking
-echo "Type checking..."
-npx tsc --noEmit
-if [ $? -ne 0 ]; then
-  echo "❌ TypeScript errors found"
-  exit 1
-fi
-
-# Linting
-echo "Linting..."
-npm run lint
-if [ $? -ne 0 ]; then
-  echo "❌ Linting errors found"
-  exit 1
-fi
-
-# Build test
-echo "Testing build..."
-npm run build
-if [ $? -ne 0 ]; then
-  echo "❌ Build failed"
-  exit 1
-fi
-
-echo "✅ All health checks passed"
-```
-
-#### 2. **Performance Budgets**
-```typescript
-// Define performance budgets
-const PERFORMANCE_BUDGETS = {
-  formLoadTime: 2000,        // 2 seconds max
-  submissionTime: 5000,       // 5 seconds max
-  searchResponseTime: 500,    // 500ms max
-  componentRenderTime: 100,   // 100ms max
-} as const;
-
-// Monitor against budgets
-export function monitorPerformance<T>(
-  operation: () => Promise<T>,
-  budget: number,
-  operationName: string
-): Promise<T> {
-  const startTime = performance.now();
-  
-  return operation().then(result => {
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    
-    if (duration > budget) {
-      console.warn(`⚠️ ${operationName} exceeded budget: ${duration}ms > ${budget}ms`);
-    }
-    
-    return result;
-  });
-}
-```
-
-#### 3. **Automated Quality Gates**
-```typescript
-// Pre-commit hooks for quality
-// .husky/pre-commit
-#!/bin/sh
-echo "Running pre-commit checks..."
-
-# Type check
-npx tsc --noEmit
-if [ $? -ne 0 ]; then
-  echo "❌ TypeScript errors found. Commit blocked."
-  exit 1
-fi
-
-# Lint check
-npm run lint
-if [ $? -ne 0 ]; then
-  echo "❌ Linting errors found. Commit blocked."
-  exit 1
-fi
-
-echo "✅ Pre-commit checks passed"
-```
-
-### System Evolution Patterns
-
-#### 1. **Adding New Field Types**
-```typescript
-// When adding new YEP field types, follow this pattern:
-
-// 1. Add to enum
-enum YEPFieldType {
-  // ... existing types
-  newFieldType = 'new-field-type',
-}
-
-// 2. Add to renderer
-export function YEPFieldRenderer({ field, form }: YEPFieldRendererProps) {
-  switch (field.type) {
-    // ... existing cases
-    case YEPFieldType.newFieldType:
-      return <NewFieldTypeRenderer field={field} form={form} />;
-    default:
-      return <StandardFieldRenderer field={field} form={form} />;
-  }
-}
-
-// 3. Add to configuration
-export function getYEPFieldTypeConfig(type: YEPFieldType) {
-  const configs = {
-    // ... existing configs
-    [YEPFieldType.newFieldType]: {
-      label: 'New Field Type',
-      description: 'Description of the new field type',
-      icon: '🔧',
-      category: 'YEP Specific',
-      validation: { required: false },
-    },
-  };
-  
-  return configs[type];
-}
-
-// 4. Update processor if needed
-export function processNewFieldType(fieldData: any) {
-  // Handle the new field type in form processing
-  return processedData;
-}
-```
-
-#### 2. **Adding New Form Categories**
-```typescript
-// When adding new form categories:
-
-// 1. Add to enum
-enum YEPFormCategory {
-  // ... existing categories
-  newCategory = 'new-category',
-}
-
-// 2. Add processing logic
-export async function processYEPFormSubmission(
-  submissionData: YEPFormSubmission,
-  formTemplate: YEPFormTemplate
-): Promise<ActionResult<{ createdEntities: string[] }>> {
-  switch (formTemplate.category) {
-    // ... existing cases
-    case YEPFormCategory.newCategory:
-      return await processNewCategoryForm(submissionData, formTemplate);
-    default:
-      return { success: false, error: 'Unknown form category' };
-  }
-}
-
-// 3. Add to Firestore rules if needed
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     // ... existing rules
-//     match /new_entities/{document} {
-//       allow read, write: if request.auth != null && 
-//         hasRole(request.auth.uid, ['admin', 'yep-manager']);
-//     }
-//   }
-// }
-```
-
-#### 3. **Performance Optimization Patterns**
-```typescript
-// When optimizing performance:
-
-// 1. Identify bottlenecks
-const performanceProfiler = {
-  start: (label: string) => performance.mark(`${label}-start`),
-  end: (label: string) => {
-    performance.mark(`${label}-end`);
-    performance.measure(label, `${label}-start`, `${label}-end`);
-    const measure = performance.getEntriesByName(label)[0];
-    console.log(`${label}: ${measure.duration}ms`);
-  }
-};
-
-// 2. Implement optimizations
-// Use React.memo for expensive components
-const ExpensiveComponent = React.memo(({ data }) => {
-  // Component logic
-});
-
-// Use useMemo for expensive calculations
-const processedData = useMemo(() => 
-  expensiveCalculation(data), [data]
-);
-
-// Use useCallback for event handlers
-const handleSubmit = useCallback((formData) => {
-  // Handler logic
-}, [dependencies]);
-
-// 3. Monitor results
-performanceProfiler.start('form-processing');
-await processForm(data);
-performanceProfiler.end('form-processing');
-```
-
-### Rule Documentation Standards
-
-#### 1. **Rule Format**
-```markdown
-### [Rule Name]
-
-**Purpose**: [Why this rule exists]
-**When to Apply**: [When to use this rule]
-**Examples**: [Code examples]
-**Anti-patterns**: [What to avoid]
-**Related Rules**: [Links to related rules]
-```
-
-#### 2. **Example Documentation**
-```markdown
-### Firebase Client SDK Usage
-
-**Purpose**: Prevent mixing Firebase Admin SDK with Client SDK
-**When to Apply**: All Firebase operations in client components and server actions
-**Examples**: 
-```typescript
-// ✅ Good
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-
-// ❌ Bad
-import { db } from '@/lib/firebase-admin';
-```
-
-**Anti-patterns**: 
-- Using admin SDK in client code
-- Mixing SDK versions
-- Not handling errors properly
-
-**Related Rules**: Error Handling, Security Rules
-```
-
-### Continuous Improvement
-
-#### 1. **Monthly Rule Reviews**
-- Review error logs for new patterns
-- Check performance metrics for bottlenecks
-- Update security rules based on new threats
-- Refactor rules for clarity and accuracy
-
-#### 2. **Quarterly Architecture Reviews**
-- Assess rule effectiveness
-- Identify gaps in coverage
-- Update examples with current codebase
-- Remove outdated patterns
-
-#### 3. **Annual Rule Overhauls**
-- Complete rule system review
-- Update for new technologies
-- Consolidate related rules
-- Improve organization and navigation
-
-Remember: When in doubt, check existing patterns in the codebase and maintain consistency with established conventions. These rules should evolve with the system to maintain their effectiveness and relevance.
+- `src/ai/genkit.ts` - AI configuration
+- `src/ai/flows/` - AI processing flows
+- `src/app/dashboard/actions.ts` - AI server actions
+- `src/components/ai-chat-interface.tsx` - AI chat UI
+- `.env.local` - AI API key configuration
+
+### Emergency Procedures
+1. **AI Service Down**: Check API key and quota
+2. **Permission Errors**: Verify Firestore rules
+3. **Performance Issues**: Check model configuration
+4. **Integration Failures**: Verify server action setup
+
+Remember: AI features are powerful but require careful implementation. Always test thoroughly and provide fallbacks for when AI services are unavailable.

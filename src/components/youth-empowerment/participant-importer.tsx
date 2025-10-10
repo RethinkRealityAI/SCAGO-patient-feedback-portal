@@ -13,9 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { upsertParticipantByEmail } from '@/app/youth-empowerment/actions';
 
 const TargetFields = [
-  'youthParticipant','email','etransferEmailAddress','mailingAddress','phoneNumber','region','approved','contractSigned','signedSyllabus','availability','assignedMentor','idProvided','canadianStatus','canadianStatusOther','sin','youthProposal','proofOfAffiliationWithSCD','scagoCounterpart','dob',
-  // New fields from current participants data
-  'age','citizenshipStatus','location','projectCategory','duties','affiliationWithSCD','notes','nextSteps','interviewed','interviewNotes','recruited'
+  'youthParticipant','age','email','etransferEmailAddress','phoneNumber','emergencyContactRelationship','emergencyContactNumber','region','mailingAddress','projectCategory','projectInANutshell','contractSigned','signedSyllabus','availability','assignedMentor','idProvided','canadianStatus','sin','sinNumber','youthProposal','affiliationWithSCD','proofOfAffiliationWithSCD','scagoCounterpart','dob','file',
+  // Additional fields
+  'approved','canadianStatusOther','citizenshipStatus','location','duties','notes','nextSteps','interviewed','interviewNotes','recruited'
 ] as const;
 type TargetField = typeof TargetFields[number];
 
@@ -36,36 +36,135 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
   const [mapping, setMapping] = useState<Record<string, TargetField | 'skip'>>({});
   const [isMappingLoading, setIsMappingLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<{
+    isValid: boolean;
+    message: string;
+    warnings: string[];
+    missingRequired: string[];
+  } | null>(null);
 
   const hasData = rows.length > 0 && headers.length > 0;
 
-  const parseCsv = useCallback((csvText: string) => {
-    const result = Papa.parse<RowObject>(csvText, { header: true, skipEmptyLines: true });
-    if (result.errors?.length) {
-      toast({ title: 'CSV Parse Error', description: result.errors[0].message, variant: 'destructive' });
-      return;
+  // Validation function to check data quality and required fields
+  const validateData = useCallback((headers: string[], rows: any[], mapping: Record<string, TargetField | 'skip'>) => {
+    const requiredFields = ['youthParticipant']; // Only name is required
+    const warnings: string[] = [];
+    const missingRequired: string[] = [];
+    
+    // Check if required fields are mapped
+    const mappedFields = Object.values(mapping).filter(field => field !== 'skip');
+    const missingFields = requiredFields.filter(field => !mappedFields.includes(field as TargetField));
+    
+    if (missingFields.length > 0) {
+      missingRequired.push(`Missing required fields: ${missingFields.join(', ')}`);
     }
-    const data = (result.data || []).filter(r => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
+    
+    // Check data quality
+    if (rows.length === 0) {
+      warnings.push('No data rows found');
+    }
+    
+    // Check for empty required fields in data
+    const emailColumn = Object.keys(mapping).find(key => mapping[key] === 'email');
+    if (emailColumn) {
+      const emptyEmails = rows.filter(row => !row[emailColumn] || row[emailColumn].trim() === '').length;
+      if (emptyEmails > 0) {
+        warnings.push(`${emptyEmails} rows have empty email addresses`);
+      }
+    }
+    
+    const nameColumn = Object.keys(mapping).find(key => mapping[key] === 'youthParticipant');
+    if (nameColumn) {
+      const emptyNames = rows.filter(row => !row[nameColumn] || row[nameColumn].trim() === '').length;
+      if (emptyNames > 0) {
+        warnings.push(`${emptyNames} rows have empty participant names`);
+      }
+    }
+    
+    const isValid = missingRequired.length === 0 && warnings.length === 0;
+    const message = isValid 
+      ? 'Data is valid and ready for import!'
+      : missingRequired.length > 0 
+        ? 'Please map all required fields before importing'
+        : 'Data has some issues that should be reviewed';
+    
+    return { isValid, message, warnings, missingRequired };
+  }, []);
+
+  const parseCsv = useCallback((csvText: string) => {
+    // Enhanced CSV parsing with better error handling and data cleaning
+    const result = Papa.parse<RowObject>(csvText, { 
+      header: true, 
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim(), // Clean headers
+      transform: (value) => value?.toString().trim() || '', // Clean values
+    });
+    
+    if (result.errors?.length) {
+      // Try alternative parsing methods for malformed CSV
+      const alternativeResult = Papa.parse<RowObject>(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        delimiter: '\t', // Try tab-delimited
+        transformHeader: (header) => header.trim(),
+        transform: (value) => value?.toString().trim() || '',
+      });
+      
+      if (alternativeResult.errors?.length) {
+        toast({ title: 'CSV Parse Error', description: result.errors[0].message, variant: 'destructive' });
+        return;
+      } else {
+        // Use alternative parsing result
+        const data = (alternativeResult.data || []).filter((r: any) => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
+        const cols = alternativeResult.meta.fields || Object.keys(data[0] || {});
+        setHeaders(cols);
+        setRows(data.slice(0, 500));
+        setMapping(Object.fromEntries(cols.map((h: string) => [h, 'skip' as const])));
+        return;
+      }
+    }
+    
+    const data = (result.data || []).filter((r: any) => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
     const cols = result.meta.fields || Object.keys(data[0] || {});
     setHeaders(cols);
     setRows(data.slice(0, 500)); // safety cap
-    setMapping(Object.fromEntries(cols.map(h => [h, 'skip' as const])));
+    setMapping(Object.fromEntries(cols.map((h: string) => [h, 'skip' as const])));
   }, [toast]);
 
   const handleFile = useCallback((file: File) => {
     Papa.parse<RowObject>(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (header) => header.trim(), // Clean headers
+      transform: (value) => value?.toString().trim() || '', // Clean values
       complete: (res) => {
         if (res.errors?.length) {
-          toast({ title: 'CSV Parse Error', description: res.errors[0].message, variant: 'destructive' });
+          // Try alternative parsing for malformed files
+          Papa.parse<RowObject>(file, {
+            header: true,
+            skipEmptyLines: true,
+            delimiter: '\t', // Try tab-delimited
+            transformHeader: (header) => header.trim(),
+            transform: (value) => value?.toString().trim() || '',
+            complete: (altRes) => {
+              if (altRes.errors?.length) {
+                toast({ title: 'CSV Parse Error', description: res.errors[0].message, variant: 'destructive' });
+                return;
+              }
+              const data = (altRes.data || []).filter((r: any) => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
+              const cols = altRes.meta.fields || Object.keys(data[0] || {});
+              setHeaders(cols);
+              setRows(data.slice(0, 500));
+              setMapping(Object.fromEntries(cols.map((h: string) => [h, 'skip' as const])));
+            },
+          });
           return;
         }
-        const data = (res.data || []).filter(r => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
+        const data = (res.data || []).filter((r: any) => Object.values(r).some(v => (v ?? '').toString().trim() !== ''));
         const cols = res.meta.fields || Object.keys(data[0] || {});
         setHeaders(cols);
         setRows(data.slice(0, 500));
-        setMapping(Object.fromEntries(cols.map(h => [h, 'skip' as const])));
+        setMapping(Object.fromEntries(cols.map((h: string) => [h, 'skip' as const])));
       },
     });
   }, [toast]);
@@ -89,12 +188,16 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
         next[h] = (TargetFields as readonly string[]).includes(proposed) ? (proposed as TargetField) : 'skip';
       }
       setMapping(next);
+      
+      // Validate the AI mapping
+      const validation = validateData(headers, rows, next);
+      setValidationStatus(validation);
     } catch (e) {
       toast({ title: 'Mapping Error', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     } finally {
       setIsMappingLoading(false);
     }
-  }, [headers, rows, hasData, toast]);
+  }, [headers, rows, hasData, toast, validateData]);
 
   const mappedPreview = useMemo(() => {
     return rows.slice(0, 5).map((r) => {
@@ -128,22 +231,32 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
         }
 
         // Convert booleans
-        for (const b of ['approved','contractSigned','signedSyllabus','idProvided','proofOfAffiliationWithSCD'] as const) {
+        for (const b of ['approved','contractSigned','signedSyllabus','idProvided','proofOfAffiliationWithSCD','interviewed','recruited'] as const) {
           if (obj[b] !== undefined) {
             const parsed = normalizeBoolean(obj[b]);
             if (parsed !== undefined) obj[b] = parsed;
           }
         }
 
-        // Ensure required minimal fields
-        if (!obj.youthParticipant || !obj.email || !obj.region || !obj.dob) {
-          continue; // skip incomplete rows
+        // Ensure only name is required - handle empty data gracefully
+        if (!obj.youthParticipant || obj.youthParticipant.trim() === '') {
+          continue; // skip rows without name
         }
+        
+        // Provide safe defaults for empty fields
+        obj.email = obj.email || '';
+        obj.region = obj.region || '';
+        obj.dob = obj.dob || '';
+        obj.canadianStatus = obj.canadianStatus || 'Other';
+        obj.contractSigned = obj.contractSigned ?? false;
+        obj.signedSyllabus = obj.signedSyllabus ?? false;
+        obj.idProvided = obj.idProvided ?? false;
+        obj.proofOfAffiliationWithSCD = obj.proofOfAffiliationWithSCD ?? false;
+        obj.approved = obj.approved ?? false;
 
-        // Pass raw sin; server will hash
-        if (obj.sin) {
-          obj.sin = obj.sin;
-        }
+        // Handle SIN - provide empty string if not provided
+        obj.sin = obj.sin || '';
+        obj.sinNumber = obj.sinNumber || '';
 
         await upsertParticipantByEmail(obj);
       }
@@ -160,51 +273,132 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-5xl">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] max-w-5xl h-[90vh] max-h-[1200px] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Import YEP Participants from CSV</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="flex gap-2 items-center">
-            <Input type="file" accept=".csv" ref={fileInputRef} onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-            }} />
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>Choose CSV</Button>
-          </div>
+        <div className="flex-1 overflow-hidden flex flex-col space-y-4">
+          {/* File Upload Section */}
+          <div className="flex-shrink-0 space-y-4">
+            <div className="flex gap-2 items-center">
+              <Input type="file" accept=".csv" ref={fileInputRef} onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }} />
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>Choose CSV</Button>
+            </div>
 
-          <div>
-            <label className="block text-sm mb-2">Or paste CSV</label>
-            <Textarea value={rawCsv} onChange={(e) => setRawCsv(e.target.value)} rows={6} placeholder="Paste CSV here..." />
-            <div className="mt-2">
-              <Button onClick={() => parseCsv(rawCsv)} disabled={!rawCsv.trim()}>Parse</Button>
+            <div>
+              <label className="block text-sm mb-2">Or paste CSV</label>
+              <Textarea 
+                value={rawCsv} 
+                onChange={(e) => setRawCsv(e.target.value)} 
+                rows={8} 
+                placeholder="Paste CSV here..." 
+                className="resize-none"
+              />
+              <div className="mt-2 flex gap-2">
+                <Button onClick={() => parseCsv(rawCsv)} disabled={!rawCsv.trim()}>
+                  Parse
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => {
+                    parseCsv(rawCsv);
+                    setTimeout(() => requestAiMapping(), 200);
+                  }} 
+                  disabled={!rawCsv.trim() || isMappingLoading}
+                >
+                  {isMappingLoading ? 'Processing with AI...' : 'Import with AI'}
+                </Button>
+              </div>
             </div>
           </div>
 
+          {/* Validation Status */}
+          {validationStatus && (
+            <div className={`p-4 rounded-lg border ${
+              validationStatus.isValid 
+                ? 'bg-green-50 border-green-200 text-green-800' 
+                : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                {validationStatus.isValid ? (
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
+                <span className="font-medium">{validationStatus.message}</span>
+              </div>
+              
+              {validationStatus.missingRequired.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium text-red-700">Required fields missing:</div>
+                  <ul className="text-sm text-red-600 list-disc list-inside ml-2">
+                    {validationStatus.missingRequired.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {validationStatus.warnings.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium text-yellow-700">Warnings:</div>
+                  <ul className="text-sm text-yellow-600 list-disc list-inside ml-2">
+                    {validationStatus.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Data Mapping Section */}
           {hasData && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
+            <div className="flex-1 flex flex-col space-y-4 min-h-0">
+              <div className="flex justify-between items-center flex-shrink-0">
                 <div className="font-medium">Map columns</div>
                 <Button variant="secondary" onClick={requestAiMapping} disabled={isMappingLoading}>
-                  {isMappingLoading ? 'Suggesting…' : 'Suggest with AI'}
+                  {isMappingLoading ? 'Processing with AI...' : 'Suggest with AI'}
                 </Button>
               </div>
-              <div className="overflow-x-auto">
+              
+              {/* Mapping Table - Scrollable */}
+              <div className="flex-1 overflow-auto border rounded-md">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
-                      <TableHead>CSV Column</TableHead>
-                      <TableHead>Map to Field</TableHead>
+                      <TableHead className="w-1/3">CSV Column</TableHead>
+                      <TableHead className="w-2/3">Map to Field</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {headers.map((h) => (
                       <TableRow key={h}>
-                        <TableCell>{h}</TableCell>
+                        <TableCell className="font-medium">{h}</TableCell>
                         <TableCell>
-                          <Select value={mapping[h] || 'skip'} onValueChange={(v) => setMapping((m) => ({ ...m, [h]: v as TargetField | 'skip' }))}>
-                            <SelectTrigger className="w-72">
+                          <Select 
+                            value={mapping[h] || 'skip'} 
+                            onValueChange={(v) => {
+                              const newMapping = { ...mapping, [h]: v as TargetField | 'skip' };
+                              setMapping(newMapping);
+                              // Update validation when mapping changes
+                              const validation = validateData(headers, rows, newMapping);
+                              setValidationStatus(validation);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
                               <SelectValue placeholder="Do not import" />
                             </SelectTrigger>
                             <SelectContent>
@@ -221,15 +415,22 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
                 </Table>
               </div>
 
-              <div>
-                <div className="font-medium mb-2">Preview (first 5 rows after mapping)</div>
-                <pre className="bg-muted p-3 rounded text-xs overflow-auto max-h-60">{JSON.stringify(mappedPreview, null, 2)}</pre>
+              {/* Preview Section - Collapsible */}
+              <div className="flex-shrink-0">
+                <details className="group">
+                  <summary className="cursor-pointer font-medium text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Preview (first 5 rows) <span className="group-open:hidden">▼</span><span className="hidden group-open:inline">▲</span>
+                  </summary>
+                  <div className="mt-2">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-auto max-h-48 border">{JSON.stringify(mappedPreview, null, 2)}</pre>
+                  </div>
+                </details>
               </div>
             </div>
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 border-t pt-4">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={importRows} disabled={!hasData || isImporting}>{isImporting ? 'Importing…' : 'Import'}</Button>
         </DialogFooter>
