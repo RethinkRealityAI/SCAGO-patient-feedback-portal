@@ -21,7 +21,7 @@ import { YEPMentor, YEPParticipant } from '@/lib/youth-empowerment';
 
 const mentorFormSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  // title removed
+  title: z.string().optional().or(z.literal('')),
   email: z
     .string()
     .email('Invalid email')
@@ -54,7 +54,7 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
     resolver: zodResolver(mentorFormSchema),
     defaultValues: {
       name: mentor?.name || '',
-      // title removed
+      title: (mentor as any)?.title || '',
       email: (mentor as any)?.email || '',
       phone: (mentor as any)?.phone || '',
       vulnerableSectorCheck: (mentor as any)?.vulnerableSectorCheck || false,
@@ -76,7 +76,7 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
     if (mentor) {
       form.reset({
         name: mentor.name || '',
-        // title removed
+        title: (mentor as any)?.title || '',
         email: (mentor as any)?.email || '',
         phone: (mentor as any)?.phone || '',
         vulnerableSectorCheck: (mentor as any)?.vulnerableSectorCheck || false,
@@ -90,7 +90,7 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
       // Reset to default values for new mentor
       form.reset({
         name: '',
-        // title removed
+        title: '',
         email: '',
         phone: '',
         vulnerableSectorCheck: false,
@@ -205,7 +205,19 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
                   )}
                 />
 
-                {/* title field removed */}
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title/Role</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Senior Mentor, Clinical Mentor" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField

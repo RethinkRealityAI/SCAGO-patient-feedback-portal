@@ -303,7 +303,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
     return badges;
   };
 
-  const regions = Array.from(new Set(participants.map(p => p.region).filter(region => region && region.trim() !== '')));
+  const regions = Array.from(new Set(participants.map(p => p.region).filter((region): region is string => !!region && region.trim() !== '')));
 
   if (isLoading) {
     return (
@@ -383,7 +383,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                   <SelectContent>
                     <SelectItem value="all">All Regions</SelectItem>
                     {regions.map(region => (
-                      <SelectItem key={region} value={region!}>{region}</SelectItem>
+                      <SelectItem key={region} value={region}>{region}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -170,6 +170,7 @@ const participantSchema = z.object({
 
 const mentorSchema = z.object({
   name: z.string().min(2, 'Name is required'),
+  title: z.string().optional().or(z.literal('')),
   email: z
     .string()
     .transform((val) => {
@@ -225,7 +226,7 @@ const attendanceSchema = z.object({
 
 const meetingSchema = z.object({
   studentId: z.string().min(1, 'Student is required'),
-  advisorId: z.string().min(1, 'Advisor is required'),
+  advisorId: z.string().min(1, 'Mentor is required'), // Keep advisorId for database compatibility
   meetingDate: z.string().min(1, 'Meeting date is required'),
   duration: z.number().optional(),
   notes: z.string().optional(),
@@ -560,6 +561,7 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
     
     const mentorData: any = {
       name: validatedData.name,
+      title: validatedData.title || '',
       email: validatedData.email || '',
       phone: validatedData.phone || '',
       vulnerableSectorCheck: validatedData.vulnerableSectorCheck ?? false,
@@ -590,6 +592,7 @@ export async function updateMentor(id: string, data: Partial<z.infer<typeof ment
 
     // Only include fields that have values
     if (data.name !== undefined) updateData.name = data.name;
+    if (data.title !== undefined) updateData.title = data.title;
     if (data.email !== undefined) updateData.email = data.email;
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.vulnerableSectorCheck !== undefined) updateData.vulnerableSectorCheck = data.vulnerableSectorCheck;
@@ -628,6 +631,7 @@ export async function getMentors() {
       return {
         id: doc.id,
         name: data.name || '',
+        title: data.title || '',
         email: data.email || '',
         phone: data.phone || '',
         vulnerableSectorCheck: data.vulnerableSectorCheck || false,

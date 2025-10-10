@@ -21,7 +21,7 @@ import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 const meetingFormSchema = z.object({
   studentId: z.string().min(1, 'Student is required'),
-  advisorId: z.string().min(1, 'Advisor is required'),
+  advisorId: z.string().min(1, 'Mentor is required'),
   meetingDate: z.string().min(1, 'Meeting date is required'),
   duration: z.number().min(1, 'Duration must be at least 1 minute').max(480, 'Duration cannot exceed 8 hours').optional(),
   notes: z.string().optional(),
@@ -97,7 +97,7 @@ export function MeetingForm({
     setDataError(null);
     try {
       const [participantsData, mentorsData] = await Promise.all([
-        getParticipants({ approved: true }), // Only show approved participants
+        getParticipants(), // Show all participants
         getMentors(),
       ]);
       
@@ -106,7 +106,7 @@ export function MeetingForm({
       
       // Check if we have the required data
       if (participantsData.length === 0) {
-        setDataError('No approved participants found. Please add participants first.');
+        setDataError('No participants found. Please add participants first.');
       }
       if (mentorsData.length === 0) {
         setDataError('No mentors found. Please add mentors first.');
@@ -163,7 +163,7 @@ export function MeetingForm({
       if (result.success) {
         toast({
           title: 'Meeting Recorded',
-          description: 'Advisor meeting has been successfully recorded.',
+          description: 'Mentor meeting has been successfully recorded.',
         });
         // Reset form and state
         form.reset({
@@ -217,10 +217,10 @@ export function MeetingForm({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
-            Record Advisor Meeting
+            Record Mentor Meeting
           </DialogTitle>
           <DialogDescription>
-            Record a meeting between a participant and their advisor
+            Record a meeting between a participant and their mentor
           </DialogDescription>
         </DialogHeader>
 
@@ -251,7 +251,7 @@ export function MeetingForm({
                     <Users className="h-5 w-5" />
                     Meeting Participants
                   </CardTitle>
-                  <CardDescription>Select the participant and advisor</CardDescription>
+                  <CardDescription>Select the participant and mentor</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
@@ -312,11 +312,11 @@ export function MeetingForm({
                     name="advisorId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Advisor *</FormLabel>
+                        <FormLabel>Mentor *</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select advisor" />
+                              <SelectValue placeholder="Select mentor" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>

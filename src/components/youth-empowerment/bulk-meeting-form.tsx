@@ -20,7 +20,7 @@ import { createAdvisorMeeting, getParticipants, getMentors } from '@/app/youth-e
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 const bulkMeetingFormSchema = z.object({
-  advisorId: z.string().min(1, 'Advisor is required'),
+  advisorId: z.string().min(1, 'Mentor is required'),
   studentIds: z.array(z.string()).min(1, 'At least one student is required'),
   meetingDate: z.string().min(1, 'Meeting date is required'),
   duration: z.number().min(1, 'Duration must be at least 1 minute').max(480, 'Duration cannot exceed 8 hours').optional(),
@@ -91,7 +91,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
     setDataError(null);
     try {
       const [participantsData, mentorsData] = await Promise.all([
-        getParticipants({ approved: true }),
+        getParticipants(), // Show all participants
         getMentors(),
       ]);
       
@@ -100,7 +100,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
       
       // Check if we have the required data
       if (participantsData.length === 0) {
-        setDataError('No approved participants found. Please add participants first.');
+        setDataError('No participants found. Please add participants first.');
       }
       if (mentorsData.length === 0) {
         setDataError('No mentors found. Please add mentors first.');
@@ -193,7 +193,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
       if (successCount === totalRecords) {
         toast({
           title: 'Bulk Meetings Recorded',
-          description: `Successfully recorded ${totalRecords} meetings with the same advisor.`,
+          description: `Successfully recorded ${totalRecords} meetings with the same mentor.`,
         });
         // Reset form and state
         form.reset({
@@ -254,7 +254,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
             Bulk Meeting Recording
           </DialogTitle>
           <DialogDescription>
-            Record the same meeting for multiple students with one advisor
+            Record the same meeting for multiple students with one mentor
           </DialogDescription>
         </DialogHeader>
 
@@ -283,10 +283,10 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <GraduationCap className="h-5 w-5" />
-                    Select Advisor
+                    Select Mentor
                   </CardTitle>
                   <CardDescription>
-                    Choose the advisor for all meetings
+                    Choose the mentor for all meetings
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -295,11 +295,11 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
                     name="advisorId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Advisor *</FormLabel>
+                        <FormLabel>Mentor *</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value as any}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select advisor" />
+                              <SelectValue placeholder="Select mentor" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>

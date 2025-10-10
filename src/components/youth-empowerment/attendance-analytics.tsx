@@ -341,7 +341,7 @@ export function AttendanceAnalytics({ onExport }: AttendanceAnalyticsProps) {
           <CardContent>
             <div className="text-2xl font-bold">{analytics.meetingAttendanceRate.toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground">
-              Advisor meeting participation
+              Mentor meeting participation
             </p>
             {analytics.meetingAttendanceRate === 0 ? (
               <div className="h-2 w-full bg-muted rounded-full mt-2">

@@ -47,7 +47,7 @@ export function ExportDialog({ isOpen, onClose }: ExportDialogProps) {
     { id: 'mentors', label: 'Mentors', icon: GraduationCap, description: 'Mentor information and assignments' },
     { id: 'workshops', label: 'Workshops', icon: Calendar, description: 'Workshop schedules and details' },
     { id: 'attendance', label: 'Attendance', icon: Target, description: 'Workshop attendance records' },
-    { id: 'meetings', label: 'Meetings', icon: MessageSquare, description: 'Advisor meeting records' },
+    { id: 'meetings', label: 'Meetings', icon: MessageSquare, description: 'Mentor meeting records' },
   ];
 
   const handleDataTypeToggle = (dataType: string) => {

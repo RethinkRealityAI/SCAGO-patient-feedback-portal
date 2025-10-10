@@ -99,7 +99,7 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
         return {
           ...meeting,
           studentName: student?.youthParticipant || 'Unknown Student',
-          advisorName: advisor?.name || 'Unknown Advisor',
+          advisorName: advisor?.name || 'Unknown Mentor',
         };
       });
 
@@ -251,7 +251,7 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
                 Meeting Records ({filteredMeetings.length})
               </CardTitle>
               <CardDescription>
-                Track and manage advisor-student meetings
+                Track and manage mentor-student meetings
               </CardDescription>
             </div>
             <Button onClick={() => setIsFormOpen(true)}>
@@ -289,10 +289,10 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
             </Select>
             <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
               <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All Advisors" />
+                <SelectValue placeholder="All Mentors" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Advisors</SelectItem>
+                <SelectItem value="all">All Mentors</SelectItem>
                 {mentors.map(mentor => (
                   <SelectItem key={mentor.id} value={mentor.id}>
                     {mentor.name}
@@ -319,7 +319,7 @@ export function MeetingsTable({ onRefresh }: MeetingsTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student</TableHead>
-                  <TableHead>Advisor</TableHead>
+                  <TableHead>Mentor</TableHead>
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Topics</TableHead>

@@ -225,7 +225,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Mentor</TableHead>
-                  {/* Title removed */}
+                  <TableHead>Title/Role</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>VSC</TableHead>
@@ -252,7 +252,9 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                         <TableCell>
                           <div className="font-medium">{mentor.name}</div>
                         </TableCell>
-                        {/* Title cell removed */}
+                        <TableCell>
+                          <div className="text-sm text-muted-foreground">{mentor.title || '-'}</div>
+                        </TableCell>
                         <TableCell>
                           <div className="text-sm text-muted-foreground">{(mentor as any).email || '-'}</div>
                         </TableCell>
@@ -387,7 +389,10 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                   <label className="text-sm font-medium text-muted-foreground">Name</label>
                   <p className="text-sm">{selectedMentor.name}</p>
                 </div>
-                {/* Title removed */}
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Title/Role</label>
+                  <p className="text-sm">{selectedMentor.title || '-'}</p>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Assigned Youth</label>

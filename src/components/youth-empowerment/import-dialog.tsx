@@ -107,7 +107,7 @@ export function ImportDialog({ isOpen, onClose, onSuccess, defaultTargetTable = 
       id: 'meetings', 
       label: 'Meetings', 
       icon: MessageSquare, 
-      description: 'Advisor meeting records',
+      description: 'Mentor meeting records',
       requiredFields: ['participantId', 'mentorId', 'meetingDate', 'type']
     },
   ];

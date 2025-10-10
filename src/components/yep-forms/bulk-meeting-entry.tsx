@@ -79,7 +79,7 @@ export function BulkMeetingEntry({
     try {
       setIsLoading(true);
       const [participantsResult, mentorsResult] = await Promise.all([
-        getParticipants({ approved: true }),
+        getParticipants(), // Show all participants
         getMentors()
       ]);
       setParticipants(participantsResult as any);
@@ -223,7 +223,7 @@ export function BulkMeetingEntry({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Advisor</label>
+                  <label className="text-sm font-medium">Mentor</label>
                   <Select
                     value={record.advisorId}
                     onValueChange={(value) => {
@@ -233,7 +233,7 @@ export function BulkMeetingEntry({
                     disabled={disabled}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select advisor" />
+                      <SelectValue placeholder="Select mentor" />
                     </SelectTrigger>
                     <SelectContent>
                       {mentors.map((mentor) => (

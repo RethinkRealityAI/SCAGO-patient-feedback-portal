@@ -56,6 +56,7 @@ export interface YEPParticipant {
 export interface YEPMentor {
   id: string;
   name: string;
+  title?: string;
   email?: string;
   phone?: string;
   vulnerableSectorCheck?: boolean;
