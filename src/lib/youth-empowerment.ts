@@ -56,8 +56,16 @@ export interface YEPParticipant {
 export interface YEPMentor {
   id: string;
   name: string;
-  title: string;
+  email?: string;
+  phone?: string;
+  vulnerableSectorCheck?: boolean;
+  contractSigned?: boolean;
+  availability?: string;
   assignedStudents: string[];
+  file?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -200,6 +208,7 @@ export const participantValidation = {
 export const mentorValidation = {
   name: (value: string) => value.length >= 2,
   title: (value: string) => value.length >= 2,
+  email: (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
 };
 
 export const workshopValidation = {

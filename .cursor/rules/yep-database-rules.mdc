@@ -1,0 +1,907 @@
+---
+description: when working with the youth empowerment program tables and database and forms
+alwaysApply: false
+---
+# YEP Database Operations Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: Database operations and server actions
+**Apply To**: 
+- `src/app/youth-empowerment/actions.ts`
+- `src/lib/youth-empowerment.ts`
+- `src/lib/import-utils.ts`
+
+## 🗄️ **Database Schema Rules**
+
+### YEPParticipant Interface Requirements
+```typescript
+interface YEPParticipant {
+  // REQUIRED FIELDS (Never optional)
+  id: string;                      // Document ID
+  youthParticipant: string;        // Participant name (min 2 chars)
+  sinLast4: string;               // Last 4 digits or 'N/A'
+  sinHash: string;                // bcrypt hash or 'N/A'
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // OPTIONAL FIELDS (With safe defaults)
+  age?: number;                   // 16-30 range
+  email?: string;                 // Valid email format
+  etransferEmailAddress?: string; // Valid email format
+  phoneNumber?: string;           // Phone number format
+  emergencyContactRelationship?: string;
+  emergencyContactNumber?: string;
+  region?: string;
+  mailingAddress?: string;        // Legacy field
+  streetAddress?: string;         // NEW - separate address fields
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  
+  // Program Status (Boolean flags with false defaults)
+  approved?: boolean;              // Default: false
+  contractSigned?: boolean;       // Default: false
+  signedSyllabus?: boolean;       // Default: false
+  idProvided?: boolean;           // Default: false
+  proofOfAffiliationWithSCD?: boolean; // Default: false
+  interviewed?: boolean;          // Default: false
+  recruited?: boolean;           // Default: false
+  
+  // Program Details
+  availability?: string;
+  assignedMentor?: string;
+  scagoCounterpart?: string;
+  canadianStatus?: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
+  canadianStatusOther?: string;
+  
+  // Project Information
+  projectCategory?: string;
+  projectInANutshell?: string;
+  youthProposal?: string;
+  affiliationWithSCD?: string;
+  
+  // Security (SIN handling)
+  sin?: string;                   // Full SIN (not stored)
+  sinNumber?: string;             // Alternative SIN field
+  
+  // File Management
+  file?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  
+  // Notes & Tracking
+  notes?: string;
+  nextSteps?: string;
+  interviewNotes?: string;
+  duties?: string;
+  location?: string;
+  citizenshipStatus?: string;
+}
+```
+
+## 🔐 **Security Rules**
+
+### SIN Security Requirements
+```typescript
+// ALWAYS validate SIN security
+function handleSINSecurity(sin: string | undefined): { sinLast4: string; sinHash: string } {
+  if (sin && sin.trim() !== '') {
+    // Validate SIN format
+    if (!validateSINLenient(sin)) {
+      throw new Error('Invalid SIN format');
+    }
+    
+    // Extract last 4 digits
+    const sinLast4 = extractSINLast4(sin);
+    
+    // Hash the full SIN
+    const sinHash = await hashSIN(sin);
+    
+    return { sinLast4, sinHash };
+  } else {
+    // Provide safe defaults when no SIN
+    return { sinLast4: 'N/A', sinHash: 'N/A' };
+  }
+}
+```
+
+### Data Validation Rules
+```typescript
+// Server-side validation with Zod
+const participantSchema = z.object({
+  youthParticipant: z.string().min(2, 'Name is required'),
+  age: z.number().min(16).max(30).optional(),
+  email: z.string().email('Valid email is required').optional().or(z.literal('')),
+  etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
+  phoneNumber: z.string().optional().or(z.literal('')),
+  // ... all other fields with proper validation
+  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).default('Other'),
+  sin: z.string().optional().refine((val) => {
+    if (!val || val.trim() === '') return true;
+    return validateSINLenient(val);
+  }, 'Invalid SIN format').or(z.literal('')),
+}).superRefine((data, ctx) => {
+  if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your status when "Other" is selected',
+      path: ['canadianStatusOther'],
+    });
+  }
+});
+```
+
+## 🏗️ **Server Actions Rules**
+
+### Create Participant Rules
+```typescript
+export async function createParticipant(data: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Parse and validate form data
+    const validatedData = participantSchema.parse({
+      youthParticipant: data.get('youthParticipant'),
+      age: data.get('age') ? parseInt(data.get('age') as string) : undefined,
+      email: data.get('email'),
+      // ... parse all fields
+    });
+    
+    // Handle SIN security
+    const { sinLast4, sinHash } = handleSINSecurity(validatedData.sin);
+    
+    // Create participant data with safe defaults
+    const participantData = {
+      youthParticipant: validatedData.youthParticipant,
+      age: validatedData.age || null,
+      email: validatedData.email || '',
+      etransferEmailAddress: validatedData.etransferEmailAddress || '',
+      phoneNumber: validatedData.phoneNumber || '',
+      emergencyContactRelationship: validatedData.emergencyContactRelationship || '',
+      emergencyContactNumber: validatedData.emergencyContactNumber || '',
+      region: validatedData.region || '',
+      mailingAddress: validatedData.mailingAddress || '',
+      streetAddress: validatedData.streetAddress || '',
+      city: validatedData.city || '',
+      province: validatedData.province || '',
+      postalCode: validatedData.postalCode || '',
+      projectCategory: validatedData.projectCategory || '',
+      projectInANutshell: validatedData.projectInANutshell || '',
+      contractSigned: validatedData.contractSigned ?? false,
+      signedSyllabus: validatedData.signedSyllabus ?? false,
+      availability: validatedData.availability || '',
+      assignedMentor: validatedData.assignedMentor || '',
+      idProvided: validatedData.idProvided ?? false,
+      canadianStatus: validatedData.canadianStatus || 'Other',
+      canadianStatusOther: validatedData.canadianStatusOther || '',
+      sin: validatedData.sin || '',
+      sinNumber: validatedData.sinNumber || '',
+      sinLast4: sinLast4,  // REQUIRED - always has value
+      sinHash: sinHash,    // REQUIRED - always has value
+      youthProposal: validatedData.youthProposal || '',
+      affiliationWithSCD: validatedData.affiliationWithSCD || '',
+      proofOfAffiliationWithSCD: validatedData.proofOfAffiliationWithSCD ?? false,
+      scagoCounterpart: validatedData.scagoCounterpart || '',
+      dob: validatedData.dob || '',
+      approved: validatedData.approved ?? false,
+      interviewed: validatedData.interviewed ?? false,
+      interviewNotes: validatedData.interviewNotes || '',
+      recruited: validatedData.recruited ?? false,
+      notes: validatedData.notes || '',
+      nextSteps: validatedData.nextSteps || '',
+      duties: validatedData.duties || '',
+      location: validatedData.location || '',
+      citizenshipStatus: validatedData.citizenshipStatus || '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    // Save to Firestore
+    const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating participant:', error);
+    return { success: false, error: 'Failed to create participant' };
+  }
+}
+```
+
+### Update Participant Rules
+```typescript
+export async function updateParticipant(id: string, data: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Parse and validate form data
+    const validatedData = participantSchema.parse({
+      // ... parse all fields
+    });
+    
+    // Build update data (only include provided fields)
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+    
+    // Only update fields that are provided
+    if (validatedData.youthParticipant) updateData.youthParticipant = validatedData.youthParticipant;
+    if (validatedData.age !== undefined) updateData.age = validatedData.age;
+    if (validatedData.email !== undefined) updateData.email = validatedData.email;
+    // ... handle all fields conditionally
+    
+    // Handle SIN security if provided
+    if (validatedData.sin !== undefined) {
+      const { sinLast4, sinHash } = handleSINSecurity(validatedData.sin);
+      updateData.sinLast4 = sinLast4;
+      updateData.sinHash = sinHash;
+    }
+    
+    // Update in Firestore
+    await updateDoc(doc(db, 'yep_participants', id), updateData);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating participant:', error);
+    return { success: false, error: 'Failed to update participant' };
+  }
+}
+```
+
+### Get Participants Rules
+```typescript
+export async function getParticipants(): Promise<YEPParticipant[]> {
+  try {
+    const participantsRef = collection(db, 'yep_participants');
+    const q = query(participantsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        youthParticipant: data.youthParticipant || '',
+        age: data.age || null,
+        email: data.email || '',
+        etransferEmailAddress: data.etransferEmailAddress || '',
+        phoneNumber: data.phoneNumber || '',
+        emergencyContactRelationship: data.emergencyContactRelationship || '',
+        emergencyContactNumber: data.emergencyContactNumber || '',
+        region: data.region || '',
+        mailingAddress: data.mailingAddress || '',
+        streetAddress: data.streetAddress || '',
+        city: data.city || '',
+        province: data.province || '',
+        postalCode: data.postalCode || '',
+        projectCategory: data.projectCategory || '',
+        projectInANutshell: data.projectInANutshell || '',
+        contractSigned: data.contractSigned || false,
+        signedSyllabus: data.signedSyllabus || false,
+        availability: data.availability || '',
+        assignedMentor: data.assignedMentor || '',
+        idProvided: data.idProvided || false,
+        canadianStatus: data.canadianStatus || 'Canadian Citizen',
+        canadianStatusOther: data.canadianStatusOther || '',
+        sin: data.sin || '',
+        sinNumber: data.sinNumber || '',
+        sinLast4: data.sinLast4 || '',  // REQUIRED - always has value
+        sinHash: data.sinHash || '',    // REQUIRED - always has value
+        youthProposal: data.youthProposal || '',
+        affiliationWithSCD: data.affiliationWithSCD || '',
+        proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD || false,
+        scagoCounterpart: data.scagoCounterpart || '',
+        dob: data.dob || '',
+        approved: data.approved || false,
+        interviewed: data.interviewed || false,
+        interviewNotes: data.interviewNotes || '',
+        recruited: data.recruited || false,
+        notes: data.notes || '',
+        nextSteps: data.nextSteps || '',
+        duties: data.duties || '',
+        location: data.location || '',
+        citizenshipStatus: data.citizenshipStatus || '',
+        fileUrl: data.fileUrl || '',
+        fileName: data.fileName || '',
+        fileType: data.fileType || '',
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching participants:', error);
+    return [];
+  }
+}
+```
+
+### Upsert Participant Rules
+```typescript
+export async function upsertParticipantByEmail(participantData: any): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Find existing participant by email
+    const participantsRef = collection(db, 'yep_participants');
+    const q = query(participantsRef, where('email', '==', participantData.email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      // Create new participant
+      return await createParticipant(participantData);
+    } else {
+      // Update existing participant
+      const doc = snapshot.docs[0];
+      return await updateParticipant(doc.id, participantData);
+    }
+  } catch (error) {
+    console.error('Error upserting participant:', error);
+    return { success: false, error: 'Failed to upsert participant' };
+  }
+}
+```
+
+## 🔧 **Error Handling Rules**
+
+### Database Error Handling
+```typescript
+// Always wrap database operations in try-catch
+try {
+  const result = await databaseOperation();
+  return { success: true, data: result };
+} catch (error) {
+  console.error('Database error:', error);
+  return { success: false, error: 'Database operation failed' };
+}
+```
+
+### Validation Error Handling
+```typescript
+// Handle Zod validation errors
+try {
+  const validatedData = participantSchema.parse(formData);
+  // Process validated data
+} catch (error) {
+  if (error instanceof z.ZodError) {
+    return { success: false, error: error.errors[0].message };
+  }
+  throw error;
+}
+```
+
+## 📊 **Data Consistency Rules**
+
+### Safe Defaults
+```typescript
+// Always provide safe defaults for optional fields
+const safeDefaults = {
+  email: '',
+  phoneNumber: '',
+  region: '',
+  canadianStatus: 'Other',
+  contractSigned: false,
+  signedSyllabus: false,
+  idProvided: false,
+  proofOfAffiliationWithSCD: false,
+  approved: false,
+  interviewed: false,
+  recruited: false,
+  sinLast4: 'N/A',
+  sinHash: 'N/A',
+};
+```
+
+### Data Type Consistency
+```typescript
+// Ensure consistent data types
+const normalizeData = (data: any) => {
+  return {
+    ...data,
+    age: data.age ? parseInt(data.age) : null,
+    contractSigned: Boolean(data.contractSigned),
+    signedSyllabus: Boolean(data.signedSyllabus),
+    idProvided: Boolean(data.idProvided),
+    proofOfAffiliationWithSCD: Boolean(data.proofOfAffiliationWithSCD),
+    approved: Boolean(data.approved),
+    interviewed: Boolean(data.interviewed),
+    recruited: Boolean(data.recruited),
+  };
+};
+```
+
+## 🚀 **Performance Rules**
+
+### Batch Operations
+```typescript
+// Use batch writes for multiple operations
+const batch = writeBatch(db);
+participants.forEach(participant => {
+  const docRef = doc(collection(db, 'yep_participants'));
+  batch.set(docRef, participant);
+});
+await batch.commit();
+```
+
+### Query Optimization
+```typescript
+// Use proper indexing for queries
+const q = query(
+  collection(db, 'yep_participants'),
+  where('region', '==', 'Toronto'),
+  orderBy('createdAt', 'desc'),
+  limit(50)
+);
+```
+
+## 📋 **Testing Rules**
+
+### Database Testing
+```typescript
+// Test database operations
+describe('Database Operations', () => {
+  test('should create participant with required fields', async () => {
+    const participantData = {
+      youthParticipant: 'Test Participant',
+      email: 'test@example.com',
+    };
+    
+    const result = await createParticipant(participantData);
+    expect(result.success).toBe(true);
+  });
+  
+  test('should handle SIN security', async () => {
+    const participantData = {
+      youthParticipant: 'Test Participant',
+      sin: '123456789',
+    };
+    
+    const result = await createParticipant(participantData);
+    expect(result.success).toBe(true);
+    // Verify SIN is hashed and only last 4 stored
+  });
+});
+```# YEP Database Operations Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: Database operations and server actions
+**Apply To**: 
+- `src/app/youth-empowerment/actions.ts`
+- `src/lib/youth-empowerment.ts`
+- `src/lib/import-utils.ts`
+
+## 🗄️ **Database Schema Rules**
+
+### YEPParticipant Interface Requirements
+```typescript
+interface YEPParticipant {
+  // REQUIRED FIELDS (Never optional)
+  id: string;                      // Document ID
+  youthParticipant: string;        // Participant name (min 2 chars)
+  sinLast4: string;               // Last 4 digits or 'N/A'
+  sinHash: string;                // bcrypt hash or 'N/A'
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // OPTIONAL FIELDS (With safe defaults)
+  age?: number;                   // 16-30 range
+  email?: string;                 // Valid email format
+  etransferEmailAddress?: string; // Valid email format
+  phoneNumber?: string;           // Phone number format
+  emergencyContactRelationship?: string;
+  emergencyContactNumber?: string;
+  region?: string;
+  mailingAddress?: string;        // Legacy field
+  streetAddress?: string;         // NEW - separate address fields
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  
+  // Program Status (Boolean flags with false defaults)
+  approved?: boolean;              // Default: false
+  contractSigned?: boolean;       // Default: false
+  signedSyllabus?: boolean;       // Default: false
+  idProvided?: boolean;           // Default: false
+  proofOfAffiliationWithSCD?: boolean; // Default: false
+  interviewed?: boolean;          // Default: false
+  recruited?: boolean;           // Default: false
+  
+  // Program Details
+  availability?: string;
+  assignedMentor?: string;
+  scagoCounterpart?: string;
+  canadianStatus?: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
+  canadianStatusOther?: string;
+  
+  // Project Information
+  projectCategory?: string;
+  projectInANutshell?: string;
+  youthProposal?: string;
+  affiliationWithSCD?: string;
+  
+  // Security (SIN handling)
+  sin?: string;                   // Full SIN (not stored)
+  sinNumber?: string;             // Alternative SIN field
+  
+  // File Management
+  file?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  
+  // Notes & Tracking
+  notes?: string;
+  nextSteps?: string;
+  interviewNotes?: string;
+  duties?: string;
+  location?: string;
+  citizenshipStatus?: string;
+}
+```
+
+## 🔐 **Security Rules**
+
+### SIN Security Requirements
+```typescript
+// ALWAYS validate SIN security
+function handleSINSecurity(sin: string | undefined): { sinLast4: string; sinHash: string } {
+  if (sin && sin.trim() !== '') {
+    // Validate SIN format
+    if (!validateSINLenient(sin)) {
+      throw new Error('Invalid SIN format');
+    }
+    
+    // Extract last 4 digits
+    const sinLast4 = extractSINLast4(sin);
+    
+    // Hash the full SIN
+    const sinHash = await hashSIN(sin);
+    
+    return { sinLast4, sinHash };
+  } else {
+    // Provide safe defaults when no SIN
+    return { sinLast4: 'N/A', sinHash: 'N/A' };
+  }
+}
+```
+
+### Data Validation Rules
+```typescript
+// Server-side validation with Zod
+const participantSchema = z.object({
+  youthParticipant: z.string().min(2, 'Name is required'),
+  age: z.number().min(16).max(30).optional(),
+  email: z.string().email('Valid email is required').optional().or(z.literal('')),
+  etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
+  phoneNumber: z.string().optional().or(z.literal('')),
+  // ... all other fields with proper validation
+  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).default('Other'),
+  sin: z.string().optional().refine((val) => {
+    if (!val || val.trim() === '') return true;
+    return validateSINLenient(val);
+  }, 'Invalid SIN format').or(z.literal('')),
+}).superRefine((data, ctx) => {
+  if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your status when "Other" is selected',
+      path: ['canadianStatusOther'],
+    });
+  }
+});
+```
+
+## 🏗️ **Server Actions Rules**
+
+### Create Participant Rules
+```typescript
+export async function createParticipant(data: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Parse and validate form data
+    const validatedData = participantSchema.parse({
+      youthParticipant: data.get('youthParticipant'),
+      age: data.get('age') ? parseInt(data.get('age') as string) : undefined,
+      email: data.get('email'),
+      // ... parse all fields
+    });
+    
+    // Handle SIN security
+    const { sinLast4, sinHash } = handleSINSecurity(validatedData.sin);
+    
+    // Create participant data with safe defaults
+    const participantData = {
+      youthParticipant: validatedData.youthParticipant,
+      age: validatedData.age || null,
+      email: validatedData.email || '',
+      etransferEmailAddress: validatedData.etransferEmailAddress || '',
+      phoneNumber: validatedData.phoneNumber || '',
+      emergencyContactRelationship: validatedData.emergencyContactRelationship || '',
+      emergencyContactNumber: validatedData.emergencyContactNumber || '',
+      region: validatedData.region || '',
+      mailingAddress: validatedData.mailingAddress || '',
+      streetAddress: validatedData.streetAddress || '',
+      city: validatedData.city || '',
+      province: validatedData.province || '',
+      postalCode: validatedData.postalCode || '',
+      projectCategory: validatedData.projectCategory || '',
+      projectInANutshell: validatedData.projectInANutshell || '',
+      contractSigned: validatedData.contractSigned ?? false,
+      signedSyllabus: validatedData.signedSyllabus ?? false,
+      availability: validatedData.availability || '',
+      assignedMentor: validatedData.assignedMentor || '',
+      idProvided: validatedData.idProvided ?? false,
+      canadianStatus: validatedData.canadianStatus || 'Other',
+      canadianStatusOther: validatedData.canadianStatusOther || '',
+      sin: validatedData.sin || '',
+      sinNumber: validatedData.sinNumber || '',
+      sinLast4: sinLast4,  // REQUIRED - always has value
+      sinHash: sinHash,    // REQUIRED - always has value
+      youthProposal: validatedData.youthProposal || '',
+      affiliationWithSCD: validatedData.affiliationWithSCD || '',
+      proofOfAffiliationWithSCD: validatedData.proofOfAffiliationWithSCD ?? false,
+      scagoCounterpart: validatedData.scagoCounterpart || '',
+      dob: validatedData.dob || '',
+      approved: validatedData.approved ?? false,
+      interviewed: validatedData.interviewed ?? false,
+      interviewNotes: validatedData.interviewNotes || '',
+      recruited: validatedData.recruited ?? false,
+      notes: validatedData.notes || '',
+      nextSteps: validatedData.nextSteps || '',
+      duties: validatedData.duties || '',
+      location: validatedData.location || '',
+      citizenshipStatus: validatedData.citizenshipStatus || '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    // Save to Firestore
+    const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating participant:', error);
+    return { success: false, error: 'Failed to create participant' };
+  }
+}
+```
+
+### Update Participant Rules
+```typescript
+export async function updateParticipant(id: string, data: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Parse and validate form data
+    const validatedData = participantSchema.parse({
+      // ... parse all fields
+    });
+    
+    // Build update data (only include provided fields)
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+    
+    // Only update fields that are provided
+    if (validatedData.youthParticipant) updateData.youthParticipant = validatedData.youthParticipant;
+    if (validatedData.age !== undefined) updateData.age = validatedData.age;
+    if (validatedData.email !== undefined) updateData.email = validatedData.email;
+    // ... handle all fields conditionally
+    
+    // Handle SIN security if provided
+    if (validatedData.sin !== undefined) {
+      const { sinLast4, sinHash } = handleSINSecurity(validatedData.sin);
+      updateData.sinLast4 = sinLast4;
+      updateData.sinHash = sinHash;
+    }
+    
+    // Update in Firestore
+    await updateDoc(doc(db, 'yep_participants', id), updateData);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating participant:', error);
+    return { success: false, error: 'Failed to update participant' };
+  }
+}
+```
+
+### Get Participants Rules
+```typescript
+export async function getParticipants(): Promise<YEPParticipant[]> {
+  try {
+    const participantsRef = collection(db, 'yep_participants');
+    const q = query(participantsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        youthParticipant: data.youthParticipant || '',
+        age: data.age || null,
+        email: data.email || '',
+        etransferEmailAddress: data.etransferEmailAddress || '',
+        phoneNumber: data.phoneNumber || '',
+        emergencyContactRelationship: data.emergencyContactRelationship || '',
+        emergencyContactNumber: data.emergencyContactNumber || '',
+        region: data.region || '',
+        mailingAddress: data.mailingAddress || '',
+        streetAddress: data.streetAddress || '',
+        city: data.city || '',
+        province: data.province || '',
+        postalCode: data.postalCode || '',
+        projectCategory: data.projectCategory || '',
+        projectInANutshell: data.projectInANutshell || '',
+        contractSigned: data.contractSigned || false,
+        signedSyllabus: data.signedSyllabus || false,
+        availability: data.availability || '',
+        assignedMentor: data.assignedMentor || '',
+        idProvided: data.idProvided || false,
+        canadianStatus: data.canadianStatus || 'Canadian Citizen',
+        canadianStatusOther: data.canadianStatusOther || '',
+        sin: data.sin || '',
+        sinNumber: data.sinNumber || '',
+        sinLast4: data.sinLast4 || '',  // REQUIRED - always has value
+        sinHash: data.sinHash || '',    // REQUIRED - always has value
+        youthProposal: data.youthProposal || '',
+        affiliationWithSCD: data.affiliationWithSCD || '',
+        proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD || false,
+        scagoCounterpart: data.scagoCounterpart || '',
+        dob: data.dob || '',
+        approved: data.approved || false,
+        interviewed: data.interviewed || false,
+        interviewNotes: data.interviewNotes || '',
+        recruited: data.recruited || false,
+        notes: data.notes || '',
+        nextSteps: data.nextSteps || '',
+        duties: data.duties || '',
+        location: data.location || '',
+        citizenshipStatus: data.citizenshipStatus || '',
+        fileUrl: data.fileUrl || '',
+        fileName: data.fileName || '',
+        fileType: data.fileType || '',
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching participants:', error);
+    return [];
+  }
+}
+```
+
+### Upsert Participant Rules
+```typescript
+export async function upsertParticipantByEmail(participantData: any): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Find existing participant by email
+    const participantsRef = collection(db, 'yep_participants');
+    const q = query(participantsRef, where('email', '==', participantData.email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      // Create new participant
+      return await createParticipant(participantData);
+    } else {
+      // Update existing participant
+      const doc = snapshot.docs[0];
+      return await updateParticipant(doc.id, participantData);
+    }
+  } catch (error) {
+    console.error('Error upserting participant:', error);
+    return { success: false, error: 'Failed to upsert participant' };
+  }
+}
+```
+
+## 🔧 **Error Handling Rules**
+
+### Database Error Handling
+```typescript
+// Always wrap database operations in try-catch
+try {
+  const result = await databaseOperation();
+  return { success: true, data: result };
+} catch (error) {
+  console.error('Database error:', error);
+  return { success: false, error: 'Database operation failed' };
+}
+```
+
+### Validation Error Handling
+```typescript
+// Handle Zod validation errors
+try {
+  const validatedData = participantSchema.parse(formData);
+  // Process validated data
+} catch (error) {
+  if (error instanceof z.ZodError) {
+    return { success: false, error: error.errors[0].message };
+  }
+  throw error;
+}
+```
+
+## 📊 **Data Consistency Rules**
+
+### Safe Defaults
+```typescript
+// Always provide safe defaults for optional fields
+const safeDefaults = {
+  email: '',
+  phoneNumber: '',
+  region: '',
+  canadianStatus: 'Other',
+  contractSigned: false,
+  signedSyllabus: false,
+  idProvided: false,
+  proofOfAffiliationWithSCD: false,
+  approved: false,
+  interviewed: false,
+  recruited: false,
+  sinLast4: 'N/A',
+  sinHash: 'N/A',
+};
+```
+
+### Data Type Consistency
+```typescript
+// Ensure consistent data types
+const normalizeData = (data: any) => {
+  return {
+    ...data,
+    age: data.age ? parseInt(data.age) : null,
+    contractSigned: Boolean(data.contractSigned),
+    signedSyllabus: Boolean(data.signedSyllabus),
+    idProvided: Boolean(data.idProvided),
+    proofOfAffiliationWithSCD: Boolean(data.proofOfAffiliationWithSCD),
+    approved: Boolean(data.approved),
+    interviewed: Boolean(data.interviewed),
+    recruited: Boolean(data.recruited),
+  };
+};
+```
+
+## 🚀 **Performance Rules**
+
+### Batch Operations
+```typescript
+// Use batch writes for multiple operations
+const batch = writeBatch(db);
+participants.forEach(participant => {
+  const docRef = doc(collection(db, 'yep_participants'));
+  batch.set(docRef, participant);
+});
+await batch.commit();
+```
+
+### Query Optimization
+```typescript
+// Use proper indexing for queries
+const q = query(
+  collection(db, 'yep_participants'),
+  where('region', '==', 'Toronto'),
+  orderBy('createdAt', 'desc'),
+  limit(50)
+);
+```
+
+## 📋 **Testing Rules**
+
+### Database Testing
+```typescript
+// Test database operations
+describe('Database Operations', () => {
+  test('should create participant with required fields', async () => {
+    const participantData = {
+      youthParticipant: 'Test Participant',
+      email: 'test@example.com',
+    };
+    
+    const result = await createParticipant(participantData);
+    expect(result.success).toBe(true);
+  });
+  
+  test('should handle SIN security', async () => {
+    const participantData = {
+      youthParticipant: 'Test Participant',
+      sin: '123456789',
+    };
+    
+    const result = await createParticipant(participantData);
+    expect(result.success).toBe(true);
+    // Verify SIN is hashed and only last 4 stored
+  });
+});
+```

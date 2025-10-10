@@ -124,9 +124,9 @@ export const yepFormTemplates: YEPFormTemplate[] = [
             type: 'select',
             required: true,
             options: [
-              { id: '1', label: 'Canadian Citizen', value: 'citizen' },
-              { id: '2', label: 'Permanent Resident', value: 'permanent' },
-              { id: '3', label: 'Other', value: 'other' }
+              { id: '1', label: 'Canadian Citizen', value: 'Canadian Citizen' },
+              { id: '2', label: 'Permanent Resident', value: 'Permanent Resident' },
+              { id: '3', label: 'Other', value: 'Other' }
             ]
           },
           {

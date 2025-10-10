@@ -1,0 +1,72 @@
+---
+description: when working with the youth participants table and add participant form and any ai importing features
+alwaysApply: false
+---
+  }
+];
+```
+
+### Validation Tests
+```typescript
+// Test Cases for Validation
+const validationTests = [
+  {
+    data: [{ name: 'John Doe', email: 'john@example.com' }],
+    mapping: { name: 'youthParticipant', email: 'email' },
+    expected: { isValid: true, warnings: [] }
+  },
+  {
+    data: [{ name: '', email: 'john@example.com' }],
+    mapping: { name: 'youthParticipant', email: 'email' },
+    expected: { isValid: false, warnings: ['1 rows have empty participant names'] }
+  }
+];
+```
+
+## 🔗 **Integration Points**
+
+### API Endpoint Rules
+```typescript
+// /api/yep/csv-map/route.ts
+export async function POST(request: Request) {
+  try {
+    const { headers, sampleData } = await request.json();
+    
+    // Validate input
+    if (!headers || !Array.isArray(headers)) {
+      return Response.json({ error: 'Invalid headers' }, { status: 400 });
+    }
+    
+    // Generate AI mapping
+    const mapping = await generateAiMapping(headers, sampleData);
+    
+    return Response.json({ mapping });
+  } catch (error) {
+    console.error('AI mapping error:', error);
+    return Response.json({ error: 'Mapping failed' }, { status: 500 });
+  }
+}
+```
+
+### Component Integration
+```typescript
+// participant-importer.tsx
+const requestAiMapping = async () => {
+  try {
+    const response = await fetch('/api/yep/csv-map', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headers, sampleData })
+    });
+    
+    if (!response.ok) throw new Error('AI mapping failed');
+    
+    const { mapping } = await response.json();
+    setMapping(mapping);
+    validateData(headers, rows, mapping);
+  } catch (error) {
+    console.error('AI mapping error:', error);
+    // Fallback to manual mapping
+  }
+};
+```

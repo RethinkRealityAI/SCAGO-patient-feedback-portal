@@ -87,13 +87,17 @@ export const TABLE_SCHEMAS = {
     }
   },
   mentors: {
-    required: ['name', 'title', 'email'],
-    optional: ['phone', 'specialization', 'availability', 'notes'],
+    required: ['name', 'email'],
+    optional: ['email', 'phone', 'vulnerableSectorCheck', 'contractSigned', 'availability', 'assignedStudents', 'file'],
     types: {
       name: 'string',
-      title: 'string',
       email: 'email',
-      phone: 'string'
+      phone: 'string',
+      vulnerableSectorCheck: 'boolean',
+      contractSigned: 'boolean',
+      availability: 'string',
+      assignedStudents: 'string',
+      file: 'string'
     }
   },
   workshops: {
@@ -373,7 +377,18 @@ export function generateMappingSuggestions(
     // Interview and recruitment
     'interviewed': ['interviewed', 'interview', 'meeting', 'interview status', 'interviewed status', 'interview completed', 'interview done', 'interviewed_flag', 'interview_status', 'interview_completed', 'interview_done', 'interview_flag'],
     'interviewNotes': ['interview notes', 'meeting notes', 'interview comments', 'interview remarks', 'interview feedback', 'interview summary', 'interview details', 'interview_record', 'meeting_comments', 'interview_comments', 'interview_feedback'],
-    'recruited': ['recruited', 'recruitment', 'source', 'recruitment source', 'recruited from', 'recruitment method', 'recruitment channel', 'recruitment_source', 'recruited_flag', 'recruitment_status', 'recruitment_method']
+    'recruited': ['recruited', 'recruitment', 'source', 'recruitment source', 'recruited from', 'recruitment method', 'recruitment channel', 'recruitment_source', 'recruited_flag', 'recruitment_status', 'recruitment_method'],
+
+    // Mentor fields
+    'name': ['name', 'mentor', 'mentor name', 'full name'],
+    // title removed
+    'email': ['email', 'email address', 'mentor email', 'contact email'],
+    'phone': ['phone', 'phone number', 'contact', 'contact number', 'telephone', 'mobile'],
+    'vulnerableSectorCheck': ['vulnerable sector check', 'vsc', 'sector check', 'background check', 'police check'],
+    'contractSigned': ['contract', 'mentor contract signed', 'agreement signed', 'signed contract'],
+    'availability': ['availability', 'available', 'schedule', 'times'],
+    'assignedStudents': ['assigned youth', 'assigned students', 'students', 'youth list', 'youth ids', 'participant ids'],
+    'file': ['file', 'document', 'attachment', 'url']
   };
   
   // Try to match headers to schema fields

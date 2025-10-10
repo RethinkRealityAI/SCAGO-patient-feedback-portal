@@ -1,0 +1,359 @@
+---
+description: when creating new cursor rules, updating existing rules, or managing rule patterns and information
+alwaysApply: true
+---
+# Rule Generation & Update Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: All cursor rule files and rule management
+**Apply To**: 
+- `.cursor/rules/**/*.mdc`
+- `.cursor/settings.json`
+- Rule creation and maintenance workflows
+- Pattern recognition and rule updates
+
+## 📋 **Rule Creation Patterns**
+
+### New Rule Creation Template
+```markdown
+---
+description: [specific description of when to apply this rule]
+alwaysApply: [true/false - true for critical rules, false for specific contexts]
+---
+# [Rule Name]
+
+## 🎯 **Rule Application Scope**
+**Target Files**: [specific files or patterns this rule applies to]
+**Apply To**: 
+- [list of file patterns or directories]
+
+## [Rule Content Sections]
+[Detailed rule content with code examples, patterns, and guidelines]
+```
+
+### Rule Description Guidelines
+```typescript
+// Rule Description Patterns
+- Specific: "when working with the youth empowerment program Dashboard and page"
+- Context-aware: "when working with the youth participants table and add participant form"
+- Feature-specific: "when working with AI importing features"
+- Always apply: "when creating new cursor rules, updating existing rules"
+```
+
+## 🔄 **Rule Update Patterns**
+
+### Information Update Rules
+```typescript
+// When to Update Rules
+1. New features added to the system
+2. Changes in file structure or organization
+3. New patterns discovered in development
+4. Security requirements updated
+5. Performance optimizations identified
+6. Testing procedures improved
+7. Error handling patterns refined
+```
+
+### Rule Content Update Process
+```markdown
+1. Identify outdated information
+2. Find new patterns or requirements
+3. Update rule content with new information
+4. Remove obsolete sections
+5. Add new code examples or patterns
+6. Update file targeting if needed
+7. Test rule application
+8. Update rule description if context changes
+```
+
+## 🏗️ **Rule Structure Patterns**
+
+### Standard Rule Sections
+```markdown
+## 🎯 **Rule Application Scope**
+- Target Files: [specific files]
+- Apply To: [file patterns]
+
+## [Main Content Sections]
+- Architecture/Overview
+- Implementation Rules
+- Code Examples
+- Error Handling
+- Testing Guidelines
+- Performance Considerations
+- Integration Points
+```
+
+### Code Example Patterns
+```typescript
+// Always include:
+1. TypeScript interfaces and types
+2. Function implementations with error handling
+3. Configuration examples
+4. Testing patterns
+5. Security considerations
+6. Performance optimizations
+```
+
+## 🔍 **Pattern Recognition Rules**
+
+### Common Patterns to Document
+```typescript
+// Development Patterns
+1. File organization patterns
+2. Naming conventions
+3. Error handling patterns
+4. Security implementations
+5. Performance optimizations
+6. Testing strategies
+7. Integration patterns
+8. Maintenance procedures
+```
+
+### Pattern Documentation Format
+```markdown
+### [Pattern Name] Rules
+```typescript
+// Pattern Description
+[Code example showing the pattern]
+
+// When to use this pattern
+[Context and conditions]
+
+// Benefits and considerations
+[Advantages and potential issues]
+```
+```
+
+## 📊 **Rule Management Rules**
+
+### Rule Organization
+```typescript
+// Rule File Naming
+- yep-system-rules.mdc: Main system rules
+- yep-database-rules.mdc: Database-specific rules
+- yep-ai-mapping-rules.mdc: AI/import-specific rules
+- yep-browser-testing-rules.mdc: Testing-specific rules
+- rule-generation-update-rules.mdc: Meta-rules for rule management
+```
+
+### Rule Priority System
+```typescript
+// Rule Priority Levels
+1. Critical: Security, data integrity, core functionality
+2. High: Performance, user experience, system stability
+3. Medium: Code quality, maintainability, documentation
+4. Low: Nice-to-have features, optional optimizations
+```
+
+## 🔧 **Rule Maintenance Rules**
+
+### Regular Rule Review
+```typescript
+// Rule Review Checklist
+1. Check for outdated information
+2. Verify file targeting is still accurate
+3. Update code examples with current patterns
+4. Add new patterns discovered in development
+5. Remove obsolete sections
+6. Update rule descriptions for clarity
+7. Test rule application in relevant contexts
+```
+
+### Rule Update Triggers
+```typescript
+// When to Update Rules
+1. New features implemented
+2. File structure changes
+3. Security requirements updated
+4. Performance issues identified
+5. Testing procedures improved
+6. Error patterns discovered
+7. Integration points changed
+8. Documentation gaps identified
+```
+
+## 🚀 **Rule Generation Rules**
+
+### New Rule Creation Process
+```typescript
+// Rule Creation Workflow
+1. Identify recurring patterns or requirements
+2. Determine rule scope and targeting
+3. Create rule with proper structure
+4. Add comprehensive code examples
+5. Include error handling patterns
+6. Add testing guidelines
+7. Update .cursor/settings.json
+8. Test rule application
+9. Document rule purpose and usage
+```
+
+### Rule Content Standards
+```markdown
+// Required Content Elements
+1. Clear description of when to apply
+2. Specific file targeting
+3. Comprehensive code examples
+4. Error handling patterns
+5. Security considerations
+6. Performance guidelines
+7. Testing procedures
+8. Integration points
+9. Maintenance procedures
+```
+
+## 🔄 **Rule Update Workflow**
+
+### Information Update Process
+```typescript
+// Update Workflow
+1. Identify information that needs updating
+2. Find new patterns or requirements
+3. Update existing rule content
+4. Add new code examples
+5. Remove obsolete information
+6. Update rule description if needed
+7. Test updated rule application
+8. Verify rule still applies correctly
+```
+
+### Rule Consolidation Rules
+```typescript
+// When to Consolidate Rules
+1. Multiple rules with overlapping content
+2. Similar patterns across different contexts
+3. Redundant information in different rules
+4. Rules that can be combined for better organization
+5. Rules with similar file targeting
+```
+
+## 📋 **Rule Quality Standards**
+
+### Rule Content Quality
+```markdown
+// Quality Checklist
+1. Clear and specific descriptions
+2. Comprehensive code examples
+3. Proper error handling patterns
+4. Security considerations included
+5. Performance guidelines provided
+6. Testing procedures documented
+7. Integration points clearly defined
+8. Maintenance procedures included
+```
+
+### Rule Application Quality
+```typescript
+// Application Quality Standards
+1. Rules apply to correct files
+2. Rules provide actionable guidance
+3. Rules include relevant code examples
+4. Rules cover edge cases and error handling
+5. Rules are up-to-date with current patterns
+6. Rules are comprehensive but not overwhelming
+7. Rules are easy to understand and follow
+```
+
+## 🔗 **Rule Integration Rules**
+
+### Rule Dependencies
+```typescript
+// Rule Relationship Management
+1. Identify rules that depend on each other
+2. Ensure consistent patterns across related rules
+3. Avoid conflicting guidance in different rules
+4. Maintain consistency in terminology and approaches
+5. Update related rules when one rule changes
+```
+
+### Cross-Rule Consistency
+```markdown
+// Consistency Requirements
+1. Use consistent terminology across all rules
+2. Maintain consistent code style examples
+3. Ensure consistent error handling patterns
+4. Keep consistent security approaches
+5. Maintain consistent testing procedures
+6. Use consistent file targeting patterns
+```
+
+## 🧪 **Rule Testing Rules**
+
+### Rule Validation Process
+```typescript
+// Rule Testing Checklist
+1. Test rule application to target files
+2. Verify rule provides useful guidance
+3. Check for conflicts with other rules
+4. Validate code examples work correctly
+5. Ensure rule covers all relevant scenarios
+6. Test rule with different file types
+7. Verify rule description is accurate
+```
+
+### Rule Effectiveness Metrics
+```typescript
+// Rule Effectiveness Indicators
+1. Rules are applied when expected
+2. Rules provide actionable guidance
+3. Rules help prevent common errors
+4. Rules improve code quality
+5. Rules reduce development time
+6. Rules are easy to follow
+7. Rules stay current with system changes
+```
+
+## 📚 **Rule Documentation Rules**
+
+### Rule Documentation Standards
+```markdown
+// Documentation Requirements
+1. Clear rule purpose and scope
+2. Comprehensive usage examples
+3. Error handling patterns
+4. Security considerations
+5. Performance guidelines
+6. Testing procedures
+7. Integration points
+8. Maintenance procedures
+9. Related rules and dependencies
+10. Update history and version tracking
+```
+
+### Rule Version Management
+```typescript
+// Version Control for Rules
+1. Track rule changes and updates
+2. Document reasons for rule changes
+3. Maintain backward compatibility when possible
+4. Version rule files for major changes
+5. Document rule evolution over time
+6. Keep change logs for rule updates
+```
+
+## 🎯 **Rule Optimization Rules**
+
+### Rule Performance
+```typescript
+// Rule Optimization Guidelines
+1. Keep rules focused and specific
+2. Avoid overly broad rule descriptions
+3. Use precise file targeting
+4. Minimize rule conflicts
+5. Optimize rule loading and application
+6. Remove redundant or obsolete rules
+7. Consolidate related rules when beneficial
+```
+
+### Rule Maintenance Efficiency
+```markdown
+// Maintenance Efficiency
+1. Regular rule review and updates
+2. Automated rule validation where possible
+3. Clear rule organization and structure
+4. Consistent rule patterns and formats
+5. Easy rule discovery and navigation
+6. Clear rule relationships and dependencies
+7. Efficient rule update processes
+```

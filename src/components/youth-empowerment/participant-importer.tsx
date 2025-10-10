@@ -210,41 +210,187 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
     });
   }, [rows, mapping]);
 
-  const normalizeBoolean = (val: string): boolean | undefined => {
-    const s = (val || '').toString().trim().toLowerCase();
-    if (!s) return undefined;
-    if (['true','yes','y','1','approved'].includes(s)) return true;
-    if (['false','no','n','0','pending'].includes(s)) return false;
-    return undefined;
+  // Enhanced boolean normalization with comprehensive pattern matching
+  const normalizeBoolean = (val: string): { value: boolean | undefined; original: string; transformed: boolean } => {
+    const original = (val || '').toString().trim();
+    const s = original.toLowerCase();
+    
+    if (!s) return { value: undefined, original, transformed: false };
+    
+    // Positive boolean patterns
+    const positivePatterns = [
+      'true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done',
+      'contract signed', 'signed contract', 'provided signed', 'signed syllabus',
+      'passport provided', 'drivers license provided', 'id provided',
+      'proof provided', 'affiliation provided', 'yes', 'yep', 'yeah', 'yup',
+      'confirmed', 'verified', 'accepted', 'valid', 'active', 'enabled',
+      'on', 'enabled', 'checked', 'marked', 'ticked', 'selected'
+    ];
+    
+    // Negative boolean patterns
+    const negativePatterns = [
+      'false', 'no', 'n', '0', 'pending', 'not provided', 'not signed',
+      'not completed', 'missing', 'incomplete', 'unavailable', 'none',
+      'nope', 'nah', 'negative', 'rejected', 'declined', 'inactive',
+      'disabled', 'off', 'unchecked', 'unmarked', 'deselected', 'empty'
+    ];
+    
+    // Check for positive patterns
+    for (const pattern of positivePatterns) {
+      if (s.includes(pattern) || pattern.includes(s)) {
+        return { value: true, original, transformed: true };
+      }
+    }
+    
+    // Check for negative patterns
+    for (const pattern of negativePatterns) {
+      if (s.includes(pattern) || pattern.includes(s)) {
+        return { value: false, original, transformed: true };
+      }
+    }
+    
+    return { value: undefined, original, transformed: false };
+  };
+
+  // Enhanced Canadian status normalization
+  const normalizeCanadianStatus = (val: string): { value: string; original: string; transformed: boolean } => {
+    const original = (val || '').toString().trim();
+    const s = original.toLowerCase();
+    
+    if (!s) return { value: '', original, transformed: false };
+    
+    // Canadian Citizen patterns
+    if (s.includes('citizen') || s.includes('canadian citizen') || s.includes('citizenship')) {
+      return { value: 'Canadian Citizen', original, transformed: true };
+    }
+    
+    // Permanent Resident patterns
+    if (s.includes('permanent') || s.includes('pr status') || s.includes('pr') || s.includes('permanent resident')) {
+      return { value: 'Permanent Resident', original, transformed: true };
+    }
+    
+    return { value: original, original, transformed: false };
   };
 
   const importRows = useCallback(async () => {
     if (!hasData) return;
     setIsImporting(true);
+    
+    // Track transformations for user feedback
+    const transformations: Array<{
+      row: number;
+      field: string;
+      original: string;
+      transformed: string | boolean | number;
+      type: 'boolean' | 'canadian_status' | 'age' | 'email';
+    }> = [];
+    
     try {
+      let createdCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+
       // Upsert by email
-      for (const r of rows) {
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const r = rows[rowIndex];
         const obj: any = {};
         for (const [col, target] of Object.entries(mapping)) {
           if (!target || target === 'skip') continue;
           obj[target] = (r[col] ?? '').toString().trim();
         }
 
-        // Convert booleans
+        // Enhanced boolean conversion with transformation tracking
         for (const b of ['approved','contractSigned','signedSyllabus','idProvided','proofOfAffiliationWithSCD','interviewed','recruited'] as const) {
+          // Set default values for boolean fields that might be missing
+          obj[b] = obj[b] ?? false;
           if (obj[b] !== undefined) {
-            const parsed = normalizeBoolean(obj[b]);
-            if (parsed !== undefined) obj[b] = parsed;
+            const normalized = normalizeBoolean(obj[b]);
+            if (normalized.value !== undefined) {
+              obj[b] = normalized.value;
+              if (normalized.transformed) {
+                transformations.push({
+                  row: rowIndex + 1,
+                  field: b,
+                  original: normalized.original,
+                  transformed: normalized.value,
+                  type: 'boolean'
+                });
+              }
+            }
           }
         }
 
         // Ensure only name is required - handle empty data gracefully
         if (!obj.youthParticipant || obj.youthParticipant.trim() === '') {
-          continue; // skip rows without name
+          skippedCount += 1; // skip rows without name
+          continue;
+        }
+        
+        // Enhanced age conversion with transformation tracking
+        if (typeof obj.age === 'string') {
+          const trimmed = obj.age.trim();
+          if (trimmed === '') {
+            delete obj.age; // drop blank ages
+          } else {
+            const ageNum = parseInt(trimmed, 10);
+            if (!isNaN(ageNum) && ageNum >= 16 && ageNum <= 30) {
+              obj.age = ageNum;
+              transformations.push({
+                row: rowIndex + 1,
+                field: 'age',
+                original: trimmed,
+                transformed: ageNum,
+                type: 'age'
+              });
+            } else {
+              delete obj.age; // Remove invalid age values
+            }
+          }
+        }
+        
+        // Enhanced Canadian status normalization with transformation tracking
+        if (obj.canadianStatus) {
+          const normalized = normalizeCanadianStatus(obj.canadianStatus);
+          obj.canadianStatus = normalized.value;
+          if (normalized.transformed) {
+            transformations.push({
+              row: rowIndex + 1,
+              field: 'canadianStatus',
+              original: normalized.original,
+              transformed: normalized.value,
+              type: 'canadian_status'
+            });
+          }
+        }
+        
+        // Enhanced email cleaning with transformation tracking
+        if (obj.email && !obj.email.includes('@')) {
+          const originalEmail = obj.email;
+          obj.email = '';
+          transformations.push({
+            row: rowIndex + 1,
+            field: 'email',
+            original: originalEmail,
+            transformed: '',
+            type: 'email'
+          });
+        }
+        if (obj.etransferEmailAddress && !obj.etransferEmailAddress.includes('@')) {
+          const originalEmail = obj.etransferEmailAddress;
+          obj.etransferEmailAddress = '';
+          transformations.push({
+            row: rowIndex + 1,
+            field: 'etransferEmailAddress',
+            original: originalEmail,
+            transformed: '',
+            type: 'email'
+          });
         }
         
         // Provide safe defaults for empty fields
         obj.email = obj.email || '';
+        obj.etransferEmailAddress = obj.etransferEmailAddress || '';
         obj.region = obj.region || '';
         obj.dob = obj.dob || '';
         obj.canadianStatus = obj.canadianStatus || 'Other';
@@ -254,14 +400,52 @@ export function ParticipantImporter({ isOpen, onClose, onImported }: Participant
         obj.proofOfAffiliationWithSCD = obj.proofOfAffiliationWithSCD ?? false;
         obj.approved = obj.approved ?? false;
 
-        // Handle SIN - provide empty string if not provided
-        obj.sin = obj.sin || '';
-        obj.sinNumber = obj.sinNumber || '';
+        // Handle SIN - normalize: keep only 9 digits, else clear
+        const normalizeDigits = (v: string) => (v || '').replace(/\D/g, '');
+        const sinDigits = normalizeDigits(obj.sin);
+        const sinNumDigits = normalizeDigits(obj.sinNumber);
+        if (sinDigits.length === 9) {
+          obj.sin = sinDigits;
+        } else if (sinNumDigits.length === 9) {
+          obj.sin = sinNumDigits; // prefer a valid 9-digit from sinNumber
+        } else {
+          obj.sin = '';
+        }
+        obj.sinNumber = sinNumDigits.length === 9 ? sinNumDigits : '';
 
-        await upsertParticipantByEmail(obj);
+        try {
+          const res: any = await upsertParticipantByEmail(obj);
+          if (res?.success) {
+            if (res.action === 'updated') updatedCount += 1;
+            else createdCount += 1;
+          } else if (res?.error) {
+            failedCount += 1;
+          } else {
+            createdCount += 1; // default to created if unspecified
+          }
+        } catch (_) {
+          failedCount += 1;
+        }
       }
 
-      toast({ title: 'Import complete', description: 'Participants imported.' });
+      // Show transformation summary if any transformations occurred
+      if (transformations.length > 0) {
+        const transformationSummary = transformations.slice(0, 10).map(t => 
+          `Row ${t.row} ${t.field}: "${t.original}" → ${t.transformed}`
+        ).join('\n');
+        
+        toast({
+          title: 'Data Transformations Applied',
+          description: `Applied ${transformations.length} data transformations:\n${transformationSummary}${transformations.length > 10 ? '\n... and more' : ''}`,
+          duration: 8000,
+        });
+      }
+
+      const totalProcessed = createdCount + updatedCount + skippedCount + failedCount;
+      toast({ 
+        title: 'Import complete', 
+        description: `Created ${createdCount}, Updated ${updatedCount}, Skipped ${skippedCount}, Failed ${failedCount} (from ${totalProcessed} rows)${transformations.length > 0 ? ` • ${transformations.length} data fixes` : ''}` 
+      });
       onImported?.();
       onClose();
     } catch (e) {

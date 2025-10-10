@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
+// Prefer Gemini mapping flow first; fall back to heuristic mapping below
+import { suggestParticipantCsvMapping as geminiSuggestMapping, CsvMappingInputSchema as GeminiInputSchema } from '@/ai/flows/csv-participant-mapper-flow';
 
 // Helper function for Levenshtein distance calculation
 function levenshteinDistance(str1: string, str2: string): number {
@@ -22,29 +24,83 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[str2.length][str1.length];
 }
 
-// Helper function to analyze data type from sample data
+// Enhanced data type analysis with comprehensive boolean detection
 function analyzeDataType(sampleData: string[]): string {
   if (sampleData.length === 0) return 'unknown';
   
-  const sample = sampleData[0];
+  // Enhanced boolean pattern detection
+  const positiveBooleanPatterns = [
+    'true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done',
+    'contract signed', 'signed contract', 'provided signed', 'signed syllabus',
+    'passport provided', 'drivers license provided', 'id provided',
+    'proof provided', 'affiliation provided', 'confirmed', 'verified', 'accepted',
+    'valid', 'active', 'enabled', 'on', 'checked', 'marked', 'ticked', 'selected'
+  ];
   
-  // Email pattern
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sample)) return 'email';
+  const negativeBooleanPatterns = [
+    'false', 'no', 'n', '0', 'pending', 'not provided', 'not signed',
+    'not completed', 'missing', 'incomplete', 'unavailable', 'none',
+    'nope', 'nah', 'negative', 'rejected', 'declined', 'inactive',
+    'disabled', 'off', 'unchecked', 'unmarked', 'deselected', 'empty'
+  ];
   
-  // Phone pattern
-  if (/^[\+]?[1-9][\d]{0,15}$/.test(sample.replace(/[\s\-\(\)]/g, ''))) return 'phone';
+  const hasPositiveBoolean = sampleData.some(val => 
+    positiveBooleanPatterns.some(pattern => val.toLowerCase().includes(pattern))
+  );
   
-  // Date pattern
-  if (/^\d{4}-\d{2}-\d{2}$/.test(sample) || /^\d{2}\/\d{2}\/\d{4}$/.test(sample)) return 'date';
+  const hasNegativeBoolean = sampleData.some(val => 
+    negativeBooleanPatterns.some(pattern => val.toLowerCase().includes(pattern))
+  );
   
-  // Boolean pattern
-  if (/^(true|false|yes|no|y|n|1|0|approved|pending)$/i.test(sample)) return 'boolean';
+  if (hasPositiveBoolean || hasNegativeBoolean) return 'boolean';
   
-  // Number pattern
-  if (/^\d+$/.test(sample)) return 'number';
+  // Check for email patterns
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const hasEmailPatterns = sampleData.some(val => emailPattern.test(val));
   
-  // URL pattern
-  if (/^https?:\/\//.test(sample)) return 'url';
+  if (hasEmailPatterns) return 'email';
+  
+  // Check for phone patterns
+  const phonePattern = /^[\+]?[1-9][\d]{0,15}$/;
+  const hasPhonePatterns = sampleData.some(val => 
+    phonePattern.test(val.replace(/[\s\-\(\)]/g, ''))
+  );
+  
+  if (hasPhonePatterns) return 'phone';
+  
+  // Check for age patterns (16-30)
+  const agePattern = /^\d{1,2}$/;
+  const hasAgePatterns = sampleData.some(val => 
+    agePattern.test(val) && parseInt(val) >= 16 && parseInt(val) <= 30
+  );
+  
+  if (hasAgePatterns) return 'age';
+  
+  // Check for Canadian status patterns
+  const canadianStatusPatterns = ['canadian citizen', 'permanent resident', 'pr status', 'citizenship'];
+  const hasCanadianStatus = sampleData.some(val => 
+    canadianStatusPatterns.some(pattern => val.toLowerCase().includes(pattern))
+  );
+  
+  if (hasCanadianStatus) return 'canadian_status';
+  
+  // Check for date patterns
+  const datePattern = /^\d{4}-\d{2}-\d{2}$|^\d{2}\/\d{2}\/\d{4}$|^\d{2}-\d{2}-\d{4}$/;
+  const hasDatePatterns = sampleData.some(val => datePattern.test(val));
+  
+  if (hasDatePatterns) return 'date';
+  
+  // Check for number patterns
+  const numberPattern = /^\d+$/;
+  const hasNumberPatterns = sampleData.some(val => numberPattern.test(val));
+  
+  if (hasNumberPatterns) return 'number';
+  
+  // Check for URL patterns
+  const urlPattern = /^https?:\/\//;
+  const hasUrlPatterns = sampleData.some(val => urlPattern.test(val));
+  
+  if (hasUrlPatterns) return 'url';
   
   return 'text';
 }
@@ -53,7 +109,7 @@ function analyzeDataType(sampleData: string[]): string {
 function getExpectedDataType(field: string): string {
   const typeMap: Record<string, string> = {
     youthParticipant: 'text',
-    age: 'number',
+    age: 'age',
     email: 'email',
     etransferEmailAddress: 'email',
     phoneNumber: 'phone',
@@ -68,7 +124,7 @@ function getExpectedDataType(field: string): string {
     availability: 'text',
     assignedMentor: 'text',
     idProvided: 'boolean',
-    canadianStatus: 'text',
+    canadianStatus: 'canadian_status',
     sin: 'text',
     sinNumber: 'text',
     youthProposal: 'text',
@@ -166,12 +222,17 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
     contractSigned: [
       'contract', 'signed', 'agreement', 'contract signed', 'signed contract',
       'agreement signed', 'contractual agreement', 'legal agreement', 'signed agreement',
-      'contract status', 'agreement status', 'signed status', 'contractual'
+      'contract status', 'agreement status', 'signed status', 'contractual',
+      'provides signed contract', 'provided signed contract', 'contract filled',
+      'signed contract filled', 'contract completed', 'agreement completed',
+      'contract signed (filled)', 'signed contract (filled)', 'contract provided'
     ],
     signedSyllabus: [
       'syllabus', 'signed syllabus', 'course agreement', 'syllabus signed',
       'course syllabus', 'program syllabus', 'curriculum agreement', 'syllabus status',
-      'course agreement signed', 'program agreement', 'curriculum signed'
+      'course agreement signed', 'program agreement', 'curriculum signed',
+      'provided signed syllabus', 'syllabus filed', 'syllabus completed',
+      'course completed', 'signed syllabus (filed)', 'syllabus provided'
     ],
     availability: [
       'availability', 'schedule', 'time', 'when available', 'available times',
@@ -186,7 +247,11 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
     idProvided: [
       'id', 'identification', 'id provided', 'documents', 'id documents', 'identification provided',
       'id status', 'documentation', 'id verification', 'identification status',
-      'documents provided', 'id_verified', 'identification_verified'
+      'documents provided', 'id_verified', 'identification_verified',
+      'passport provided', 'drivers license provided', 'id provided (filed)',
+      'passport provided (filed)', 'drivers license provided (filed)',
+      'identification provided (filed)', 'id provided (filed)', 'passport provided',
+      'drivers license provided', 'identification provided', 'id provided'
     ],
     canadianStatus: [
       'citizenship', 'canadian', 'status', 'citizen', 'canadian status', 'citizenship status',
@@ -211,7 +276,10 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
     proofOfAffiliationWithSCD: [
       'affiliation', 'scd', 'proof', 'connection', 'scd affiliation', 'scd proof',
       'affiliation proof', 'scd connection', 'scd relationship', 'scd affiliation proof',
-      'sickle cell affiliation', 'scd connection proof', 'affiliation with scd'
+      'sickle cell affiliation', 'scd connection proof', 'affiliation with scd',
+      'proof of affiliation with scd', 'affiliation with scd', 'scd affiliation',
+      'proof provided', 'affiliation provided', 'scd proof provided',
+      'proof of affiliation', 'affiliation proof', 'scd proof'
     ],
     scagoCounterpart: [
       'counterpart', 'scago', 'partner', 'scago counterpart', 'scago partner',
@@ -389,8 +457,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = CsvMappingInputSchema.parse(body);
 
+    // Try Gemini flow first
+    try {
+      const geminiParsed = GeminiInputSchema.parse(parsed);
+      const aiResult = await geminiSuggestMapping(geminiParsed);
+      if (aiResult && Object.keys(aiResult.mapping || {}).length > 0) {
+        return new Response(JSON.stringify({ success: true, data: aiResult, source: 'gemini' }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (_) {
+      // fall through to heuristic
+    }
+
     const result = suggestParticipantCsvMapping(parsed);
-    return new Response(JSON.stringify({ success: true, data: result }), {
+    return new Response(JSON.stringify({ success: true, data: result, source: 'heuristic' }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {

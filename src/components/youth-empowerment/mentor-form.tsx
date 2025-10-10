@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -15,12 +16,22 @@ import { Badge } from '@/components/ui/badge';
 import { X, Loader2, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createMentor, updateMentor, getParticipants } from '@/app/youth-empowerment/actions';
-import { mentorTitleOptions } from '@/lib/youth-empowerment';
+// title removed
 import { YEPMentor, YEPParticipant } from '@/lib/youth-empowerment';
 
 const mentorFormSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  title: z.string().min(2, 'Title is required'),
+  // title removed
+  email: z
+    .string()
+    .email('Invalid email')
+    .optional()
+    .or(z.literal('')),
+  phone: z.string().optional().or(z.literal('')),
+  vulnerableSectorCheck: z.boolean().optional().default(false),
+  contractSigned: z.boolean().optional().default(false),
+  availability: z.string().optional().or(z.literal('')),
+  file: z.string().optional().or(z.literal('')),
   assignedStudents: z.array(z.string()).default([]),
 });
 
@@ -43,7 +54,13 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
     resolver: zodResolver(mentorFormSchema),
     defaultValues: {
       name: mentor?.name || '',
-      title: mentor?.title || '',
+      // title removed
+      email: (mentor as any)?.email || '',
+      phone: (mentor as any)?.phone || '',
+      vulnerableSectorCheck: (mentor as any)?.vulnerableSectorCheck || false,
+      contractSigned: (mentor as any)?.contractSigned || false,
+      availability: (mentor as any)?.availability || '',
+      file: (mentor as any)?.file || '',
       assignedStudents: mentor?.assignedStudents || [],
     },
   });
@@ -59,7 +76,13 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
     if (mentor) {
       form.reset({
         name: mentor.name || '',
-        title: mentor.title || '',
+        // title removed
+        email: (mentor as any)?.email || '',
+        phone: (mentor as any)?.phone || '',
+        vulnerableSectorCheck: (mentor as any)?.vulnerableSectorCheck || false,
+        contractSigned: (mentor as any)?.contractSigned || false,
+        availability: (mentor as any)?.availability || '',
+        file: (mentor as any)?.file || '',
         assignedStudents: mentor.assignedStudents || [],
       });
       setSelectedStudents(mentor.assignedStudents || []);
@@ -67,7 +90,13 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
       // Reset to default values for new mentor
       form.reset({
         name: '',
-        title: '',
+        // title removed
+        email: '',
+        phone: '',
+        vulnerableSectorCheck: false,
+        contractSigned: false,
+        availability: '',
+        file: '',
         assignedStudents: [],
       });
       setSelectedStudents([]);
@@ -176,26 +205,94 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
                   )}
                 />
 
+                {/* title field removed */}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="name@example.com" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Number</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g. 416-555-0123" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="vulnerableSectorCheck"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Provided Vulnerable Sector Check</FormLabel>
+                          <FormDescription>Mentor has provided a valid check</FormDescription>
+                        </div>
+                        <FormControl>
+                          <Checkbox checked={!!field.value} onCheckedChange={(v) => field.onChange(!!v)} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="contractSigned"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Mentor Contract Signed</FormLabel>
+                          <FormDescription>Agreement signed and on file</FormDescription>
+                        </div>
+                        <FormControl>
+                          <Checkbox checked={!!field.value} onCheckedChange={(v) => field.onChange(!!v)} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <FormField
                   control={form.control}
-                  name="title"
+                  name="availability"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Title/Role *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select title" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {mentorTitleOptions.map((title) => (
-                            <SelectItem key={title} value={title}>
-                              {title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Availability</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g. Weekdays 6-9pm" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="file"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>File (URL)</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Link to document (optional)" />
+                      </FormControl>
+                      <FormDescription>Link to uploaded document if available</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

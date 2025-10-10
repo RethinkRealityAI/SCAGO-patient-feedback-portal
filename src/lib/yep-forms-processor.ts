@@ -117,8 +117,12 @@ async function processMentorForm(
   
   // Extract mentor data from form
   const mentorData = {
-    name: data.mentorName || '',
-    title: data.mentorTitle || '',
+    name: data.mentorName || data.name || '',
+    email: data.email || '',
+    phone: data.phone || '',
+    vulnerableSectorCheck: Boolean(data.vulnerableSectorCheck),
+    contractSigned: Boolean(data.contractSigned),
+    availability: data.availability || '',
     assignedStudents: data.assignedStudents || []
   };
 
@@ -198,8 +202,11 @@ async function processWorkshopForm(
     title: data.workshopTitle || data.title || '',
     description: data.description || '',
     date: data.workshopDate || data.date || '',
+    time: data.time || '',
     location: data.location || '',
     capacity: typeof data.capacity === 'number' ? data.capacity : Number(data.capacity || 0),
+    mentor: data.mentor || '',
+    notes: data.notes || '',
     feedbackSurveyId: data.feedbackSurveyId || data.feedbackSurvey || ''
   };
 

@@ -43,7 +43,8 @@ import {
   Calendar,
   Phone,
   CreditCard,
-  Home
+  Home,
+  ArrowRight
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getParticipants, deleteParticipant } from '@/app/youth-empowerment/actions';
@@ -103,17 +104,18 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
     // Search filter
     if (searchTerm) {
+      const q = searchTerm.toLowerCase();
       filtered = filtered.filter(p => 
-        p.youthParticipant.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.etransferEmailAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.phoneNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.mailingAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.projectCategory?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.emergencyContactRelationship?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.emergencyContactNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.assignedMentor?.toLowerCase().includes(searchTerm.toLowerCase())
+        (p.youthParticipant || '').toLowerCase().includes(q) ||
+        (p.email || '').toLowerCase().includes(q) ||
+        (p.etransferEmailAddress || '').toLowerCase().includes(q) ||
+        (p.phoneNumber || '').toLowerCase().includes(q) ||
+        (p.mailingAddress || '').toLowerCase().includes(q) ||
+        (p.region || '').toLowerCase().includes(q) ||
+        (p.projectCategory || '').toLowerCase().includes(q) ||
+        (p.emergencyContactRelationship || '').toLowerCase().includes(q) ||
+        (p.emergencyContactNumber || '').toLowerCase().includes(q) ||
+        (p.assignedMentor || '').toLowerCase().includes(q)
       );
     }
 
@@ -132,7 +134,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
     // Age filter
     if (ageFilter !== 'all') {
       filtered = filtered.filter(p => {
-        if (!p.age) return ageFilter === 'pending'; // No age data
+        if (p.age == null) return false; // Exclude missing ages when a specific filter is selected
         switch (ageFilter) {
           case 'under18': return p.age < 18;
           case '18-25': return p.age >= 18 && p.age <= 25;
@@ -219,9 +221,9 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
   const getStatusBadge = (participant: YEPParticipant) => {
     if (participant.approved) {
-      return <Badge variant="default" className="bg-green-100 text-green-800">Approved</Badge>;
+      return <Badge variant="default" className="bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold text-sm px-3 py-1">✓ Approved</Badge>;
     }
-    return <Badge variant="secondary">Pending</Badge>;
+    return null; // Don't show pending approval badge
   };
 
   const getDocumentStatus = (participant: YEPParticipant) => {
@@ -247,42 +249,61 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
 
   const getDocumentStatusBadges = (participant: YEPParticipant) => {
     const badges = [];
+    // Show completed items as green badges
     if (participant.contractSigned) {
-      badges.push(<Badge key="contract" variant="outline" className="text-xs">Contract Signed</Badge>);
+      badges.push(<Badge key="contract" variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-300 whitespace-nowrap font-medium">Contract ✓</Badge>);
     }
     if (participant.signedSyllabus) {
-      badges.push(<Badge key="syllabus" variant="outline" className="text-xs">Signed Syllabus</Badge>);
+      badges.push(<Badge key="syllabus" variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-300 whitespace-nowrap font-medium">Syllabus ✓</Badge>);
     }
     if (participant.idProvided) {
-      badges.push(<Badge key="id" variant="outline" className="text-xs">ID Provided</Badge>);
+      badges.push(<Badge key="id" variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-300 whitespace-nowrap font-medium">ID ✓</Badge>);
     }
     if (participant.proofOfAffiliationWithSCD) {
-      badges.push(<Badge key="scd" variant="outline" className="text-xs">SCD Affiliation</Badge>);
+      badges.push(<Badge key="scd-proof" variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-300 whitespace-nowrap font-medium">SCD Proof ✓</Badge>);
     }
     if (participant.youthProposal) {
-      badges.push(<Badge key="proposal" variant="outline" className="text-xs">Youth Proposal</Badge>);
+      badges.push(<Badge key="proposal" variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-300 whitespace-nowrap font-medium">Proposal ✓</Badge>);
     }
-    if (participant.affiliationWithSCD) {
-      badges.push(<Badge key="affil" variant="outline" className="text-xs">SCD Affiliation</Badge>);
+    // Show pending items as amber/orange badges
+    if (!participant.contractSigned) {
+      badges.push(<Badge key="contract-pending" variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border-amber-300 whitespace-nowrap font-medium">Contract</Badge>);
+    }
+    if (!participant.signedSyllabus) {
+      badges.push(<Badge key="syllabus-pending" variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border-amber-300 whitespace-nowrap font-medium">Syllabus</Badge>);
+    }
+    if (!participant.idProvided) {
+      badges.push(<Badge key="id-pending" variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border-amber-300 whitespace-nowrap font-medium">ID</Badge>);
+    }
+    if (!participant.proofOfAffiliationWithSCD) {
+      badges.push(<Badge key="scd-proof-pending" variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border-amber-300 whitespace-nowrap font-medium">SCD Proof</Badge>);
+    }
+    if (!participant.youthProposal) {
+      badges.push(<Badge key="proposal-pending" variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border-amber-300 whitespace-nowrap font-medium">Proposal</Badge>);
     }
     
-    return badges.length > 0 ? badges : [<span key="none" className="text-xs text-muted-foreground">No docs</span>];
+    return badges;
   };
 
   const getRecruitmentStatusBadges = (participant: YEPParticipant) => {
     const badges = [];
     if (participant.recruited) {
-      badges.push(<Badge key="recruited" variant="default" className="text-xs bg-blue-100 text-blue-800">Recruited</Badge>);
+      badges.push(<Badge key="recruited" variant="default" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-300 whitespace-nowrap font-medium">Recruited ✓</Badge>);
     }
     if (participant.interviewed) {
-      badges.push(<Badge key="interviewed" variant="default" className="text-xs bg-purple-100 text-purple-800">Interviewed</Badge>);
+      badges.push(<Badge key="interviewed" variant="default" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-300 whitespace-nowrap font-medium">Interviewed ✓</Badge>);
     }
-    // Note: Approved status is already shown in the main status badge, so we don't duplicate it here
-    
-    return badges.length > 0 ? badges : [<span key="pending" className="text-xs text-muted-foreground">Pending</span>];
+    // Show pending recruitment items in gray
+    if (!participant.recruited) {
+      badges.push(<Badge key="recruited-pending" variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 border-gray-300 whitespace-nowrap font-medium">Recruit</Badge>);
+    }
+    if (!participant.interviewed) {
+      badges.push(<Badge key="interviewed-pending" variant="outline" className="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 border-gray-300 whitespace-nowrap font-medium">Interview</Badge>);
+    }
+    return badges;
   };
 
-  const regions = Array.from(new Set(participants.map(p => p.region)));
+  const regions = Array.from(new Set(participants.map(p => p.region).filter(region => region && region.trim() !== '')));
 
   if (isLoading) {
     return (
@@ -362,7 +383,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                   <SelectContent>
                     <SelectItem value="all">All Regions</SelectItem>
                     {regions.map(region => (
-                      <SelectItem key={region} value={region}>{region}</SelectItem>
+                      <SelectItem key={region} value={region!}>{region}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -424,100 +445,120 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
           </div>
 
           {/* Table */}
-          <div className="rounded-md border">
-            <Table>
+          <div className="relative rounded-lg border shadow-sm overflow-x-auto">
+            {/* scroll cue - more visible arrow */}
+            <div className="pointer-events-none absolute right-0 top-0 h-full w-16 bg-gradient-to-l from-background via-background/80 to-transparent flex items-start justify-end pr-3 pt-4 z-20">
+              <ArrowRight className="h-6 w-6 text-muted-foreground animate-pulse" />
+            </div>
+            <Table className="[&_tr]:border-b [&_th]:border-r [&_td]:border-r [&_tr:last-child]:border-b-0 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Participant</TableHead>
-                  <TableHead>Contact Info</TableHead>
-                  <TableHead>Status & Documents</TableHead>
-                  <TableHead>Region</TableHead>
-                  <TableHead>Age</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Emergency Contact</TableHead>
-                  <TableHead>Mentor</TableHead>
-                  <TableHead>File</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                <TableRow className="bg-muted/50 h-14 hover:bg-muted/50">
+                  <TableHead className="sticky left-0 bg-muted/50 z-10 w-[200px] font-semibold">Participant</TableHead>
+                  <TableHead className="min-w-[200px] font-semibold">Contact Info</TableHead>
+                  <TableHead className="min-w-[450px] font-semibold">Status & Documents</TableHead>
+                  <TableHead className="min-w-[120px] font-semibold">Region</TableHead>
+                  <TableHead className="min-w-[80px] font-semibold text-center">Age</TableHead>
+                  <TableHead className="min-w-[180px] font-semibold">Project</TableHead>
+                  <TableHead className="min-w-[150px] font-semibold">Emergency Contact</TableHead>
+                  <TableHead className="min-w-[140px] font-semibold">Mentor</TableHead>
+                  <TableHead className="min-w-[100px] font-semibold">File</TableHead>
+                  <TableHead className="w-[60px] sticky right-0 bg-muted/50 z-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredParticipants.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      No participants found
+                  <TableRow className="h-24 hover:bg-transparent">
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <User className="h-12 w-12 opacity-20" />
+                        <p className="text-sm font-medium">No participants found</p>
+                        <p className="text-xs">Try adjusting your filters or add a new participant</p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredParticipants.map((participant) => (
-                    <TableRow key={participant.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{participant.youthParticipant}</div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {participant.email}
+                    <TableRow key={participant.id} className="h-auto hover:bg-muted/40 transition-all duration-200 group">
+                      <TableCell className="sticky left-0 bg-background group-hover:bg-muted/40 w-[200px] py-4 transition-colors">
+                        <div className="space-y-1">
+                          <div className="font-semibold text-sm truncate" title={participant.youthParticipant}>
+                            {participant.youthParticipant}
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate" title={participant.email}>{participant.email}</span>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
+                      <TableCell className="py-4">
+                        <div className="space-y-1.5">
                           {participant.phoneNumber && (
-                            <div className="text-sm flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {participant.phoneNumber}
+                            <div className="text-xs flex items-center gap-1.5">
+                              <Phone className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                              <span>{participant.phoneNumber}</span>
                             </div>
                           )}
                           {participant.etransferEmailAddress && (
-                            <div className="text-sm flex items-center gap-1">
-                              <CreditCard className="h-3 w-3" />
-                              {participant.etransferEmailAddress}
+                            <div className="text-xs flex items-center gap-1.5">
+                              <CreditCard className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                              <span className="truncate" title={participant.etransferEmailAddress}>
+                                {participant.etransferEmailAddress}
+                              </span>
                             </div>
                           )}
                           {participant.mailingAddress && (
-                            <div className="text-sm flex items-center gap-1">
-                              <Home className="h-3 w-3" />
-                              <span className="truncate max-w-[200px]" title={participant.mailingAddress}>
+                            <div className="text-xs flex items-start gap-1.5">
+                              <Home className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                              <span className="line-clamp-2 leading-tight" title={participant.mailingAddress}>
                                 {participant.mailingAddress}
                               </span>
                             </div>
                           )}
                           {!participant.phoneNumber && !participant.etransferEmailAddress && !participant.mailingAddress && (
-                            <span className="text-muted-foreground text-sm">No contact info</span>
+                            <span className="text-muted-foreground text-xs italic">No contact info</span>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="space-y-2">
-                          {getStatusBadge(participant)}
-                          <div className="flex flex-wrap gap-1">
-                            {getDocumentStatusBadges(participant)}
+                      <TableCell className="py-4">
+                        <div className="space-y-2.5">
+                          <div className="flex items-center">
+                            {getStatusBadge(participant)}
                           </div>
-                          <div className="flex flex-wrap gap-1">
-                            {getRecruitmentStatusBadges(participant)}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1.5">Documents:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {getDocumentStatusBadges(participant)}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1.5">Recruitment:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {getRecruitmentStatusBadges(participant)}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {participant.region}
+                      <TableCell className="py-4">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                          <span className="text-sm font-medium">{participant.region}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4 text-center">
                         {participant.age ? (
-                          <span className="text-sm">{participant.age}</span>
+                          <span className="font-medium text-sm">{participant.age}</span>
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4">
                         {participant.projectCategory ? (
-                          <div className="text-sm">
-                            <div className="font-medium truncate max-w-[120px]" title={participant.projectCategory}>
+                          <div className="space-y-1">
+                            <div className="font-medium text-sm line-clamp-1" title={participant.projectCategory}>
                               {participant.projectCategory}
                             </div>
                             {participant.projectInANutshell && (
-                              <div className="text-muted-foreground truncate max-w-[120px]" title={participant.projectInANutshell}>
+                              <div className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={participant.projectInANutshell}>
                                 {participant.projectInANutshell}
                               </div>
                             )}
@@ -526,56 +567,62 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4">
                         {participant.emergencyContactRelationship && participant.emergencyContactNumber ? (
-                          <div className="text-sm">
-                            <div className="font-medium">{participant.emergencyContactRelationship}</div>
-                            <div className="text-muted-foreground">{participant.emergencyContactNumber}</div>
+                          <div className="space-y-1">
+                            <div className="font-medium text-sm">{participant.emergencyContactRelationship}</div>
+                            <div className="text-xs text-muted-foreground">{participant.emergencyContactNumber}</div>
                           </div>
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {participant.assignedMentor || (
-                          <span className="text-muted-foreground">Not assigned</span>
+                      <TableCell className="py-4">
+                        {participant.assignedMentor ? (
+                          <div className="flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{participant.assignedMentor}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm italic">Not assigned</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4">
                         {participant.fileUrl ? (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => window.open(participant.fileUrl, '_blank')}
+                            className="gap-1.5"
                           >
-                            <Download className="h-3 w-3 mr-1" />
+                            <Download className="h-3.5 w-3.5" />
                             View
                           </Button>
                         ) : (
-                          <span className="text-muted-foreground text-sm">No file</span>
+                          <span className="text-muted-foreground text-sm italic">No file</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="sticky right-0 bg-background group-hover:bg-muted/40 py-4 transition-colors">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-muted opacity-70 group-hover:opacity-100 transition-opacity">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleView(participant)}>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel className="font-semibold">Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleView(participant)} className="cursor-pointer">
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEdit(participant)}>
+                            <DropdownMenuItem onClick={() => handleEdit(participant)} className="cursor-pointer">
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               onClick={() => handleDelete(participant)}
-                              className="text-destructive"
+                              className="text-destructive focus:text-destructive cursor-pointer"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete

@@ -51,13 +51,14 @@ interface ImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  defaultTargetTable?: 'participants' | 'mentors' | 'workshops' | 'attendance' | 'meetings';
 }
 
-export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) {
+export function ImportDialog({ isOpen, onClose, onSuccess, defaultTargetTable = 'participants' }: ImportDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState<'select' | 'upload' | 'mapping' | 'preview' | 'import'>('select');
   const [importOptions, setImportOptions] = useState<ImportOptions>({
-    targetTable: 'participants',
+    targetTable: defaultTargetTable,
     format: 'csv',
     skipDuplicates: true,
     updateExisting: false,
@@ -86,7 +87,7 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
       label: 'Mentors', 
       icon: GraduationCap, 
       description: 'Mentor information and assignments',
-      requiredFields: ['name', 'title', 'email']
+      requiredFields: ['name', 'email']
     },
     { 
       id: 'workshops', 
@@ -406,7 +407,12 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
                                     {field} (Required)
                                   </SelectItem>
                                 ))}
-                                {['etransferEmailAddress', 'mailingAddress', 'phoneNumber', 'approved', 'contractSigned', 'signedSyllabus', 'availability', 'assignedMentor', 'idProvided', 'canadianStatusOther', 'sin', 'youthProposal', 'proofOfAffiliationWithSCD', 'scagoCounterpart', 'age', 'citizenshipStatus', 'location', 'projectCategory', 'duties', 'affiliationWithSCD', 'notes', 'nextSteps', 'interviewed', 'interviewNotes', 'recruited'].map(field => (
+                                {importOptions.targetTable === 'participants' && ['etransferEmailAddress', 'mailingAddress', 'phoneNumber', 'approved', 'contractSigned', 'signedSyllabus', 'availability', 'assignedMentor', 'idProvided', 'canadianStatusOther', 'sin', 'youthProposal', 'proofOfAffiliationWithSCD', 'scagoCounterpart', 'age', 'citizenshipStatus', 'location', 'projectCategory', 'duties', 'affiliationWithSCD', 'notes', 'nextSteps', 'interviewed', 'interviewNotes', 'recruited'].map(field => (
+                                  <SelectItem key={field} value={field}>
+                                    {field} (Optional)
+                                  </SelectItem>
+                                ))}
+                                {importOptions.targetTable === 'mentors' && ['email', 'phone', 'vulnerableSectorCheck', 'contractSigned', 'availability', 'assignedStudents', 'file'].map(field => (
                                   <SelectItem key={field} value={field}>
                                     {field} (Optional)
                                   </SelectItem>

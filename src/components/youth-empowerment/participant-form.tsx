@@ -45,7 +45,7 @@ const participantFormSchema = z.object({
   availability: z.string().optional().or(z.literal('')),
   assignedMentor: z.string().optional().or(z.literal('')),
   idProvided: z.boolean().optional().default(false),
-  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).default('Other'),
+  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).optional().default('Other'),
   sin: z.string().optional().refine((val) => {
     // Only validate if the value exists and is not empty
     if (!val || val.trim() === '') return true;
@@ -749,7 +749,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                               <SelectContent>
                                 {mentors.map((mentor) => (
                                   <SelectItem key={mentor.id} value={mentor.id}>
-                                    {mentor.name} - {mentor.title}
+                                    {mentor.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

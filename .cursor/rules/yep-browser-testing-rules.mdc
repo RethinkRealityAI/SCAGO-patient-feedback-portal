@@ -1,0 +1,320 @@
+---
+description: when testing the youth empowerment program in browser, running development servers, or using playwright for automated testing
+alwaysApply: false
+---
+# YEP Browser Testing & Development Server Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: Browser testing, development server management, and automated testing
+**Apply To**: 
+- Browser testing workflows
+- Development server management
+- Playwright testing scripts
+- Local development environment setup
+
+## 🖥️ **Development Server Rules**
+
+### Server Management
+```bash
+# PRIMARY DEVELOPMENT SERVER
+- Port: 9002 (localhost:9002)
+- Command: npm run dev
+- Always check for existing running servers before starting new ones
+- Use --turbopack flag for faster builds: npm run dev --turbopack -p 9002
+```
+
+### Server Check Commands
+```bash
+# Check for existing running servers
+netstat -ano | findstr :9002
+# or
+lsof -i :9002
+
+# Kill existing server if needed
+taskkill /F /PID <PID_NUMBER>
+# or
+kill -9 <PID_NUMBER>
+```
+
+### Server Startup Rules
+```bash
+# ALWAYS check for existing servers first
+1. Check if port 9002 is already in use
+2. If server is running, use existing server
+3. If server is not running, start with: npm run dev --turbopack -p 9002
+4. Wait for "Ready in X.Xs" message before testing
+5. Verify server is accessible at http://localhost:9002
+```
+
+## 🌐 **Browser Testing Rules**
+
+### Primary Testing Environment
+```typescript
+// MAIN TESTING URL
+const BASE_URL = 'http://localhost:9002';
+const YEP_URL = 'http://localhost:9002/youth-empowerment';
+
+// Testing Workflow
+1. Start development server on port 9002
+2. Navigate to http://localhost:9002/youth-empowerment
+3. Test all YEP features in browser
+4. Use browser developer tools for debugging
+5. Take screenshots for documentation
+```
+
+### Browser Testing Checklist
+```typescript
+// Essential Browser Tests
+1. Server Status: Verify server is running on port 9002
+2. Page Load: Navigate to /youth-empowerment and verify page loads
+3. Form Testing: Test Add Participant form with all fields
+4. Table Testing: Verify participants table displays correctly
+5. Filter Testing: Test all filter combinations
+6. Import Testing: Test CSV import with AI mapping
+7. Status Badges: Verify status badges display correctly
+8. Responsive Design: Test on different screen sizes
+```
+
+### Playwright Testing Rules
+```typescript
+// Playwright Browser Testing
+import { test, expect } from '@playwright/test';
+
+test.describe('YEP Browser Testing', () => {
+  test.beforeEach(async ({ page }) => {
+    // Always check server is running
+    await page.goto('http://localhost:9002/youth-empowerment');
+    await expect(page).toHaveTitle(/Patient Feedback Portal/);
+  });
+
+  test('should load YEP page correctly', async ({ page }) => {
+    await expect(page.locator('h1')).toContainText('Youth Empowerment Program');
+  });
+
+  test('should open Add Participant form', async ({ page }) => {
+    await page.click('button:has-text("Add Participant")');
+    await expect(page.locator('dialog')).toBeVisible();
+  });
+
+  test('should test CSV import functionality', async ({ page }) => {
+    await page.click('button:has-text("Import CSV")');
+    await expect(page.locator('dialog')).toBeVisible();
+  });
+});
+```
+
+## 🔧 **Development Environment Rules**
+
+### Environment Setup
+```bash
+# Required Environment Variables
+- .env.local: Local development configuration
+- .env: Base environment configuration
+- Firebase configuration for database access
+- AI API keys for CSV mapping functionality
+```
+
+### Port Management
+```bash
+# PORT USAGE
+- Primary: 9002 (YEP development server)
+- Alternative: 3000 (if 9002 is unavailable)
+- Check for conflicts before starting server
+- Use specific port flag: -p 9002
+```
+
+### Server Status Monitoring
+```typescript
+// Server Health Check
+const checkServerStatus = async () => {
+  try {
+    const response = await fetch('http://localhost:9002/api/health');
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+};
+
+// Wait for server to be ready
+const waitForServer = async (maxAttempts = 30) => {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (await checkServerStatus()) {
+      console.log('Server is ready!');
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error('Server failed to start within timeout');
+};
+```
+
+## 🧪 **Testing Workflow Rules**
+
+### Pre-Testing Checklist
+```typescript
+// Before starting any browser testing
+1. Check if development server is already running
+2. Verify port 9002 is available
+3. Ensure all dependencies are installed (npm install)
+4. Check environment variables are configured
+5. Verify Firebase connection is working
+6. Start server with: npm run dev --turbopack -p 9002
+7. Wait for "Ready in X.Xs" message
+8. Navigate to http://localhost:9002/youth-empowerment
+```
+
+### Testing Execution Rules
+```typescript
+// Browser Testing Execution
+1. Form Testing:
+   - Test all form fields and validation
+   - Test address fields (street, city, province, postal code)
+   - Test SIN security and validation
+   - Test file upload functionality
+
+2. Table Testing:
+   - Verify all columns display correctly
+   - Test status badges and formatting
+   - Test filter functionality
+   - Test responsive design
+
+3. Import Testing:
+   - Test CSV parsing
+   - Test AI mapping functionality
+   - Test validation and error handling
+   - Test data import process
+
+4. Navigation Testing:
+   - Test all navigation links
+   - Test modal dialogs
+   - Test responsive layout
+   - Test mobile and desktop views
+```
+
+### Error Handling in Testing
+```typescript
+// Common Testing Errors and Solutions
+1. Server not running:
+   - Check if port 9002 is in use
+   - Start server with: npm run dev --turbopack -p 9002
+   - Wait for "Ready" message
+
+2. Page not loading:
+   - Check server status
+   - Verify URL is correct: http://localhost:9002/youth-empowerment
+   - Check browser console for errors
+
+3. Form submission errors:
+   - Check browser console for validation errors
+   - Verify all required fields are filled
+   - Check network tab for API errors
+
+4. Import errors:
+   - Check CSV format and delimiter
+   - Verify AI mapping is working
+   - Check validation messages
+```
+
+## 📊 **Performance Testing Rules**
+
+### Load Testing
+```typescript
+// Performance Testing Guidelines
+1. Test with large datasets (100+ participants)
+2. Monitor server response times
+3. Test CSV import with large files
+4. Verify table rendering performance
+5. Test filter performance with large datasets
+```
+
+### Memory Management
+```typescript
+// Memory and Performance Monitoring
+1. Monitor browser memory usage during testing
+2. Test with multiple browser tabs open
+3. Verify no memory leaks in long-running tests
+4. Test server stability under load
+```
+
+## 🔍 **Debugging Rules**
+
+### Browser Debugging
+```typescript
+// Browser Developer Tools Usage
+1. Console Tab: Check for JavaScript errors
+2. Network Tab: Monitor API calls and responses
+3. Elements Tab: Inspect DOM structure
+4. Performance Tab: Monitor rendering performance
+5. Application Tab: Check localStorage and sessionStorage
+```
+
+### Server Debugging
+```bash
+# Server Debugging Commands
+1. Check server logs for errors
+2. Monitor port usage: netstat -ano | findstr :9002
+3. Check process status: tasklist | findstr node
+4. Restart server if needed: Ctrl+C then npm run dev
+```
+
+## 📋 **Testing Documentation Rules**
+
+### Test Results Documentation
+```typescript
+// Document Test Results
+1. Screenshot successful tests
+2. Document any errors or issues found
+3. Record performance metrics
+4. Note any browser-specific issues
+5. Update test documentation with new findings
+```
+
+### Test Data Management
+```typescript
+// Test Data Guidelines
+1. Use realistic test data
+2. Test with various data formats
+3. Test edge cases and error conditions
+4. Clean up test data after testing
+5. Use consistent test data across tests
+```
+
+## 🚀 **Automation Rules**
+
+### Automated Testing Setup
+```typescript
+// Playwright Test Configuration
+const config = {
+  testDir: './tests',
+  use: {
+    baseURL: 'http://localhost:9002',
+    headless: false, // Set to true for CI/CD
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+  ],
+};
+```
+
+### CI/CD Testing Rules
+```bash
+# Continuous Integration Testing
+1. Always check server status before running tests
+2. Use headless mode for automated testing
+3. Set appropriate timeouts for server startup
+4. Clean up test data after test completion
+5. Generate test reports and screenshots
+```

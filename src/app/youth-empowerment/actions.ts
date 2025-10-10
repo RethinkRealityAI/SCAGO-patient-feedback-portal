@@ -27,12 +27,34 @@ function parseLocalDateFromYMD(ymd: string): Date {
   return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
 }
 
-// Validation Schemas - Updated to handle empty data gracefully
+// Validation Schemas - Updated to handle empty data gracefully and CSV import issues
 const participantSchema = z.object({
   youthParticipant: z.string().min(2, 'Name is required'),
-  age: z.number().min(16).max(30).optional(),
-  email: z.string().email('Valid email is required').optional().or(z.literal('')),
-  etransferEmailAddress: z.string().email('Valid email is required').optional().or(z.literal('')),
+  age: z.union([
+    z.number().min(16).max(30),
+    z.string().transform((val) => {
+      const num = parseInt(val, 10);
+      if (isNaN(num)) return undefined;
+      return num >= 16 && num <= 30 ? num : undefined;
+    }).optional(),
+    z.undefined()
+  ]).optional(),
+  email: z
+    .string()
+    .transform((val) => {
+      const v = (val || '').trim();
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      return isEmail ? v : '';
+    })
+    .optional(),
+  etransferEmailAddress: z
+    .string()
+    .transform((val) => {
+      const v = (val || '').trim();
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      return isEmail ? v : '';
+    })
+    .optional(),
   phoneNumber: z.string().optional().or(z.literal('')),
   emergencyContactRelationship: z.string().optional().or(z.literal('')),
   emergencyContactNumber: z.string().optional().or(z.literal('')),
@@ -45,46 +67,147 @@ const participantSchema = z.object({
   postalCode: z.string().optional().or(z.literal('')),
   projectCategory: z.string().optional().or(z.literal('')),
   projectInANutshell: z.string().optional().or(z.literal('')),
-  contractSigned: z.boolean().optional().default(false),
-  signedSyllabus: z.boolean().optional().default(false),
+  contractSigned: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
+  signedSyllabus: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
   availability: z.string().optional().or(z.literal('')),
   assignedMentor: z.string().optional().or(z.literal('')),
-  idProvided: z.boolean().optional().default(false),
-  canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).optional(),
+  idProvided: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done', 'passport provided', 'drivers license provided', 'id provided'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
+  canadianStatus: z.union([
+    z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']),
+    z.string().transform((val) => {
+      // Handle variations in Canadian status from CSV
+      const normalized = val.toLowerCase().trim();
+      if (normalized.includes('citizen')) return 'Canadian Citizen';
+      if (normalized.includes('permanent') || normalized.includes('pr')) return 'Permanent Resident';
+      return 'Other';
+    }),
+    z.undefined()
+  ]).optional(),
   sin: z.string().optional().or(z.literal('')),
   sinNumber: z.string().optional().or(z.literal('')),
   youthProposal: z.string().optional().or(z.literal('')),
   affiliationWithSCD: z.string().optional().or(z.literal('')),
-  proofOfAffiliationWithSCD: z.boolean().optional().default(false),
+  proofOfAffiliationWithSCD: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done', 'proof provided', 'affiliation provided'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
   scagoCounterpart: z.string().optional().or(z.literal('')),
   dob: z.string().optional().or(z.literal('')),
   file: z.string().optional().or(z.literal('')),
   fileUpload: z.instanceof(File).optional(),
   // Additional legacy fields
-  approved: z.boolean().optional().default(false),
+  approved: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
   canadianStatusOther: z.string().optional().or(z.literal('')),
   citizenshipStatus: z.string().optional().or(z.literal('')),
   location: z.string().optional().or(z.literal('')),
   duties: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
   nextSteps: z.string().optional().or(z.literal('')),
-  interviewed: z.boolean().optional(),
+  interviewed: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done', 'interviewed'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
   interviewNotes: z.string().optional().or(z.literal('')),
-  recruited: z.boolean().optional(),
-}).superRefine((data, ctx) => {
-  if (data.canadianStatus === 'Other' && (!data.canadianStatusOther || data.canadianStatusOther.trim() === '')) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Please specify your status when "Other" is selected',
-      path: ['canadianStatusOther'],
-    });
-  }
+  recruited: z.union([
+    z.boolean(),
+    z.string().transform((val) => {
+      const s = (val || '').toString().trim().toLowerCase();
+      if (['true', 'yes', 'y', '1', 'approved', 'signed', 'provided', 'completed', 'done', 'recruited'].includes(s)) return true;
+      if (['false', 'no', 'n', '0', 'pending', 'not provided', 'not signed'].includes(s)) return false;
+      return false;
+    }),
+    z.undefined()
+  ]).optional().default(false),
 });
 
 const mentorSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  title: z.string().min(2, 'Title is required'),
+  email: z
+    .string()
+    .transform((val) => {
+      const v = (val || '').trim();
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      return isEmail ? v : '';
+    })
+    .optional(),
+  phone: z.string().optional().or(z.literal('')),
+  vulnerableSectorCheck: z
+    .union([
+      z.boolean(),
+      z.string().transform((val) => {
+        const s = (val || '').toString().trim().toLowerCase();
+        if (['true', 'yes', 'y', '1', 'provided', 'completed', 'done', 'valid', 'verified', 'cleared'].includes(s)) return true;
+        if (['false', 'no', 'n', '0', 'pending', 'not provided', 'missing', 'invalid'].includes(s)) return false;
+        return false;
+      }),
+      z.undefined(),
+    ])
+    .optional()
+    .default(false),
+  contractSigned: z
+    .union([
+      z.boolean(),
+      z.string().transform((val) => {
+        const s = (val || '').toString().trim().toLowerCase();
+        if (['true', 'yes', 'y', '1', 'signed', 'completed', 'done', 'agreement signed'].includes(s)) return true;
+        if (['false', 'no', 'n', '0', 'pending', 'not signed'].includes(s)) return false;
+        return false;
+      }),
+      z.undefined(),
+    ])
+    .optional()
+    .default(false),
+  availability: z.string().optional().or(z.literal('')),
   assignedStudents: z.array(z.string()).default([]),
+  file: z.string().optional().or(z.literal('')),
 });
 
 const workshopSchema = z.object({
@@ -118,26 +241,29 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
     let sinLast4 = 'N/A';
     let sinHash = 'N/A';
     if (validatedData.sin && validatedData.sin.trim() !== '') {
-      if (!validateSINLenient(validatedData.sin)) {
-        return { error: 'Invalid SIN format' };
+      if (validateSINLenient(validatedData.sin)) {
+        sinLast4 = extractSINLast4(validatedData.sin);
+        sinHash = await hashSIN(validatedData.sin);
+      } else {
+        // Ignore invalid SINs instead of failing the entire create
+        sinLast4 = 'N/A';
+        sinHash = 'N/A';
       }
-      sinLast4 = extractSINLast4(validatedData.sin);
-      sinHash = await hashSIN(validatedData.sin);
     }
 
     // Handle file upload if provided
     let fileUrl = '';
     let fileName = '';
     let fileType = '';
-    if (validatedData.file) {
-      const fileRef = ref(storage, `yep-files/${Date.now()}-${validatedData.file.name}`);
-      const snapshot = await uploadBytes(fileRef, validatedData.file);
+    if (validatedData.fileUpload) {
+      const fileRef = ref(storage, `yep-files/${Date.now()}-${validatedData.fileUpload.name}`);
+      const snapshot = await uploadBytes(fileRef, validatedData.fileUpload);
       fileUrl = await getDownloadURL(snapshot.ref);
-      fileName = validatedData.file.name;
-      fileType = validatedData.file.type;
+      fileName = validatedData.fileUpload.name;
+      fileType = validatedData.fileUpload.type;
     }
 
-    const participantData = {
+    const participantData: any = {
       youthParticipant: validatedData.youthParticipant,
       age: validatedData.age,
       email: validatedData.email || '',
@@ -181,12 +307,19 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       duties: validatedData.duties || '',
       notes: validatedData.notes || '',
       nextSteps: validatedData.nextSteps || '',
-      interviewed: validatedData.interviewed,
+      interviewed: validatedData.interviewed ?? false,
       interviewNotes: validatedData.interviewNotes || '',
-      recruited: validatedData.recruited,
+      recruited: validatedData.recruited ?? false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
+    // Remove any undefined values to satisfy Firestore restrictions
+    Object.keys(participantData).forEach((key) => {
+      if (participantData[key] === undefined) {
+        delete participantData[key];
+      }
+    });
 
     const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
     
@@ -246,20 +379,22 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 
     // Handle SIN update if provided
     if (data.sin && data.sin.trim() !== '') {
-      if (!validateSINLenient(data.sin)) {
-        return { error: 'Invalid SIN format' };
+      if (validateSINLenient(data.sin)) {
+        updateData.sinLast4 = extractSINLast4(data.sin);
+        updateData.sinHash = await hashSIN(data.sin);
+      } else {
+        // Ignore invalid SIN updates rather than erroring
+        delete updateData.sin;
       }
-      updateData.sinLast4 = extractSINLast4(data.sin);
-      updateData.sinHash = await hashSIN(data.sin);
     }
 
     // Handle file upload if provided
-    if (data.file) {
-      const fileRef = ref(storage, `yep-files/${Date.now()}-${data.file.name}`);
-      const snapshot = await uploadBytes(fileRef, data.file);
+    if (data.fileUpload) {
+      const fileRef = ref(storage, `yep-files/${Date.now()}-${data.fileUpload.name}`);
+      const snapshot = await uploadBytes(fileRef, data.fileUpload);
       updateData.fileUrl = await getDownloadURL(snapshot.ref);
-      updateData.fileName = data.file.name;
-      updateData.fileType = data.file.type;
+      updateData.fileName = data.fileUpload.name;
+      updateData.fileType = data.fileUpload.type;
     }
 
     await updateDoc(doc(db, 'yep_participants', id), updateData);
@@ -275,6 +410,13 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 export async function upsertParticipantByEmail(data: z.infer<typeof participantSchema>) {
   try {
     const validatedData = participantSchema.parse(data);
+
+    // If email is blank or invalid, we cannot upsert reliably – create a new record
+    if (!validatedData.email) {
+      const created = await createParticipant(validatedData);
+      if ((created as any)?.error) return { error: (created as any).error };
+      return { success: true, id: (created as any).id as string, action: 'created' as const };
+    }
 
     // Try to find existing participant by email
     const q = query(
@@ -416,8 +558,15 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
   try {
     const validatedData = mentorSchema.parse(data);
     
-    const mentorData = {
-      ...validatedData,
+    const mentorData: any = {
+      name: validatedData.name,
+      email: validatedData.email || '',
+      phone: validatedData.phone || '',
+      vulnerableSectorCheck: validatedData.vulnerableSectorCheck ?? false,
+      contractSigned: validatedData.contractSigned ?? false,
+      availability: validatedData.availability || '',
+      assignedStudents: validatedData.assignedStudents || [],
+      file: validatedData.file || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -441,8 +590,13 @@ export async function updateMentor(id: string, data: Partial<z.infer<typeof ment
 
     // Only include fields that have values
     if (data.name !== undefined) updateData.name = data.name;
-    if (data.title !== undefined) updateData.title = data.title;
+    if (data.email !== undefined) updateData.email = data.email;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.vulnerableSectorCheck !== undefined) updateData.vulnerableSectorCheck = data.vulnerableSectorCheck;
+    if (data.contractSigned !== undefined) updateData.contractSigned = data.contractSigned;
+    if (data.availability !== undefined) updateData.availability = data.availability;
     if (data.assignedStudents !== undefined) updateData.assignedStudents = data.assignedStudents;
+    if (data.file !== undefined) updateData.file = data.file;
 
     await updateDoc(doc(db, 'yep_mentors', id), updateData);
     
@@ -474,8 +628,13 @@ export async function getMentors() {
       return {
         id: doc.id,
         name: data.name || '',
-        title: data.title || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        vulnerableSectorCheck: data.vulnerableSectorCheck || false,
+        contractSigned: data.contractSigned || false,
+        availability: data.availability || '',
         assignedStudents: data.assignedStudents || [],
+        file: data.file || '',
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
       };

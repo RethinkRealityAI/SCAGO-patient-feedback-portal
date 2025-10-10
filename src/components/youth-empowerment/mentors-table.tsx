@@ -31,12 +31,14 @@ import {
   Plus,
   User,
   Users,
-  GraduationCap
+  GraduationCap,
+  Upload
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getMentors, deleteMentor, getParticipants } from '@/app/youth-empowerment/actions';
 import { YEPMentor, YEPParticipant } from '@/lib/youth-empowerment';
 import { MentorForm } from './mentor-form';
+import { ImportDialog } from './import-dialog';
 
 interface MentorsTableProps {
   onRefresh?: () => void;
@@ -50,6 +52,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMentor, setSelectedMentor] = useState<YEPMentor | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [mentorToDelete, setMentorToDelete] = useState<YEPMentor | null>(null);
@@ -90,8 +93,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(m => 
-        m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.title.toLowerCase().includes(searchTerm.toLowerCase())
+        m.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -189,10 +191,16 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                 Manage mentors and their assigned participants
               </CardDescription>
             </div>
-            <Button onClick={() => setIsFormOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Mentor
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV
+              </Button>
+              <Button onClick={() => setIsFormOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Mentor
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -217,9 +225,15 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Mentor</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Assigned Students</TableHead>
-                  <TableHead>Student Count</TableHead>
+                  {/* Title removed */}
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>VSC</TableHead>
+                  <TableHead>Contract</TableHead>
+                  <TableHead>Availability</TableHead>
+                  <TableHead>Assigned Youth</TableHead>
+                  <TableHead>Youth Count</TableHead>
+                  <TableHead>File</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -238,8 +252,29 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                         <TableCell>
                           <div className="font-medium">{mentor.name}</div>
                         </TableCell>
+                        {/* Title cell removed */}
                         <TableCell>
-                          <Badge variant="outline">{mentor.title}</Badge>
+                          <div className="text-sm text-muted-foreground">{(mentor as any).email || '-'}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-muted-foreground">{(mentor as any).phone || '-'}</div>
+                        </TableCell>
+                        <TableCell>
+                          {(mentor as any).vulnerableSectorCheck ? (
+                            <Badge variant="default" className="bg-green-600 hover:bg-green-700">Yes</Badge>
+                          ) : (
+                            <Badge variant="secondary">No</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {(mentor as any).contractSigned ? (
+                            <Badge variant="default" className="bg-green-600 hover:bg-green-700">Signed</Badge>
+                          ) : (
+                            <Badge variant="secondary">Pending</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-[12rem] truncate text-sm">{(mentor as any).availability || '-'}</div>
                         </TableCell>
                         <TableCell>
                           <div className="max-w-xs">
@@ -257,7 +292,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                                 )}
                               </div>
                             ) : (
-                              <span className="text-muted-foreground text-sm">No students assigned</span>
+                              <span className="text-muted-foreground text-sm">No youth assigned</span>
                             )}
                           </div>
                         </TableCell>
@@ -266,6 +301,15 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                             <Users className="h-4 w-4 text-muted-foreground" />
                             <span className="font-medium">{assignedStudents.length}</span>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {((mentor as any).file) ? (
+                            <a href={(mentor as any).file} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
+                              View
+                            </a>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -316,6 +360,17 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
         onSuccess={handleFormSuccess}
       />
 
+      <ImportDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        defaultTargetTable="mentors"
+        onSuccess={() => {
+          setIsImportOpen(false);
+          loadData();
+          onRefresh?.();
+        }}
+      />
+
       {/* View Modal */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -332,13 +387,10 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                   <label className="text-sm font-medium text-muted-foreground">Name</label>
                   <p className="text-sm">{selectedMentor.name}</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Title</label>
-                  <p className="text-sm">{selectedMentor.title}</p>
-                </div>
+                {/* Title removed */}
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Assigned Students</label>
+                <label className="text-sm font-medium text-muted-foreground">Assigned Youth</label>
                 <div className="mt-2 space-y-2">
                   {getAssignedStudents(selectedMentor).length > 0 ? (
                     getAssignedStudents(selectedMentor).map(student => (
@@ -353,7 +405,7 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No students assigned</p>
+                    <p className="text-sm text-muted-foreground">No youth assigned</p>
                   )}
                 </div>
               </div>

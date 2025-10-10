@@ -1,0 +1,773 @@
+---
+description: when working with the youth empowerment program Dashboard and page and anything related to it
+alwaysApply: false
+---
+# Youth Empowerment Program (YEP) System Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: All YEP-related files in the youth empowerment system
+**Apply To**: 
+- `src/app/youth-empowerment/**/*`
+- `src/components/youth-empowerment/**/*`
+- `src/lib/youth-empowerment.ts`
+- `src/lib/import-utils.ts`
+- `src/app/api/yep/**/*`
+
+## 🏗️ **YEP System Architecture**
+
+### Core Components
+- **Database**: Firebase Firestore with `yep_participants` collection
+- **AI Integration**: CSV mapping with intelligent field detection
+- **Form Management**: React Hook Form with Zod validation
+- **Import System**: CSV parsing with AI-powered field mapping
+- **Table Display**: Consolidated status badges and responsive filters
+
+### File Structure & Responsibilities
+```
+src/app/youth-empowerment/
+├── actions.ts                    # Server actions (CRUD operations)
+├── client.tsx                    # Main YEP client component
+└── page.tsx                      # YEP page component
+
+src/components/youth-empowerment/
+├── participant-form.tsx          # Add/Edit participant form
+├── participants-table.tsx        # Main participants table
+├── participant-importer.tsx      # CSV import with AI mapping
+└── availability-selector.tsx     # Availability selection component
+
+src/lib/
+├── youth-empowerment.ts          # YEP types, schemas, and utilities
+└── import-utils.ts                 # CSV parsing and AI mapping utilities
+
+src/app/api/yep/csv-map/
+└── route.ts                      # AI-powered CSV mapping API
+```
+
+## 🗄️ **Database Schema Rules**
+
+### YEPParticipant Interface
+```typescript
+interface YEPParticipant {
+  // Core Identity (REQUIRED)
+  id: string;
+  youthParticipant: string;        // REQUIRED - participant name
+  age?: number;                   // 16-30 years
+  email?: string;
+  etransferEmailAddress?: string;
+  phoneNumber?: string;
+  
+  // Address Fields (NEW - separate fields)
+  streetAddress?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  mailingAddress?: string;        // Legacy field
+  
+  // Contact & Emergency
+  emergencyContactRelationship?: string;
+  emergencyContactNumber?: string;
+  region?: string;
+  
+  // Program Status (Boolean flags)
+  approved?: boolean;
+  contractSigned?: boolean;
+  signedSyllabus?: boolean;
+  idProvided?: boolean;
+  proofOfAffiliationWithSCD?: boolean;
+  interviewed?: boolean;
+  recruited?: boolean;
+  
+  // Program Details
+  availability?: string;
+  assignedMentor?: string;
+  scagoCounterpart?: string;
+  canadianStatus?: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
+  canadianStatusOther?: string;
+  
+  // Project Information
+  projectCategory?: string;
+  projectInANutshell?: string;
+  youthProposal?: string;
+  affiliationWithSCD?: string;
+  
+  // Security (REQUIRED for SIN handling)
+  sinLast4: string;               // REQUIRED - last 4 digits or 'N/A'
+  sinHash: string;                // REQUIRED - bcrypt hash or 'N/A'
+  sin?: string;                   // Full SIN (not stored)
+  sinNumber?: string;             // Alternative SIN field
+  
+  // File Management
+  file?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  
+  // Notes & Tracking
+  notes?: string;
+  nextSteps?: string;
+  interviewNotes?: string;
+  duties?: string;
+  location?: string;
+  citizenshipStatus?: string;
+  
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+## 🔐 **Security & Data Handling Rules**
+
+### DO:
+- ✅ **Always validate SIN security** - `sinLast4` and `sinHash` are REQUIRED fields
+- ✅ **Use server-side validation** - All form submissions through server actions
+- ✅ **Handle empty data gracefully** - Most fields are optional except `youthParticipant`
+- ✅ **Use AI mapping for CSV imports** - Intelligent field detection and mapping
+- ✅ **Validate data types** - Use Zod schemas for all form validation
+
+### DON'T:
+- ❌ **Never store full SIN** - Only store last 4 digits and hash
+- ❌ **Don't skip SIN security** - Always provide defaults ('N/A') for SIN fields
+- ❌ **Don't bypass validation** - Always validate before database operations
+- ❌ **Don't ignore empty data** - Handle null/undefined gracefully
+
+## 🏗️ **Form Management Rules**
+
+### Form Layout (participant-form.tsx)
+```typescript
+// Form Structure (Optimized Layout)
+1. Basic Information (FULL WIDTH)
+   - Personal details (name, email, phone, DOB)
+   - Address fields (street, city, province, postal code)
+   - Age, location, SCD affiliation
+
+2. Status & Documents + Program Details (SIDE BY SIDE)
+   - Status checkboxes (approved, contract, syllabus, ID, SCD)
+   - Program details (availability, mentor, counterpart)
+
+3. Legal & Security + Document Upload (SIDE BY SIDE)
+   - Canadian status, SIN handling
+   - File upload functionality
+
+4. Project Information + Program Status & Notes (SIDE BY SIDE)
+   - Project details (category, proposal, duties)
+   - Recruitment status (interviewed, recruited, notes)
+```
+
+### Form Validation Rules
+```typescript
+// Zod Schema Requirements
+- youthParticipant: REQUIRED (min 2 characters)
+- age: Optional (16-30 range)
+- email: Optional but validated if provided
+- canadianStatus: Default 'Other' if not specified
+- sinLast4/sinHash: ALWAYS required (default 'N/A')
+- All other fields: Optional with empty string defaults
+```
+
+## 📊 **Table Display Rules**
+
+### Table Structure (participants-table.tsx)
+```typescript
+// Table Columns (Consolidated)
+- Participant: Name + email
+- Contact Info: Phone + etransfer + address
+- Status & Documents: Consolidated badges
+  * Main status: Approved/Pending
+  * Document badges: Contract Signed, Youth Proposal, SCD Affiliation, ID Provided
+  * Recruitment badges: Recruited, Interviewed, Pending
+- Region: With icon
+- Age: Numeric display
+- Project: Category (truncated)
+- Emergency Contact: Relationship + number
+- Mentor: Assigned mentor
+- File: Download button if available
+```
+
+### Status Badge Rules
+```typescript
+// Badge Display Logic
+const getStatusBadge = (participant) => {
+  return participant.approved ? 'Approved' : 'Pending';
+};
+
+const getDocumentStatusBadges = (participant) => {
+  // Show badges for: Contract Signed, Signed Syllabus, ID Provided, 
+  // SCD Affiliation, Youth Proposal
+};
+
+const getRecruitmentStatusBadges = (participant) => {
+  // Show badges for: Recruited, Interviewed, Pending
+  // NOTE: Approved is shown in main status, not duplicated here
+};
+```
+
+## 🔍 **Filter System Rules**
+
+### Filter Implementation
+```typescript
+// Available Filters (All in one row)
+- Status: All Status, Approved, Pending
+- Region: All Regions + dynamic region list
+- Age: All Ages, Under 18, 18-25, Over 25
+- Documents: All Documents, Complete, Incomplete
+- Recruitment: All Recruitment, Recruited, Interviewed, Pending
+- Clear Filters: Reset all filters
+```
+
+### Filter Logic
+```typescript
+// Age Filter Logic
+const getAgeCategory = (age: number) => {
+  if (age < 18) return 'under18';
+  if (age <= 25) return '18-25';
+  return 'over25';
+};
+
+// Document Filter Logic
+const isDocumentComplete = (participant) => {
+  return participant.contractSigned && 
+         participant.signedSyllabus && 
+         participant.idProvided;
+};
+```
+
+## 🤖 **AI CSV Import Rules**
+
+### AI Mapping System (csv-map/route.ts)
+```typescript
+// AI Mapping Features
+- Fuzzy matching with Levenshtein distance
+- Data type analysis (email, phone, date, boolean)
+- Context-aware field detection
+- Scoring system for mapping confidence
+- Minimum score threshold for suggestions
+
+// Field Mapping Patterns
+const fieldMappings = {
+  youthParticipant: ['name', 'participant', 'youth', 'student'],
+  email: ['email', 'e-mail', 'email address'],
+  phoneNumber: ['phone', 'telephone', 'mobile', 'cell'],
+  // ... comprehensive mapping patterns
+};
+```
+
+### Import Process Rules
+```typescript
+// Import Workflow
+1. Parse CSV with auto-delimiter detection
+2. Show "Parse" and "Import with AI" buttons
+3. AI mapping suggests field mappings
+4. Validation shows warnings/missing fields
+5. Import with upsert logic (email as unique key)
+6. Handle empty data with safe defaults
+```
+
+## 🗄️ **Database Operations Rules**
+
+### Server Actions (actions.ts)
+```typescript
+// CRUD Operations
+- createParticipant: Handle SIN security, validate required fields
+- updateParticipant: Conditional updates, preserve existing data
+- getParticipants: Include all fields with safe defaults
+- upsertParticipantByEmail: Email-based upsert for imports
+
+// SIN Security Rules
+if (validatedData.sin && validatedData.sin.trim() !== '') {
+  sinLast4 = extractSINLast4(validatedData.sin);
+  sinHash = await hashSIN(validatedData.sin);
+} else {
+  sinLast4 = 'N/A';
+  sinHash = 'N/A';
+}
+```
+
+### Data Validation Rules
+```typescript
+// Required Fields
+- youthParticipant: Always required
+- sinLast4/sinHash: Always required (security)
+
+// Optional Fields with Defaults
+- All other fields: Optional with empty string or false defaults
+- Boolean fields: Default to false
+- Enum fields: Default to 'Other' or appropriate default
+```
+
+## 🎨 **UI/UX Rules**
+
+### Form Layout Rules
+```typescript
+// Responsive Grid Layout
+- Basic Information: Full width (grid-cols-1)
+- Side sections: lg:grid-cols-2 (desktop), grid-cols-1 (mobile)
+- Address fields: md:grid-cols-2 for street, grid-cols-1 for others
+- Status checkboxes: grid-cols-2 for compact display
+```
+
+### Table Display Rules
+```typescript
+// Responsive Table
+- Mobile: Stacked layout with cards
+- Desktop: Full table with all columns
+- Status badges: Compact with proper spacing
+- Text truncation: For long fields with full text in modal
+```
+
+## 🔧 **Development Rules**
+
+### File Organization
+```typescript
+// Component Structure
+- participant-form.tsx: Form with optimized layout
+- participants-table.tsx: Table with consolidated status display
+- participant-importer.tsx: CSV import with AI mapping
+- availability-selector.tsx: Time slot selection
+```
+
+### Error Handling
+```typescript
+// Error Handling Patterns
+- Form validation: Zod schema validation
+- Database errors: Try-catch with user-friendly messages
+- AI mapping errors: Fallback to manual mapping
+- File upload errors: Clear error messages
+```
+
+## 📋 **Testing Rules**
+
+### Browser Testing Checklist
+```typescript
+// Essential Tests
+1. Form Layout: Verify full-width Basic Info, side-by-side sections
+2. Address Fields: Test separate street, city, province, postal code
+3. Status Badges: Verify correct labels and no duplicates
+4. Filters: Test all filter combinations and Clear Filters
+5. CSV Import: Test AI mapping and validation
+6. Data Persistence: Verify all fields save correctly
+```
+
+### Data Validation Tests
+```typescript
+// Required Tests
+- Empty data handling: All fields optional except name
+- SIN security: Always provide defaults
+- Form validation: Zod schema compliance
+- AI mapping: Field detection accuracy
+```
+
+## 🚀 **Performance Optimization**
+
+### Regular Updates
+- Monitor AI mapping accuracy
+- Update field mappings for new CSV formats
+- Review and update validation rules
+- Test import functionality with new data
+
+### Performance Optimization
+- Batch CSV processing for large imports
+- Optimize table rendering for large datasets
+- Cache AI mapping results
+- Implement pagination for large participant lists
+
+## 🔗 **Integration Points**
+
+### AI Integration
+- CSV mapping API: `/api/yep/csv-map`
+- Field detection: Fuzzy matching with scoring
+- Data type analysis: Email, phone, date, boolean detection
+
+### Database Integration
+- Firestore collection: `yep_participants`
+- Server actions: CRUD operations with validation
+- Security: SIN hashing and last-4 storage
+
+### Form Integration
+- React Hook Form: Form state management
+- Zod validation: Schema-based validation
+- File upload: Secure file handling# Youth Empowerment Program (YEP) System Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: All YEP-related files in the youth empowerment system
+**Apply To**: 
+- `src/app/youth-empowerment/**/*`
+- `src/components/youth-empowerment/**/*`
+- `src/lib/youth-empowerment.ts`
+- `src/lib/import-utils.ts`
+- `src/app/api/yep/**/*`
+
+## 🏗️ **YEP System Architecture**
+
+### Core Components
+- **Database**: Firebase Firestore with `yep_participants` collection
+- **AI Integration**: CSV mapping with intelligent field detection
+- **Form Management**: React Hook Form with Zod validation
+- **Import System**: CSV parsing with AI-powered field mapping
+- **Table Display**: Consolidated status badges and responsive filters
+
+### File Structure & Responsibilities
+```
+src/app/youth-empowerment/
+├── actions.ts                    # Server actions (CRUD operations)
+├── client.tsx                    # Main YEP client component
+└── page.tsx                      # YEP page component
+
+src/components/youth-empowerment/
+├── participant-form.tsx          # Add/Edit participant form
+├── participants-table.tsx        # Main participants table
+├── participant-importer.tsx      # CSV import with AI mapping
+└── availability-selector.tsx     # Availability selection component
+
+src/lib/
+├── youth-empowerment.ts          # YEP types, schemas, and utilities
+└── import-utils.ts                 # CSV parsing and AI mapping utilities
+
+src/app/api/yep/csv-map/
+└── route.ts                      # AI-powered CSV mapping API
+```
+
+## 🗄️ **Database Schema Rules**
+
+### YEPParticipant Interface
+```typescript
+interface YEPParticipant {
+  // Core Identity (REQUIRED)
+  id: string;
+  youthParticipant: string;        // REQUIRED - participant name
+  age?: number;                   // 16-30 years
+  email?: string;
+  etransferEmailAddress?: string;
+  phoneNumber?: string;
+  
+  // Address Fields (NEW - separate fields)
+  streetAddress?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  mailingAddress?: string;        // Legacy field
+  
+  // Contact & Emergency
+  emergencyContactRelationship?: string;
+  emergencyContactNumber?: string;
+  region?: string;
+  
+  // Program Status (Boolean flags)
+  approved?: boolean;
+  contractSigned?: boolean;
+  signedSyllabus?: boolean;
+  idProvided?: boolean;
+  proofOfAffiliationWithSCD?: boolean;
+  interviewed?: boolean;
+  recruited?: boolean;
+  
+  // Program Details
+  availability?: string;
+  assignedMentor?: string;
+  scagoCounterpart?: string;
+  canadianStatus?: 'Canadian Citizen' | 'Permanent Resident' | 'Other';
+  canadianStatusOther?: string;
+  
+  // Project Information
+  projectCategory?: string;
+  projectInANutshell?: string;
+  youthProposal?: string;
+  affiliationWithSCD?: string;
+  
+  // Security (REQUIRED for SIN handling)
+  sinLast4: string;               // REQUIRED - last 4 digits or 'N/A'
+  sinHash: string;                // REQUIRED - bcrypt hash or 'N/A'
+  sin?: string;                   // Full SIN (not stored)
+  sinNumber?: string;             // Alternative SIN field
+  
+  // File Management
+  file?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  
+  // Notes & Tracking
+  notes?: string;
+  nextSteps?: string;
+  interviewNotes?: string;
+  duties?: string;
+  location?: string;
+  citizenshipStatus?: string;
+  
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+## 🔐 **Security & Data Handling Rules**
+
+### DO:
+- ✅ **Always validate SIN security** - `sinLast4` and `sinHash` are REQUIRED fields
+- ✅ **Use server-side validation** - All form submissions through server actions
+- ✅ **Handle empty data gracefully** - Most fields are optional except `youthParticipant`
+- ✅ **Use AI mapping for CSV imports** - Intelligent field detection and mapping
+- ✅ **Validate data types** - Use Zod schemas for all form validation
+
+### DON'T:
+- ❌ **Never store full SIN** - Only store last 4 digits and hash
+- ❌ **Don't skip SIN security** - Always provide defaults ('N/A') for SIN fields
+- ❌ **Don't bypass validation** - Always validate before database operations
+- ❌ **Don't ignore empty data** - Handle null/undefined gracefully
+
+## 🏗️ **Form Management Rules**
+
+### Form Layout (participant-form.tsx)
+```typescript
+// Form Structure (Optimized Layout)
+1. Basic Information (FULL WIDTH)
+   - Personal details (name, email, phone, DOB)
+   - Address fields (street, city, province, postal code)
+   - Age, location, SCD affiliation
+
+2. Status & Documents + Program Details (SIDE BY SIDE)
+   - Status checkboxes (approved, contract, syllabus, ID, SCD)
+   - Program details (availability, mentor, counterpart)
+
+3. Legal & Security + Document Upload (SIDE BY SIDE)
+   - Canadian status, SIN handling
+   - File upload functionality
+
+4. Project Information + Program Status & Notes (SIDE BY SIDE)
+   - Project details (category, proposal, duties)
+   - Recruitment status (interviewed, recruited, notes)
+```
+
+### Form Validation Rules
+```typescript
+// Zod Schema Requirements
+- youthParticipant: REQUIRED (min 2 characters)
+- age: Optional (16-30 range)
+- email: Optional but validated if provided
+- canadianStatus: Default 'Other' if not specified
+- sinLast4/sinHash: ALWAYS required (default 'N/A')
+- All other fields: Optional with empty string defaults
+```
+
+## 📊 **Table Display Rules**
+
+### Table Structure (participants-table.tsx)
+```typescript
+// Table Columns (Consolidated)
+- Participant: Name + email
+- Contact Info: Phone + etransfer + address
+- Status & Documents: Consolidated badges
+  * Main status: Approved/Pending
+  * Document badges: Contract Signed, Youth Proposal, SCD Affiliation, ID Provided
+  * Recruitment badges: Recruited, Interviewed, Pending
+- Region: With icon
+- Age: Numeric display
+- Project: Category (truncated)
+- Emergency Contact: Relationship + number
+- Mentor: Assigned mentor
+- File: Download button if available
+```
+
+### Status Badge Rules
+```typescript
+// Badge Display Logic
+const getStatusBadge = (participant) => {
+  return participant.approved ? 'Approved' : 'Pending';
+};
+
+const getDocumentStatusBadges = (participant) => {
+  // Show badges for: Contract Signed, Signed Syllabus, ID Provided, 
+  // SCD Affiliation, Youth Proposal
+};
+
+const getRecruitmentStatusBadges = (participant) => {
+  // Show badges for: Recruited, Interviewed, Pending
+  // NOTE: Approved is shown in main status, not duplicated here
+};
+```
+
+## 🔍 **Filter System Rules**
+
+### Filter Implementation
+```typescript
+// Available Filters (All in one row)
+- Status: All Status, Approved, Pending
+- Region: All Regions + dynamic region list
+- Age: All Ages, Under 18, 18-25, Over 25
+- Documents: All Documents, Complete, Incomplete
+- Recruitment: All Recruitment, Recruited, Interviewed, Pending
+- Clear Filters: Reset all filters
+```
+
+### Filter Logic
+```typescript
+// Age Filter Logic
+const getAgeCategory = (age: number) => {
+  if (age < 18) return 'under18';
+  if (age <= 25) return '18-25';
+  return 'over25';
+};
+
+// Document Filter Logic
+const isDocumentComplete = (participant) => {
+  return participant.contractSigned && 
+         participant.signedSyllabus && 
+         participant.idProvided;
+};
+```
+
+## 🤖 **AI CSV Import Rules**
+
+### AI Mapping System (csv-map/route.ts)
+```typescript
+// AI Mapping Features
+- Fuzzy matching with Levenshtein distance
+- Data type analysis (email, phone, date, boolean)
+- Context-aware field detection
+- Scoring system for mapping confidence
+- Minimum score threshold for suggestions
+
+// Field Mapping Patterns
+const fieldMappings = {
+  youthParticipant: ['name', 'participant', 'youth', 'student'],
+  email: ['email', 'e-mail', 'email address'],
+  phoneNumber: ['phone', 'telephone', 'mobile', 'cell'],
+  // ... comprehensive mapping patterns
+};
+```
+
+### Import Process Rules
+```typescript
+// Import Workflow
+1. Parse CSV with auto-delimiter detection
+2. Show "Parse" and "Import with AI" buttons
+3. AI mapping suggests field mappings
+4. Validation shows warnings/missing fields
+5. Import with upsert logic (email as unique key)
+6. Handle empty data with safe defaults
+```
+
+## 🗄️ **Database Operations Rules**
+
+### Server Actions (actions.ts)
+```typescript
+// CRUD Operations
+- createParticipant: Handle SIN security, validate required fields
+- updateParticipant: Conditional updates, preserve existing data
+- getParticipants: Include all fields with safe defaults
+- upsertParticipantByEmail: Email-based upsert for imports
+
+// SIN Security Rules
+if (validatedData.sin && validatedData.sin.trim() !== '') {
+  sinLast4 = extractSINLast4(validatedData.sin);
+  sinHash = await hashSIN(validatedData.sin);
+} else {
+  sinLast4 = 'N/A';
+  sinHash = 'N/A';
+}
+```
+
+### Data Validation Rules
+```typescript
+// Required Fields
+- youthParticipant: Always required
+- sinLast4/sinHash: Always required (security)
+
+// Optional Fields with Defaults
+- All other fields: Optional with empty string or false defaults
+- Boolean fields: Default to false
+- Enum fields: Default to 'Other' or appropriate default
+```
+
+## 🎨 **UI/UX Rules**
+
+### Form Layout Rules
+```typescript
+// Responsive Grid Layout
+- Basic Information: Full width (grid-cols-1)
+- Side sections: lg:grid-cols-2 (desktop), grid-cols-1 (mobile)
+- Address fields: md:grid-cols-2 for street, grid-cols-1 for others
+- Status checkboxes: grid-cols-2 for compact display
+```
+
+### Table Display Rules
+```typescript
+// Responsive Table
+- Mobile: Stacked layout with cards
+- Desktop: Full table with all columns
+- Status badges: Compact with proper spacing
+- Text truncation: For long fields with full text in modal
+```
+
+## 🔧 **Development Rules**
+
+### File Organization
+```typescript
+// Component Structure
+- participant-form.tsx: Form with optimized layout
+- participants-table.tsx: Table with consolidated status display
+- participant-importer.tsx: CSV import with AI mapping
+- availability-selector.tsx: Time slot selection
+```
+
+### Error Handling
+```typescript
+// Error Handling Patterns
+- Form validation: Zod schema validation
+- Database errors: Try-catch with user-friendly messages
+- AI mapping errors: Fallback to manual mapping
+- File upload errors: Clear error messages
+```
+
+## 📋 **Testing Rules**
+
+### Browser Testing Checklist
+```typescript
+// Essential Tests
+1. Form Layout: Verify full-width Basic Info, side-by-side sections
+2. Address Fields: Test separate street, city, province, postal code
+3. Status Badges: Verify correct labels and no duplicates
+4. Filters: Test all filter combinations and Clear Filters
+5. CSV Import: Test AI mapping and validation
+6. Data Persistence: Verify all fields save correctly
+```
+
+### Data Validation Tests
+```typescript
+// Required Tests
+- Empty data handling: All fields optional except name
+- SIN security: Always provide defaults
+- Form validation: Zod schema compliance
+- AI mapping: Field detection accuracy
+```
+
+## 🚀 **Performance Optimization**
+
+### Regular Updates
+- Monitor AI mapping accuracy
+- Update field mappings for new CSV formats
+- Review and update validation rules
+- Test import functionality with new data
+
+### Performance Optimization
+- Batch CSV processing for large imports
+- Optimize table rendering for large datasets
+- Cache AI mapping results
+- Implement pagination for large participant lists
+
+## 🔗 **Integration Points**
+
+### AI Integration
+- CSV mapping API: `/api/yep/csv-map`
+- Field detection: Fuzzy matching with scoring
+- Data type analysis: Email, phone, date, boolean detection
+
+### Database Integration
+- Firestore collection: `yep_participants`
+- Server actions: CRUD operations with validation
+- Security: SIN hashing and last-4 storage
+
+### Form Integration
+- React Hook Form: Form state management
+- Zod validation: Schema-based validation
+- File upload: Secure file handling

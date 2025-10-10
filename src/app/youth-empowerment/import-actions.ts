@@ -191,16 +191,38 @@ export async function importMentors(
             // Update existing mentor
             const existingDoc = existingSnapshot.docs[0];
             await setDoc(doc(db, 'yep_mentors', existingDoc.id), {
-              ...mentorData,
-              updatedAt: new Date()
-            });
+              name: mentorData.name || '',
+              email: mentorData.email || '',
+              phone: mentorData.phone || '',
+              vulnerableSectorCheck: mentorData.vulnerableSectorCheck ?? false,
+              contractSigned: mentorData.contractSigned ?? false,
+              availability: mentorData.availability || '',
+              assignedStudents: Array.isArray(mentorData.assignedStudents)
+                ? mentorData.assignedStudents
+                : (typeof mentorData.assignedStudents === 'string' && mentorData.assignedStudents.includes(',')
+                    ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
+                    : []),
+              file: mentorData.file || '',
+              updatedAt: serverTimestamp()
+            }, { merge: true });
             result.updated++;
           } else if (existingSnapshot.empty) {
             // Create new mentor
             await addDoc(collection(db, 'yep_mentors'), {
-              ...mentorData,
-              createdAt: new Date(),
-              updatedAt: new Date()
+              name: mentorData.name || '',
+              email: mentorData.email || '',
+              phone: mentorData.phone || '',
+              vulnerableSectorCheck: mentorData.vulnerableSectorCheck ?? false,
+              contractSigned: mentorData.contractSigned ?? false,
+              availability: mentorData.availability || '',
+              assignedStudents: Array.isArray(mentorData.assignedStudents)
+                ? mentorData.assignedStudents
+                : (typeof mentorData.assignedStudents === 'string' && mentorData.assignedStudents.includes(',')
+                    ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
+                    : []),
+              file: mentorData.file || '',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
             });
             result.imported++;
           } else {

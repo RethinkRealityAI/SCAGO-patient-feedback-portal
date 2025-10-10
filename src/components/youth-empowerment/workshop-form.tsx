@@ -19,6 +19,12 @@ const workshopFormSchema = z.object({
   title: z.string().min(3, 'Title is required'),
   description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
+  time: z.string().optional(),
+  location: z.string().optional(),
+  capacity: z.number().optional(),
+  mentor: z.string().optional(),
+  notes: z.string().optional(),
+  feedbackSurveyId: z.string().optional(),
 });
 
 type WorkshopFormData = z.infer<typeof workshopFormSchema>;
@@ -41,6 +47,12 @@ export function WorkshopForm({ workshop, isOpen, onClose, onSuccess }: WorkshopF
       title: workshop?.title || '',
       description: workshop?.description || '',
       date: workshop?.date ? new Date(workshop.date).toISOString().split('T')[0] : '',
+      time: workshop?.time || '',
+      location: workshop?.location || '',
+      capacity: workshop?.capacity || undefined,
+      mentor: workshop?.mentor || '',
+      notes: workshop?.notes || '',
+      feedbackSurveyId: workshop?.feedbackSurveyId || '',
     },
   });
 
@@ -53,12 +65,24 @@ export function WorkshopForm({ workshop, isOpen, onClose, onSuccess }: WorkshopF
         title: workshop.title || '',
         description: workshop.description || '',
         date: workshop.date ? new Date(workshop.date).toISOString().split('T')[0] : '',
+        time: workshop.time || '',
+        location: workshop.location || '',
+        capacity: workshop.capacity || undefined,
+        mentor: workshop.mentor || '',
+        notes: workshop.notes || '',
+        feedbackSurveyId: workshop.feedbackSurveyId || '',
       });
     } else {
       form.reset({
         title: '',
         description: '',
         date: '',
+        time: '',
+        location: '',
+        capacity: undefined,
+        mentor: '',
+        notes: '',
+        feedbackSurveyId: '',
       });
     }
 

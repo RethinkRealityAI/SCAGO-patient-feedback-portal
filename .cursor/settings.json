@@ -1,0 +1,122 @@
+{
+  "rules": {
+    "yep-system-rules.mdc": {
+      "applyTo": [
+        "src/app/youth-empowerment/**/*",
+        "src/components/youth-empowerment/**/*",
+        "src/lib/youth-empowerment.ts",
+        "src/lib/import-utils.ts",
+        "src/app/api/yep/**/*"
+      ],
+      "priority": "high",
+      "description": "Youth Empowerment Program system rules for database, forms, AI import, and table management"
+    },
+    "yep-ai-mapping-rules.mdc": {
+      "applyTo": [
+        "src/app/api/yep/csv-map/route.ts",
+        "src/components/youth-empowerment/participant-importer.tsx",
+        "src/lib/import-utils.ts"
+      ],
+      "priority": "high",
+      "description": "AI-powered CSV mapping and import system rules"
+    },
+    "yep-database-rules.mdc": {
+      "applyTo": [
+        "src/app/youth-empowerment/actions.ts",
+        "src/lib/youth-empowerment.ts"
+      ],
+      "priority": "critical",
+      "description": "Database operations, security, and server actions rules"
+    },
+    "yep-browser-testing-rules.mdc": {
+      "applyTo": [
+        "tests/**/*",
+        "playwright/**/*",
+        "*.test.ts",
+        "*.spec.ts"
+      ],
+      "priority": "high",
+      "description": "Browser testing, development server management, and automated testing rules"
+    },
+    "rule-generation-update-rules.mdc": {
+      "applyTo": [
+        ".cursor/rules/**/*.mdc",
+        ".cursor/settings.json"
+      ],
+      "priority": "critical",
+      "description": "Rule creation, update, and management patterns - always applied"
+    }
+  },
+  "filePatterns": {
+    "yep-participant-files": [
+      "src/app/youth-empowerment/actions.ts",
+      "src/app/youth-empowerment/client.tsx",
+      "src/app/youth-empowerment/page.tsx",
+      "src/components/youth-empowerment/participant-form.tsx",
+      "src/components/youth-empowerment/participants-table.tsx",
+      "src/components/youth-empowerment/participant-importer.tsx",
+      "src/components/youth-empowerment/availability-selector.tsx",
+      "src/lib/youth-empowerment.ts",
+      "src/lib/import-utils.ts",
+      "src/app/api/yep/csv-map/route.ts"
+    ]
+  },
+  "contextRules": {
+    "yep-database-operations": {
+      "files": ["src/app/youth-empowerment/actions.ts", "src/lib/youth-empowerment.ts"],
+      "rules": [
+        "Always validate SIN security with sinLast4 and sinHash",
+        "Handle empty data gracefully with safe defaults",
+        "Use server-side validation for all operations",
+        "Preserve existing data in update operations"
+      ]
+    },
+    "yep-form-management": {
+      "files": ["src/components/youth-empowerment/participant-form.tsx"],
+      "rules": [
+        "Use optimized form layout with full-width Basic Information",
+        "Implement side-by-side sections for related fields",
+        "Validate with Zod schemas and proper defaults",
+        "Handle address fields as separate inputs"
+      ]
+    },
+    "yep-table-display": {
+      "files": ["src/components/youth-empowerment/participants-table.tsx"],
+      "rules": [
+        "Consolidate status information with badges",
+        "Implement responsive filter system",
+        "Use proper badge labels matching form fields",
+        "Handle text truncation for long content"
+      ]
+    },
+    "yep-ai-import": {
+      "files": ["src/components/youth-empowerment/participant-importer.tsx", "src/app/api/yep/csv-map/route.ts"],
+      "rules": [
+        "Use AI mapping for intelligent field detection",
+        "Implement fuzzy matching with scoring",
+        "Handle CSV parsing with auto-delimiter detection",
+        "Provide validation feedback and warnings"
+      ]
+    },
+    "yep-browser-testing": {
+      "files": ["tests/**/*", "playwright/**/*", "*.test.ts", "*.spec.ts"],
+      "rules": [
+        "Always check for existing running servers before starting new ones",
+        "Use localhost:9002 as primary development server",
+        "Wait for 'Ready in X.Xs' message before testing",
+        "Test all YEP features in browser environment",
+        "Use Playwright for automated testing when appropriate"
+      ]
+    },
+    "rule-management": {
+      "files": [".cursor/rules/**/*.mdc", ".cursor/settings.json"],
+      "rules": [
+        "Always apply rule generation and update patterns",
+        "Update rules when new patterns are discovered",
+        "Maintain consistent rule structure and formatting",
+        "Remove outdated information from rules",
+        "Add new useful patterns to existing rules"
+      ]
+    }
+  }
+}
