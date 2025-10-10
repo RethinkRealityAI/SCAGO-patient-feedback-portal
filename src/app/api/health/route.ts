@@ -57,7 +57,6 @@ export async function GET() {
     'GOOGLE_API_KEY',
   ];
 
-<<<<<<< HEAD
   // Debug logging for environment variables
   console.log('Health check - Environment variables:');
   requiredEnvVars.forEach(varName => {
@@ -68,8 +67,6 @@ export async function GET() {
     }
   });
 
-=======
->>>>>>> b42de2930e6c00102fdbfef337236036c5c88605
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
   
   if (missingEnvVars.length > 0) {

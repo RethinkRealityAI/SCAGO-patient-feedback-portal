@@ -321,16 +321,9 @@ export function getSafeDefaults(): Record<string, any> {
   };
 }
 
-// Enhanced field mapping suggestions with intelligent matching
-export function generateMappingSuggestions(
-  csvHeaders: string[], 
-  table: keyof typeof TABLE_SCHEMAS
-): ImportMapping {
-  const schema = TABLE_SCHEMAS[table];
-  const mapping: ImportMapping = {};
-  
-  // Enhanced fuzzy matching with more comprehensive patterns
-  const fuzzyMatches: { [key: string]: string[] } = {
+// Get table-specific fuzzy matches to avoid duplicate property names
+function getFuzzyMatchesForTable(table: keyof typeof TABLE_SCHEMAS): { [key: string]: string[] } {
+  const allFuzzyMatches: { [key: string]: string[] } = {
     // Core participant fields
     'youthParticipant': ['name', 'participant', 'youth', 'student', 'participant name', 'full name', 'fullname', 'first name', 'last name', 'given name', 'surname', 'family name'],
     'email': ['email', 'e-mail', 'email address', 'e-mail address', 'mail', 'electronic mail', 'contact email', 'primary email', 'email id', 'email_id', 'emailaddress'],
@@ -379,17 +372,37 @@ export function generateMappingSuggestions(
     'interviewNotes': ['interview notes', 'meeting notes', 'interview comments', 'interview remarks', 'interview feedback', 'interview summary', 'interview details', 'interview_record', 'meeting_comments', 'interview_comments', 'interview_feedback'],
     'recruited': ['recruited', 'recruitment', 'source', 'recruitment source', 'recruited from', 'recruitment method', 'recruitment channel', 'recruitment_source', 'recruited_flag', 'recruitment_status', 'recruitment_method'],
 
-    // Mentor fields
+    // Mentor fields (using actual database field names)
     'name': ['name', 'mentor', 'mentor name', 'full name'],
-    // title removed
-    'email': ['email', 'email address', 'mentor email', 'contact email'],
     'phone': ['phone', 'phone number', 'contact', 'contact number', 'telephone', 'mobile'],
     'vulnerableSectorCheck': ['vulnerable sector check', 'vsc', 'sector check', 'background check', 'police check'],
-    'contractSigned': ['contract', 'mentor contract signed', 'agreement signed', 'signed contract'],
-    'availability': ['availability', 'available', 'schedule', 'times'],
     'assignedStudents': ['assigned youth', 'assigned students', 'students', 'youth list', 'youth ids', 'participant ids'],
     'file': ['file', 'document', 'attachment', 'url']
   };
+
+  // Filter matches based on the table schema
+  const schema = TABLE_SCHEMAS[table];
+  const filteredMatches: { [key: string]: string[] } = {};
+  
+  Object.entries(allFuzzyMatches).forEach(([field, variations]) => {
+    if (schema.required.includes(field) || schema.optional.includes(field)) {
+      filteredMatches[field] = variations;
+    }
+  });
+  
+  return filteredMatches;
+}
+
+// Enhanced field mapping suggestions with intelligent matching
+export function generateMappingSuggestions(
+  csvHeaders: string[], 
+  table: keyof typeof TABLE_SCHEMAS
+): ImportMapping {
+  const schema = TABLE_SCHEMAS[table];
+  const mapping: ImportMapping = {};
+  
+  // Get table-specific fuzzy matches
+  const fuzzyMatches = getFuzzyMatchesForTable(table);
   
   // Try to match headers to schema fields
   csvHeaders.forEach(header => {
