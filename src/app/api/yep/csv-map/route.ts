@@ -203,11 +203,6 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
       'postal address', 'street address', 'home', 'residence', 'location address',
       'physical address', 'mail address', 'postal code', 'zip code'
     ],
-    phoneNumber: [
-      'phone', 'telephone', 'mobile', 'cell', 'contact number', 'phone number',
-      'mobile number', 'cell phone', 'telephone number', 'contact', 'phone_no',
-      'mobile_phone', 'cell_phone', 'telephone_no', 'contact_phone'
-    ],
     region: [
       'region', 'province', 'state', 'location', 'geographic region', 'area',
       'territory', 'jurisdiction', 'administrative region', 'geographic area',
@@ -291,10 +286,6 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
       'birth_date', 'date_of_birth', 'birthday_date', 'birthday', 'born', 'birth',
       'date born', 'birthday date', 'date of birth', 'birthday_date'
     ],
-    age: [
-      'age', 'years old', 'age_years', 'current_age', 'age_in_years', 'years',
-      'age group', 'age_range', 'age category', 'age_bracket', 'age_class'
-    ],
     citizenshipStatus: [
       'citizenship', 'citizen status', 'immigration', 'citizenship status',
       'immigration status', 'citizen type', 'citizenship type', 'residency',
@@ -332,11 +323,6 @@ function suggestParticipantCsvMapping(input: z.infer<typeof CsvMappingInputSchem
       'duties', 'responsibilities', 'tasks', 'job duties', 'role duties',
       'responsibility', 'task list', 'job responsibilities', 'role responsibilities',
       'duty_list', 'responsibility_list', 'task_list', 'job_duties'
-    ],
-    affiliationWithSCD: [
-      'scd affiliation', 'scd connection', 'scd relationship', 'affiliation with scd',
-      'sickle cell affiliation', 'scd connection type', 'scd relationship type',
-      'scd_affiliation', 'scd_connection', 'scd_relationship', 'sickle_cell_affiliation'
     ],
     notes: [
       'notes', 'comments', 'remarks', 'additional', 'additional notes', 'comments notes',
