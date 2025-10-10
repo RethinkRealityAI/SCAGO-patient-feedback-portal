@@ -122,13 +122,13 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
     if (isOpen) {
       loadData();
     }
-  }, [isOpen, loadData]);
+  }, [isOpen]); // Removed loadData from dependencies to prevent infinite loop
 
   useEffect(() => {
     if (preselectedAdvisor) {
       form.setValue('advisorId', preselectedAdvisor);
     }
-  }, [preselectedAdvisor, form]);
+  }, [preselectedAdvisor]); // Removed form from dependencies to prevent infinite loop
 
   const handleStudentToggle = useCallback((studentId: string) => {
     setSelectedStudents(prevStudents => {
@@ -141,7 +141,7 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
       
       return newSelection;
     });
-  }, [form]);
+  }, []); // Removed form from dependencies to prevent infinite loop - form is stable
 
   const handleTopicToggle = useCallback((topic: string) => {
     setSelectedTopics(prevTopics => {
@@ -154,18 +154,18 @@ export function BulkMeetingForm({ isOpen, onClose, onSuccess, preselectedAdvisor
       
       return newTopics;
     });
-  }, [form]);
+  }, []); // Removed form from dependencies to prevent infinite loop - form is stable
 
   const handleSelectAllStudents = useCallback(() => {
     const allIds = participants.map(p => p.id);
     setSelectedStudents(allIds);
     form.setValue('studentIds', allIds, { shouldValidate: true });
-  }, [participants, form]);
+  }, [participants]); // Removed form from dependencies to prevent infinite loop - form is stable
 
   const handleSelectNoneStudents = useCallback(() => {
     setSelectedStudents([]);
     form.setValue('studentIds', [], { shouldValidate: true });
-  }, [form]);
+  }, []); // Removed form from dependencies to prevent infinite loop - form is stable
 
   const onSubmit = async (data: BulkMeetingFormData) => {
     setIsLoading(true);
