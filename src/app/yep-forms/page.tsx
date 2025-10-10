@@ -1,11 +1,14 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { CreateYEPFormDropdown, DeleteYEPFormButton } from './client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Trash2, FileText, Users, Calendar, ClipboardList, UserCheck, UserPlus } from 'lucide-react';
 import { getYEPFormTemplates } from './actions';
-import { YEPFormCategory } from '@/lib/yep-forms-types';
+import { YEPFormCategory, YEPFormTemplate } from '@/lib/yep-forms-types';
+import { useAuth } from '@/hooks/use-auth';
 
 function YEPFormListSkeleton() {
   return (
@@ -70,13 +73,14 @@ function getCategoryLabel(category: YEPFormCategory) {
   }
 }
 
-async function YEPFormList() {
-  const result = await getYEPFormTemplates();
-  const forms = result.success ? result.data : [];
+function YEPFormList({ forms, loading }: { forms: YEPFormTemplate[]; loading: boolean }) {
+  if (loading) {
+    return <YEPFormListSkeleton />;
+  }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-      {(forms || []).map((form: any) => (
+      {(forms || []).map((form: YEPFormTemplate) => (
         <div
           key={form.id}
           className="glass-card p-6 group hover:-translate-y-1 transition-all duration-300 hover:shadow-lg"
@@ -125,6 +129,80 @@ async function YEPFormList() {
 }
 
 export default function YEPFormsPage() {
+  const [forms, setForms] = useState<YEPFormTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    async function loadForms() {
+      // Only load forms if user is authenticated
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await getYEPFormTemplates();
+        
+        if (result.success && result.data) {
+          setForms(result.data);
+        } else {
+          setError(result.error || 'Failed to load forms');
+          setForms([]);
+        }
+      } catch (err) {
+        console.error('Error loading YEP forms:', err);
+        setError('Failed to load forms');
+        setForms([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadForms();
+  }, [user]);
+
+  // Show authentication message if not logged in
+  if (!user) {
+    return (
+      <div className="container flex flex-col gap-6 py-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">YEP Forms</h1>
+            <p className="text-muted-foreground mt-2">Create and manage forms for the Youth Empowerment Program</p>
+          </div>
+        </div>
+        <div className="glass-card p-6 text-center">
+          <p className="text-muted-foreground">Please log in to access YEP forms.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && !loading) {
+    return (
+      <div className="container flex flex-col gap-6 py-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">YEP Forms</h1>
+            <p className="text-muted-foreground mt-2">Create and manage forms for the Youth Empowerment Program</p>
+          </div>
+          <CreateYEPFormDropdown />
+        </div>
+        <div className="glass-card p-6 text-center">
+          <p className="text-red-600 mb-4">Error loading forms: {error}</p>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container flex flex-col gap-6 py-6">
       <div className="flex items-center justify-between">
@@ -134,9 +212,7 @@ export default function YEPFormsPage() {
         </div>
         <CreateYEPFormDropdown />
       </div>
-      <React.Suspense fallback={<YEPFormListSkeleton />}>
-        <YEPFormList />
-      </React.Suspense>
+      <YEPFormList forms={forms} loading={loading} />
     </div>
   );
 }
