@@ -228,15 +228,15 @@ export const questionBank: Record<string, QuestionTemplate[]> = {
     {
       id: 'visitType',
       name: 'Visit Type',
-      description: 'Type of hospital visit (Outpatient, Emergency, Inpatient)',
+      description: 'Type of hospital visit (Outpatient, Emergency, Inpatient) - Multi-select supported',
       category: 'Healthcare',
       tags: ['visit', 'hospital', 'appointment'],
       icon: '🏥',
       popular: true,
       fieldConfig: {
         id: 'visitType',
-        type: 'radio',
-        label: 'Which type of hospital encounter did you have?',
+        type: 'checkbox',
+        label: 'Which type of hospital encounter did you have? (Select all that apply)',
         validation: { required: true },
         options: [
           { id: nanoid(), label: 'Outpatient clinic visit', value: 'outpatient' },

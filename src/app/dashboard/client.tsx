@@ -2011,7 +2011,14 @@ export default function Dashboard() {
                             ['Experience', activeSubmission.hospitalInteraction],
                             ...Object.entries(activeSubmission)
                               .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction'].includes(key))
-                              .map(([key, value]) => [key, typeof value === 'object' ? JSON.stringify(value) : String(value)])
+                              .map(([key, value]) => [
+                                key, 
+                                Array.isArray(value) 
+                                  ? value.join('; ') 
+                                  : typeof value === 'object' 
+                                    ? JSON.stringify(value) 
+                                    : String(value)
+                              ])
                           ].map(row => row.join(',')).join('\n')
                           
                           const blob = new Blob([csv], { type: 'text/csv' })
@@ -2157,9 +2164,13 @@ export default function Dashboard() {
                             <AlertCircle className="h-5 w-5 text-purple-500" />
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Visit Type</p>
+                            <p className="text-xs text-muted-foreground">Visit Type{Array.isArray((activeSubmission as any).visitType) && (activeSubmission as any).visitType.length > 1 ? 's' : ''}</p>
                             <p className="text-sm font-bold">
-                              {(activeSubmission as any).visitType}
+                              {Array.isArray((activeSubmission as any).visitType) 
+                                ? (activeSubmission as any).visitType.map((type: string) => 
+                                    type.charAt(0).toUpperCase() + type.slice(1)
+                                  ).join(', ')
+                                : (activeSubmission as any).visitType}
                             </p>
                           </div>
                         </div>

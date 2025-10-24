@@ -148,19 +148,24 @@ export const defaultSurvey = {
         },
         {
           id: 'experienced',
-          label: 'Did you experience any of the following AS A RESULT of you seeking treatment during this interaction?',
-          type: 'radio',
+          label: 'Did you experience any of the following AS A RESULT of you seeking treatment during this interaction? (Select all that apply)',
+          type: 'checkbox',
           options: [
             { id: nanoid(), label: 'Stigmatization or stereotyping', value: 'stigmatization-stereotyping' },
             { id: nanoid(), label: 'Anxiety', value: 'anxiety' },
             { id: nanoid(), label: 'Helplessness or Isolation', value: 'helplessness-isolation' },
+            { id: nanoid(), label: 'Disrespect', value: 'disrespect' },
+            { id: nanoid(), label: 'Bullying', value: 'bullying' },
+            { id: nanoid(), label: 'Attentiveness', value: 'attentiveness' },
+            { id: nanoid(), label: 'Compassion/empathy', value: 'compassion-empathy' },
+            { id: nanoid(), label: 'Understanding', value: 'understanding' },
             { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
         {
             id: 'experiencedOther',
-            label: 'If other, please specify:',
-            type: 'text',
+            label: 'Please elaborate:',
+            type: 'textarea',
             conditionField: 'experienced',
             conditionValue: 'other',
         }
@@ -389,8 +394,8 @@ export const surveyV2 = {
       fields: [
         {
           id: 'visitType',
-          label: 'Which type of hospital encounter did you have on your most recent visit?',
-          type: 'radio',
+          label: 'Which type of hospital encounter did you have on your most recent visit? (Select all that apply)',
+          type: 'checkbox',
           options: [
             { id: nanoid(), label: 'Outpatient clinic visit (in person or virtual)', value: 'outpatient' },
             { id: nanoid(), label: 'Emergency department (in person or virtual)', value: 'emergency' },
@@ -425,6 +430,20 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
+        { id: 'rightInvestigationsRationaleOutpatient', label: 'Please provide details:', type: 'textarea', conditionField: 'rightInvestigationsOutpatient', conditionValue: 'no' },
+        {
+          id: 'timelyMannerOutpatient',
+          label: 'Did you feel you were attended to in a timely manner?',
+          type: 'select',
+          conditionField: 'visitType',
+          conditionValue: 'outpatient',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ],
+        },
+        { id: 'timelyMannerRationaleOutpatient', label: 'Please provide rationale:', type: 'textarea', conditionField: 'timelyMannerOutpatient', conditionValue: 'no' },
         {
           id: 'optimalTimeOutpatient',
           label: 'Did you feel that you had an optimal amount of time?',
@@ -480,7 +499,6 @@ export const surveyV2 = {
         // Emergency Department Visit
         { id: 'edReceptionRating', label: 'Reception with the first person encountered (e.g., Triage Nurse)', type: 'rating', conditionField: 'visitType', conditionValue: 'emergency' },
         { id: 'triageNurseName', label: 'Name of Triage Nurse', type: 'text', conditionField: 'visitType', conditionValue: 'emergency' },
-        { id: 'visitReasonED', label: 'Reason for this visit? (e.g., pain crisis, fever, surgery, other)', type: 'text', conditionField: 'visitType', conditionValue: 'emergency' },
         {
           id: 'wasPainCrisisED',
           label: 'Was this visit for a pain crisis?',
@@ -493,21 +511,27 @@ export const surveyV2 = {
           ],
         },
         { id: 'timeToAnalgesiaED', label: 'If pain crisis, how long before the first analgesia was administered?', type: 'duration-hm', conditionField: 'wasPainCrisisED', conditionValue: 'yes' },
+        { id: 'visitReasonED', label: 'Reason for this visit? (e.g., fever, surgery, if other please specify)', type: 'text', conditionField: 'wasPainCrisisED', conditionValue: 'no' },
         { id: 'hcpRespectfulnessED', label: 'How respectful were the HCPs of your needs and concerns?', type: 'textarea', conditionField: 'visitType', conditionValue: 'emergency' },
         {
           id: 'experiencedED',
-          label: 'Did you experience any of the following as a result of seeking treatment during this interaction?',
-          type: 'radio',
+          label: 'Did you experience any of the following as a result of seeking treatment during this interaction? (Select all that apply)',
+          type: 'checkbox',
           conditionField: 'visitType',
           conditionValue: 'emergency',
           options: [
             { id: nanoid(), label: 'Stigmatization or stereotyping', value: 'stigmatization-stereotyping' },
             { id: nanoid(), label: 'Anxiety', value: 'anxiety' },
             { id: nanoid(), label: 'Helplessness or Isolation', value: 'helplessness-isolation' },
+            { id: nanoid(), label: 'Disrespect', value: 'disrespect' },
+            { id: nanoid(), label: 'Bullying', value: 'bullying' },
+            { id: nanoid(), label: 'Attentiveness', value: 'attentiveness' },
+            { id: nanoid(), label: 'Compassion/empathy', value: 'compassion-empathy' },
+            { id: nanoid(), label: 'Understanding', value: 'understanding' },
             { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
-        { id: 'experiencedOtherED', label: 'If other, please specify:', type: 'text', conditionField: 'experiencedED', conditionValue: 'other' },
+        { id: 'experiencedOtherED', label: 'Please elaborate:', type: 'textarea', conditionField: 'experiencedED', conditionValue: 'other' },
         { id: 'clinicianNamesED', label: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care', type: 'textarea', conditionField: 'visitType', conditionValue: 'emergency' },
         {
           id: 'rightInvestigationsED',
@@ -521,6 +545,20 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
+        { id: 'rightInvestigationsRationaleED', label: 'Please provide details:', type: 'textarea', conditionField: 'rightInvestigationsED', conditionValue: 'no' },
+        {
+          id: 'timelyMannerED',
+          label: 'Did you feel you were attended to in a timely manner?',
+          type: 'select',
+          conditionField: 'visitType',
+          conditionValue: 'emergency',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ],
+        },
+        { id: 'timelyMannerRationaleED', label: 'Please provide rationale:', type: 'textarea', conditionField: 'timelyMannerED', conditionValue: 'no' },
         { id: 'edStayLength', label: 'How long was your emergency department stay?', type: 'time-amount', conditionField: 'visitType', conditionValue: 'emergency' },
         {
           id: 'hcpFamiliarityED',
@@ -563,6 +601,7 @@ export const surveyV2 = {
         { id: 'reportNotDoneReasonED', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalED', conditionValue: 'no', options: [ { id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' } ] },
         { id: 'reportNotDoneReasonOtherED', label: 'If other, please specify:', type: 'text', conditionField: 'reportNotDoneReasonED', conditionValue: 'other' },
         { id: 'followUpPlanED', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'emergency', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'scagoFollowUpED', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanED', conditionValue: 'yes', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
         { id: 'anythingElseED', label: 'Is there anything else you would like us to know about this hospital interaction?', type: 'textarea', conditionField: 'visitType', conditionValue: 'emergency' },
 
         // Inpatient Admission
@@ -581,6 +620,20 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
+        { id: 'rightInvestigationsRationaleInpatient', label: 'Please provide details:', type: 'textarea', conditionField: 'rightInvestigationsInpatient', conditionValue: 'no' },
+        {
+          id: 'timelyMannerInpatient',
+          label: 'Did you feel you were attended to in a timely manner?',
+          type: 'select',
+          conditionField: 'visitType',
+          conditionValue: 'inpatient',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ],
+        },
+        { id: 'timelyMannerRationaleInpatient', label: 'Please provide rationale:', type: 'textarea', conditionField: 'timelyMannerInpatient', conditionValue: 'no' },
         { id: 'hospitalStayLengthInpatient', label: 'How long was your hospital stay?', type: 'time-amount', conditionField: 'visitType', conditionValue: 'inpatient' },
         { id: 'clinicianNamesInpatient', label: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care', type: 'textarea', conditionField: 'visitType', conditionValue: 'inpatient' },
         {
@@ -598,18 +651,23 @@ export const surveyV2 = {
         { id: 'hcpRespectfulnessInpatient', label: 'How respectful were the HCPs of your needs and concerns?', type: 'textarea', conditionField: 'visitType', conditionValue: 'inpatient' },
         {
           id: 'experiencedInpatient',
-          label: 'Did you experience any of the following as a result of seeking treatment during this interaction?',
-          type: 'radio',
+          label: 'Did you experience any of the following as a result of seeking treatment during this interaction? (Select all that apply)',
+          type: 'checkbox',
           conditionField: 'visitType',
           conditionValue: 'inpatient',
           options: [
             { id: nanoid(), label: 'Stigmatization or stereotyping', value: 'stigmatization-stereotyping' },
             { id: nanoid(), label: 'Anxiety', value: 'anxiety' },
             { id: nanoid(), label: 'Helplessness or Isolation', value: 'helplessness-isolation' },
+            { id: nanoid(), label: 'Disrespect', value: 'disrespect' },
+            { id: nanoid(), label: 'Bullying', value: 'bullying' },
+            { id: nanoid(), label: 'Attentiveness', value: 'attentiveness' },
+            { id: nanoid(), label: 'Compassion/empathy', value: 'compassion-empathy' },
+            { id: nanoid(), label: 'Understanding', value: 'understanding' },
             { id: nanoid(), label: 'Other', value: 'other' },
           ],
         },
-        { id: 'experiencedOtherInpatient', label: 'If other, please specify:', type: 'text', conditionField: 'experiencedInpatient', conditionValue: 'other' },
+        { id: 'experiencedOtherInpatient', label: 'Please elaborate:', type: 'textarea', conditionField: 'experiencedInpatient', conditionValue: 'other' },
         {
           id: 'optimalTimeInpatient',
           label: 'Did you feel that you had an optimal amount of time?',
@@ -639,6 +697,7 @@ export const surveyV2 = {
         { id: 'reportNotDoneReasonInpatient', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalInpatient', conditionValue: 'no', options: [ { id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' } ] },
         { id: 'reportNotDoneReasonOtherInpatient', label: 'If other, please specify:', type: 'text', conditionField: 'reportNotDoneReasonInpatient', conditionValue: 'other' },
         { id: 'followUpPlanInpatient', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'scagoFollowUpInpatient', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanInpatient', conditionValue: 'yes', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
         { id: 'anythingElseInpatient', label: 'Is there anything else you would like us to know about this hospital interaction?', type: 'textarea', conditionField: 'visitType', conditionValue: 'inpatient' },
 
         // Additional Feedback (not type-specific)

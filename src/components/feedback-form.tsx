@@ -281,6 +281,10 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
             if (controlling && (controlling.type === 'boolean-checkbox' || controlling.type === 'anonymous-toggle')) {
                 return String(actual) === String(expected);
             }
+            // Support array-based conditions (for checkbox fields like multi-select visitType)
+            if (controlling && controlling.type === 'checkbox' && Array.isArray(actual)) {
+                return actual.includes(expected);
+            }
             return actual === expected;
         };
 
@@ -785,6 +789,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             return actualValue === expectedBoolean;
         }
     
+        // Support array-based conditions (for checkbox fields like multi-select visitType)
+        if (conditionField.type === 'checkbox' && Array.isArray(actualValue)) {
+            return actualValue.includes(expectedValue);
+        }
+    
         return actualValue === expectedValue;
     };
 
@@ -1029,7 +1038,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   const isAnonymous = anonField ? !!(watchedValues as any)[anonField.id] : false;
                   // Engagement gating: if this is the V2 engagement section, hide all except visitType until selected
                   const isEngagementSection = section.id === 'v2-hospital-engagement-section';
-                  const hideUntilVisitType = isEngagementSection && !(watchedValues as any)['visitType'];
+                  const visitTypeValue = (watchedValues as any)['visitType'];
+                  const hideUntilVisitType = isEngagementSection && (!visitTypeValue || (Array.isArray(visitTypeValue) && visitTypeValue.length === 0));
                   return (
                     <Card key={section.id} className="rounded-lg border p-5 shadow-sm hover:shadow-md hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out md:hover:shadow-lg md:hover:-translate-y-2 md:hover:scale-[1.02] sm:shadow-md sm:-translate-y-1 sm:scale-[1.01]">
                       <CardHeader className="p-0">

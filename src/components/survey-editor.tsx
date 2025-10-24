@@ -396,7 +396,11 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                                 <FormControl>
                                     {conditionalFieldType === 'boolean-checkbox' ? (<Switch checked={formField.value === 'true'} onCheckedChange={(checked: boolean) => formField.onChange(String(checked))} />) : (<Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="Enter the required value" />)}
                                 </FormControl>
-                                <FormDescription>For Yes/No questions, the value is 'true' or 'false'. For others, use the option's value (e.g., 'option-1').</FormDescription>
+                                <FormDescription>
+                                    {conditionalFieldType === 'checkbox' 
+                                        ? 'For checkbox fields (multi-select), enter one value (e.g., "outpatient"). The field will show when that value is selected.'
+                                        : 'For Yes/No questions, the value is \'true\' or \'false\'. For others, use the option\'s value (e.g., \'option-1\').'}
+                                </FormDescription>
                             <FormMessage /></FormItem>
                         )} />
                     )}
