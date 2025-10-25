@@ -482,7 +482,7 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
-        Now make any enhancements to the editor itself that you can think of to make everything a smoother experience. Whether UI or UX, for things that are good and well-functioning, keep them, but just make any improvements you think would be great to have based on what we're doing and ensure they're working well.        {
+        {
           id: 'hcpRespectfulnessOutpatient',
           label: 'How respectful were the HCPs of your needs and concerns?',
           type: 'select',
