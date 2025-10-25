@@ -23,7 +23,6 @@ const missingConfigs = Object.entries(firebaseConfig)
 
 if (missingConfigs.length > 0) {
   console.error('Missing Firebase configuration values:', missingConfigs);
-  console.error('Current config:', firebaseConfig);
   throw new Error(`Missing required Firebase configuration: ${missingConfigs.join(', ')}`);
 }
 
