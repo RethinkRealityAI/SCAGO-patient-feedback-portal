@@ -97,11 +97,6 @@ export const defaultSurvey = {
           type: 'textarea',
         },
         {
-          id: 'visitReason',
-          label: 'Reason for this visit? (e.g., pain, fever, surgery, regular visit)',
-          type: 'text',
-        },
-        {
           id: 'inPainCrisis',
           label: 'Were you in the hospital for pain crisis?',
           type: 'radio',
@@ -116,6 +111,13 @@ export const defaultSurvey = {
           type: 'duration-hm',
           conditionField: 'inPainCrisis',
           conditionValue: 'yes',
+        },
+        {
+          id: 'visitReason',
+          label: 'Reason for this visit? (e.g., fever, surgery, if other please specify)',
+          type: 'text',
+          conditionField: 'inPainCrisis',
+          conditionValue: 'no',
         },
         {
           id: 'admittedToWard',
@@ -225,6 +227,30 @@ export const defaultSurvey = {
                 { id: nanoid(), label: 'No', value: 'no' },
                 { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
             ]
+        },
+        {
+            id: 'rightInvestigationRationale',
+            label: 'Please provide details:',
+            type: 'textarea',
+            conditionField: 'rightInvestigationConducted',
+            conditionValue: 'no',
+        },
+        {
+            id: 'timelyManner',
+            label: 'Did you feel you were attended to in a timely manner?',
+            type: 'select',
+            options: [
+                { id: nanoid(), label: 'Yes', value: 'yes' },
+                { id: nanoid(), label: 'No', value: 'no' },
+                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+            ]
+        },
+        {
+            id: 'timelyMannerRationale',
+            label: 'Please provide rationale:',
+            type: 'textarea',
+            conditionField: 'timelyManner',
+            conditionValue: 'no',
         },
         {
             id: 'concernsAddressed',
