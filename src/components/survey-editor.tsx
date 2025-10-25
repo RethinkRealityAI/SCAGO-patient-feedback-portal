@@ -30,6 +30,14 @@ import { QuestionBankSelector } from '@/components/question-bank-selector';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
+const otherOptionSchema = z.object({
+  enabled: z.boolean(),
+  optionValue: z.string(),
+  fieldType: z.enum(['text', 'textarea']),
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  required: z.boolean().optional(),
+}).optional();
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
@@ -57,6 +65,7 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   helperText: z.string().optional(),
   prefix: z.string().optional(),
   suffix: z.string().optional(),
+  otherOption: otherOptionSchema,
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
 const appearanceSchema = z.object({
@@ -91,7 +100,24 @@ const surveySchema = z.object({
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
-interface FormFieldConfig { id: string; label: string; type: any; options?: any[]; fields?: FormFieldConfig[]; conditionField?: string; conditionValue?: any; validation?: { required?: boolean; pattern?: string; }; }
+interface FormFieldConfig { 
+  id: string; 
+  label: string; 
+  type: any; 
+  options?: any[]; 
+  fields?: FormFieldConfig[]; 
+  conditionField?: string; 
+  conditionValue?: any; 
+  validation?: { required?: boolean; pattern?: string; }; 
+  otherOption?: {
+    enabled: boolean;
+    optionValue: string;
+    fieldType: 'text' | 'textarea';
+    label?: string;
+    placeholder?: string;
+    required?: boolean;
+  };
+}
 
 // Event handler to prevent dnd-kit from capturing clicks on interactive elements
 const stopPropagation = (e: React.PointerEvent) => e.stopPropagation();
