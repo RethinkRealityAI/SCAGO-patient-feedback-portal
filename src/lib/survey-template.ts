@@ -337,11 +337,11 @@ export const surveyV2 = {
   },
   title: 'Patient Feedback Survey (V2)',
   description: 'This survey has two sections. Contact info helps us follow up if needed. Hospital engagement questions adapt to your visit type.',
-  submitButtonLabel: 'Submit',
+  submitButtonLabel: '',
   saveProgressEnabled: true,
   shareButtonEnabled: true,
   shareTitle: 'Share this survey',
-  shareText: 'I’d like your feedback—please fill out this survey.',
+  shareText: 'I\'d like your feedback—please fill out this survey.',
   sections: [
     {
       id: 'v2-contact-information-section',
