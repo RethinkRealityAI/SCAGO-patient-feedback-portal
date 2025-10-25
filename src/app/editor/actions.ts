@@ -177,12 +177,17 @@ export async function updateSurvey(
 
     return {};
   } catch (e) {
-    console.error(e);
-    if (e instanceof Error && e.message.includes('permission-denied')) {
-      return {
-        error:
-          'Saving failed due to a permission error. Please check your Firestore security rules.',
-      };
+    console.error('updateSurvey error:', e);
+    console.error('Error details:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+    if (e instanceof Error) {
+      console.error('Error message:', e.message);
+      console.error('Error stack:', e.stack);
+      if (e.message.includes('permission-denied')) {
+        return {
+          error:
+            'Saving failed due to a permission error. Please check your Firestore security rules.',
+        };
+      }
     }
     return {
       error:

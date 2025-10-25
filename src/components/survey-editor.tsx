@@ -31,9 +31,9 @@ import { QuestionBankSelector } from '@/components/question-bank-selector';
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
 const otherOptionSchema = z.object({
-  enabled: z.boolean(),
-  optionValue: z.string(),
-  fieldType: z.enum(['text', 'textarea']),
+  enabled: z.boolean().optional(),
+  optionValue: z.string().optional(),
+  fieldType: z.enum(['text', 'textarea']).optional(),
   label: z.string().optional(),
   placeholder: z.string().optional(),
   required: z.boolean().optional(),
