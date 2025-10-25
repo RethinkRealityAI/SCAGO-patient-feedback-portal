@@ -133,6 +133,9 @@ export interface Translation {
   beforeDischargeFollowUpPlan: string;
   advisedFollowUpWithScago: string;
   additionalFeedbackPrompt: string;
+  nameOfTriageNurse: string;
+  nameOfPhysician: string;
+  pleaseElaborate: string;
   experiencedEffectsQuestion: string;
   
   // Consent and Information Collection Terms
@@ -237,6 +240,20 @@ export interface Translation {
   veryFamiliar: string;
   somewhatFamiliar: string;
   notAtAllFamiliar: string;
+  veryRespectful: string;
+  somewhatRespectful: string;
+  neutral: string;
+  notRespectful: string;
+  
+  // Experience options
+  stigmatizationOrStereotyping: string;
+  anxiety: string;
+  helplessnessOrIsolation: string;
+  disrespect: string;
+  bullying: string;
+  attentiveness: string;
+  compassionEmpathy: string;
+  understanding: string;
   
   // Patient types
   patientOption: string;
@@ -406,6 +423,20 @@ export const translations: Record<'en' | 'fr', Translation> = {
   veryFamiliar: 'Very Familiar',
   somewhatFamiliar: 'Somewhat Familiar',
   notAtAllFamiliar: 'Not at all Familiar',
+  veryRespectful: 'Very respectful',
+  somewhatRespectful: 'Somewhat respectful',
+  neutral: 'Neutral',
+  notRespectful: 'Not respectful',
+  
+  // Experience options
+  stigmatizationOrStereotyping: 'Stigmatization or stereotyping',
+  anxiety: 'Anxiety',
+  helplessnessOrIsolation: 'Helplessness or Isolation',
+  disrespect: 'Disrespect',
+  bullying: 'Bullying',
+  attentiveness: 'Attentiveness',
+  compassionEmpathy: 'Compassion/empathy',
+  understanding: 'Understanding',
     
     // Patient types
     patientOption: 'Patient',
@@ -666,6 +697,20 @@ export const translations: Record<'en' | 'fr', Translation> = {
     veryFamiliar: 'Très familier',
     somewhatFamiliar: 'Assez familier',
     notAtAllFamiliar: 'Pas du tout familier',
+    veryRespectful: 'Très respectueux',
+    somewhatRespectful: 'Assez respectueux',
+    neutral: 'Neutre',
+    notRespectful: 'Pas respectueux',
+    
+    // Experience options
+    stigmatizationOrStereotyping: 'Stigmatisation ou stéréotypage',
+    anxiety: 'Anxiété',
+    helplessnessOrIsolation: 'Sentiment d\'impuissance ou d\'isolement',
+    disrespect: 'Manque de respect',
+    bullying: 'Intimidation',
+    attentiveness: 'Attention',
+    compassionEmpathy: 'Compassion/empathie',
+    understanding: 'Compréhension',
     
     // Patient types
     patientOption: 'Patient',
@@ -946,8 +991,22 @@ export function translateOption(option: string, language: 'en' | 'fr' = 'en'): s
     'Last month': 'lastMonth',
     'Ontario': 'ontario',
     'Outpatient clinic visit (in person or virtual)': 'outpatientClinicVisit',
+    'Outpatient clinic visit': 'outpatientClinicVisit',
     'Emergency department (in person or virtual)': 'emergencyDepartment',
+    'Emergency department': 'emergencyDepartment',
     'Inpatient admission': 'inpatientAdmission',
+    'Very respectful': 'veryRespectful',
+    'Somewhat respectful': 'somewhatRespectful',
+    'Neutral': 'neutral',
+    'Not respectful': 'notRespectful',
+    'Stigmatization or stereotyping': 'stigmatizationOrStereotyping',
+    'Anxiety': 'anxiety',
+    'Helplessness or Isolation': 'helplessnessOrIsolation',
+    'Disrespect': 'disrespect',
+    'Bullying': 'bullying',
+    'Attentiveness': 'attentiveness',
+    'Compassion/empathy': 'compassionEmpathy',
+    'Understanding': 'understanding',
     'Select an option': 'selectAnOption',
     'Select a city': 'selectACity',
     'Select a hospital...': 'selectAHospital',
