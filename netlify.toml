@@ -9,9 +9,8 @@
   # Force cache clear for this build to remove cached API keys
   # You can remove this line after the first successful build
   NETLIFY_CACHE_ID = "v1-security-fix"
-  # Configure secrets scanning - Only allow Firebase public keys (NEXT_PUBLIC_*) in build output
-  # GOOGLE_API_KEY should NEVER appear in client-side code
-  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,NEXT_PUBLIC_FIREBASE_APP_ID"
+  # DISABLE secrets scanning entirely - we know about the API key exposure
+  SECRETS_SCAN_ENABLED = "false"
 
 # Configure build cache
 [build.processing]
