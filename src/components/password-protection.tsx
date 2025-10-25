@@ -8,8 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Lock } from 'lucide-react';
 
-const CORRECT_USERNAME = 'scago-admin';
-const CORRECT_PASSWORD = 'healthforms2025!';
+// Note: This is a basic client-side protection for demonstration/development purposes only.
+// For production, use proper server-side authentication with Firebase Auth.
+// These credentials should be moved to environment variables at minimum.
+const CORRECT_USERNAME = process.env.NEXT_PUBLIC_DEMO_USERNAME || 'admin';
+const CORRECT_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'change-me';
 const AUTH_KEY = 'scago-auth-verified';
 
 interface PasswordProtectionProps {

@@ -22,8 +22,8 @@ const missingConfigs = Object.entries(firebaseConfig)
   .map(([key]) => key);
 
 if (missingConfigs.length > 0) {
-  console.error('Missing Firebase configuration values:', missingConfigs);
-  console.error('Current config:', firebaseConfig);
+  console.error('Missing Firebase configuration keys:', missingConfigs);
+  // Don't log actual config values to avoid exposing secrets
   throw new Error(`Missing required Firebase configuration: ${missingConfigs.join(', ')}`);
 }
 
