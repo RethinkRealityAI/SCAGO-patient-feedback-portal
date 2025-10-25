@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DndContext, closestCenter, KeyboardSensor as DndKeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X, Plus, Eraser, GitBranch, Zap } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -246,16 +246,88 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
           </FormItem>
         )} />
         {showOptions && (
-          <div className="space-y-2">
-            <Label>Options</Label>
-            {options.map((option, optionIndex) => (
-              <div key={option.id} className="flex flex-col md:flex-row items-center gap-2">
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label` as any} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Label</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value` as any} render={({ field: formField }) => (<FormItem className="w-full"><FormLabel className="md:sr-only">Value</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} /></FormControl><FormMessage /></FormItem>)} />
-                <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => removeOption(optionIndex)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-              </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" onPointerDown={stopPropagation} onClick={() => appendOption({ id: nanoid(), label: '', value: '' })}>Add Option</Button>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Options</Label>
+              <span className="text-xs text-muted-foreground">{options.length} option{options.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+              {options.map((option, optionIndex) => (
+                <Card key={option.id} className="p-3 bg-background border border-border hover:border-primary/50 transition-colors">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted-foreground min-w-6">#{optionIndex + 1}</span>
+                      <FormField control={control} name={`${fieldPath}.options.${optionIndex}.label` as any} render={({ field: formField }) => (
+                        <FormItem className="flex-1 space-y-0">
+                          <FormControl>
+                            <Input 
+                              {...formField} 
+                              value={formField.value ?? ''} 
+                              onPointerDown={stopPropagation}
+                              placeholder="Option label (shown to user)"
+                              className="h-9"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <Button type="button" variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={() => removeOption(optionIndex)} className="h-9 w-9 shrink-0">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <FormField control={control} name={`${fieldPath}.options.${optionIndex}.value` as any} render={({ field: formField }) => (
+                      <FormItem className="space-y-0">
+                        <FormControl>
+                          <div className="flex items-center gap-2 ml-8">
+                            <span className="text-xs text-muted-foreground">Value:</span>
+                            <Input 
+                              {...formField} 
+                              value={formField.value ?? ''} 
+                              onPointerDown={stopPropagation}
+                              placeholder="option-value (used in logic)"
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onPointerDown={stopPropagation} 
+                onClick={() => appendOption({ id: nanoid(), label: '', value: '' })}
+                className="flex-1"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Option
+              </Button>
+              {options.length > 2 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onPointerDown={stopPropagation}
+                  onClick={() => {
+                    const emptyIndices: number[] = [];
+                    options.forEach((opt, idx) => {
+                      if (!opt.label && !opt.value) emptyIndices.push(idx);
+                    });
+                    emptyIndices.reverse().forEach(idx => removeOption(idx));
+                  }}
+                  className="text-xs"
+                >
+                  <Eraser className="h-4 w-4 mr-1" />
+                  Clear Empty
+                </Button>
+              )}
+            </div>
           </div>
         )}
         {field?.type === 'group' && (
@@ -372,37 +444,161 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
           </div>
         )}
         <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="conditional-logic">
-                <AccordionTrigger onPointerDown={stopPropagation}>Conditional Logic</AccordionTrigger>
-                <AccordionContent className="p-4 space-y-4">
-                    <FormDescription>Show this question only when another question has a specific answer.</FormDescription>
-                    {field?.conditionField && field?.conditionField === (getValues(fieldPath as any) as any)?.id && (
-                      <div className="text-xs text-destructive">A field cannot depend on itself.</div>
-                    )}
-                    <FormField control={control} name={`${fieldPath}.conditionField` as any} render={({ field: formField }) => (
-                        <FormItem><FormLabel>Show when</FormLabel>
-                            <div className="flex items-center gap-2">
-                                <Select onValueChange={formField.onChange} value={formField.value || undefined}>
-                                    <FormControl><SelectTrigger onPointerDown={stopPropagation}><SelectValue placeholder="Select a question..." /></SelectTrigger></FormControl>
-                                    <SelectContent>{availableConditionalFields.map(f => (<SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>))}</SelectContent>
-                                </Select>
-                                {formField.value && <Button variant="ghost" size="icon" onPointerDown={stopPropagation} onClick={clearConditionalLogic}><X className="h-4 w-4" /></Button>}
-                            </div>
-                        <FormMessage /></FormItem>
-                    )} />
+            <AccordionItem value="conditional-logic" className="border rounded-lg">
+                <AccordionTrigger onPointerDown={stopPropagation} className="px-4 hover:no-underline hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="h-4 w-4 text-primary" />
+                    <span>Conditional Logic</span>
                     {conditionalFieldId && (
-                         <FormField control={control} name={`${fieldPath}.conditionValue` as any} render={({ field: formField }) => (
-                            <FormItem><FormLabel>Has the value</FormLabel>
-                                <FormControl>
-                                    {conditionalFieldType === 'boolean-checkbox' ? (<Switch checked={formField.value === 'true'} onCheckedChange={(checked: boolean) => formField.onChange(String(checked))} />) : (<Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="Enter the required value" />)}
-                                </FormControl>
-                                <FormDescription>
-                                    {conditionalFieldType === 'checkbox' 
-                                        ? 'For checkbox fields (multi-select), enter one value (e.g., "outpatient"). The field will show when that value is selected.'
-                                        : 'For Yes/No questions, the value is \'true\' or \'false\'. For others, use the option\'s value (e.g., \'option-1\').'}
-                                </FormDescription>
-                            <FormMessage /></FormItem>
-                        )} />
+                      <span className="ml-2 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-4 space-y-4 bg-muted/30">
+                    <div className="flex items-start gap-2 p-3 bg-background rounded-lg border border-border">
+                      <Zap className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                      <FormDescription className="text-xs leading-relaxed">
+                        Show this question only when another question has a specific answer. Great for creating dynamic, personalized surveys.
+                      </FormDescription>
+                    </div>
+                    
+                    {field?.conditionField && field?.conditionField === (getValues(fieldPath as any) as any)?.id && (
+                      <div className="flex items-center gap-2 p-2 bg-destructive/10 text-destructive rounded text-xs">
+                        <X className="h-3 w-3" />
+                        A field cannot depend on itself.
+                      </div>
+                    )}
+                    
+                    <FormField control={control} name={`${fieldPath}.conditionField` as any} render={({ field: formField }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium flex items-center gap-2">
+                            Show when
+                            {formField.value && (
+                              <span className="text-xs font-normal text-muted-foreground">(trigger question)</span>
+                            )}
+                          </FormLabel>
+                          <div className="flex items-center gap-2">
+                            <Select onValueChange={formField.onChange} value={formField.value || undefined}>
+                              <FormControl>
+                                <SelectTrigger onPointerDown={stopPropagation} className={cn(
+                                  "transition-colors",
+                                  formField.value && "border-primary"
+                                )}>
+                                  <SelectValue placeholder="Select a question..." />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="max-h-72">
+                                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                                  Available Questions
+                                </div>
+                                {availableConditionalFields.length === 0 ? (
+                                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                    No questions available for conditions.
+                                    <br />
+                                    <span className="text-xs">Add select, radio, or checkbox questions first.</span>
+                                  </div>
+                                ) : (
+                                  availableConditionalFields.map(f => (
+                                    <SelectItem key={f.value} value={f.value} className="cursor-pointer">
+                                      {f.label}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {formField.value && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onPointerDown={stopPropagation} 
+                                onClick={clearConditionalLogic}
+                                className="shrink-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                    )} />
+                    
+                    {conditionalFieldId && (
+                      <FormField control={control} name={`${fieldPath}.conditionValue` as any} render={({ field: formField }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium flex items-center gap-2">
+                            Has the value
+                            <span className="text-xs font-normal text-muted-foreground">(condition)</span>
+                          </FormLabel>
+                          <FormControl>
+                            {conditionalFieldType === 'boolean-checkbox' ? (
+                              <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+                                <Switch 
+                                  checked={formField.value === 'true'} 
+                                  onCheckedChange={(checked: boolean) => formField.onChange(String(checked))} 
+                                />
+                                <span className="text-sm">
+                                  {formField.value === 'true' ? 'Checked (true)' : 'Unchecked (false)'}
+                                </span>
+                              </div>
+                            ) : (
+                              <Input 
+                                {...formField} 
+                                value={formField.value ?? ''} 
+                                onPointerDown={stopPropagation} 
+                                placeholder="Enter the required value"
+                                className="font-mono text-sm"
+                              />
+                            )}
+                          </FormControl>
+                          <FormDescription className="text-xs bg-background/50 p-2 rounded border border-border/50">
+                            {conditionalFieldType === 'checkbox' ? (
+                              <span>
+                                <strong>Multi-select:</strong> Enter one value (e.g., <code className="px-1 py-0.5 bg-muted rounded text-xs">outpatient</code>). 
+                                Shows when that value is selected.
+                              </span>
+                            ) : conditionalFieldType === 'boolean-checkbox' ? (
+                              <span>
+                                <strong>Yes/No:</strong> Toggle to set the required state.
+                              </span>
+                            ) : conditionalFieldType === 'radio' || conditionalFieldType === 'select' ? (
+                              <span>
+                                <strong>Single choice:</strong> Enter the exact option value (e.g., <code className="px-1 py-0.5 bg-muted rounded text-xs">option-1</code>).
+                              </span>
+                            ) : (
+                              <span>
+                                Enter the exact value. For Yes/No, use <code className="px-1 py-0.5 bg-muted rounded text-xs">true</code> or <code className="px-1 py-0.5 bg-muted rounded text-xs">false</code>.
+                              </span>
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                    
+                    {conditionalFieldId && (
+                      <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <GitBranch className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                          <div className="text-xs space-y-1">
+                            <div className="font-medium text-primary">Preview Logic</div>
+                            <div className="text-muted-foreground">
+                              This question will <strong className="text-foreground">only show</strong> when{' '}
+                              <strong className="text-primary">
+                                {availableConditionalFields.find(f => f.value === conditionalFieldId)?.label || 'selected question'}
+                              </strong>{' '}
+                              {conditionalFieldType === 'boolean-checkbox' ? (
+                                watch(`${fieldPath}.conditionValue` as any) === 'true' ? 'is checked' : 'is unchecked'
+                              ) : conditionalFieldType === 'checkbox' ? (
+                                <>includes <code className="px-1 py-0.5 bg-background rounded">{watch(`${fieldPath}.conditionValue` as any) || '...'}</code></>
+                              ) : (
+                                <>equals <code className="px-1 py-0.5 bg-background rounded">{watch(`${fieldPath}.conditionValue` as any) || '...'}</code></>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     )}
                 </AccordionContent>
             </AccordionItem>
