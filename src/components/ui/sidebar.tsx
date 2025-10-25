@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -8,6 +8,10 @@ import {
   Home,
   Book,
   FileText,
+  LogOut,
+  User,
+  Shield,
+  Users,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -16,12 +20,27 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { AuthContext } from '@/components/auth/auth-provider';
+import { signOut } from '@/lib/firebase-auth';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user, isAdmin, isYEPManager, userRole } = useContext(AuthContext);
+  const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     try {
@@ -38,6 +57,34 @@ export function Sidebar() {
     try {
       localStorage.setItem('sidebarCollapsed', String(next));
     } catch {}
+  };
+
+  const handleLogout = async () => {
+    const result = await signOut();
+    if (result.error) {
+      toast({
+        title: 'Error',
+        description: result.error,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Logged out',
+        description: 'You have been successfully logged out.',
+      });
+      router.push('/login');
+    }
+  };
+
+  const getUserInitials = (email: string | null) => {
+    if (!email) return 'U';
+    return email.substring(0, 2).toUpperCase();
+  };
+
+  const getRoleBadge = () => {
+    if (isAdmin) return { icon: <Shield className="h-3 w-3" />, label: 'Admin', color: 'text-blue-600' };
+    if (isYEPManager) return { icon: <Users className="h-3 w-3" />, label: 'YEP Manager', color: 'text-green-600' };
+    return { icon: <User className="h-3 w-3" />, label: 'User', color: 'text-gray-600' };
   };
 
   return (
@@ -69,7 +116,88 @@ export function Sidebar() {
         />
       </div>
 
-      <div className="mt-auto">
+      <div className="mt-auto space-y-2">
+        {user && (
+          <div className="border-t pt-2">
+            {isCollapsed ? (
+              <TooltipProvider>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="w-full p-2 h-auto">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">
+                              {getUserInitials(user.email)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="end" className="w-56">
+                        <DropdownMenuLabel className="font-normal">
+                          <div className="flex flex-col space-y-1">
+                            <p className="text-sm font-medium leading-none">{user.email}</p>
+                            <p className="text-xs leading-none text-muted-foreground flex items-center gap-1 mt-1">
+                              {getRoleBadge().icon}
+                              {getRoleBadge().label}
+                            </p>
+                          </div>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
+                          <LogOut className="mr-2 h-4 w-4" />
+                          <span>Log out</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <div className="text-xs">
+                      <div className="font-medium">{user.email}</div>
+                      <div className="text-muted-foreground">{getRoleBadge().label}</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-start p-2 h-auto hover:bg-accent">
+                    <Avatar className="h-8 w-8 mr-3">
+                      <AvatarFallback className="text-xs">
+                        {getUserInitials(user.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col items-start flex-1 min-w-0">
+                      <span className="text-sm font-medium truncate w-full">{user.email}</span>
+                      <span className={cn("text-xs flex items-center gap-1", getRoleBadge().color)}>
+                        {getRoleBadge().icon}
+                        {getRoleBadge().label}
+                      </span>
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user.email}</p>
+                      <p className="text-xs leading-none text-muted-foreground flex items-center gap-1 mt-1">
+                        {getRoleBadge().icon}
+                        {getRoleBadge().label}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
+        
         <Button
           variant="ghost"
           className="w-full justify-start"
