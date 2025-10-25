@@ -162,9 +162,10 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         case 'hospital-on':
         case 'department-on':
             fieldSchema = z.object({
-                selection: z.string(),
+                selection: z.string().optional(),
                 other: z.string().optional(),
             }).refine(data => {
+                // Only validate if selection exists
                 if (data.selection === 'other') {
                     return !!data.other;
                 }
@@ -267,7 +268,8 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
                 case 'city-on':
                 case 'hospital-on':
                 case 'department-on':
-                    return !v || !v.selection || (v.selection === 'other' && !v.other);
+                    // Check if object exists and has a valid selection
+                    return !v || typeof v !== 'object' || !v.selection || v.selection === '' || (v.selection === 'other' && (!v.other || v.other.trim() === ''));
                 case 'duration-hm':
                 case 'duration-dh':
                 case 'time-amount':
@@ -392,7 +394,7 @@ function SelectWithOtherField({ field, options, label, isFrench = false }: { fie
                         <Select onValueChange={selectionField.onChange} value={coerceSelectValue(selectionField.value)}>
                             <FormControl>
                                 <SelectTrigger className="max-w-md">
-                                    <SelectValue placeholder={isFrench ? `Sélectionnez ${label.toLowerCase() === 'city' ? 'une ville' : label.toLowerCase() === 'department' ? 'un département' : 'une option'}` : `Select a ${label.toLowerCase()}`} />
+                                    <SelectValue placeholder={isFrench ? `Sélectionnez ${label.toLowerCase() === 'city' ? 'une ville' : label.toLowerCase() === 'department' ? 'un département' : label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}` : `Select a ${label.toLowerCase()}`} />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -414,7 +416,7 @@ function SelectWithOtherField({ field, options, label, isFrench = false }: { fie
                     render={({ field: otherField }) => (
                         <FormItem>
                             <FormControl>
-                                <Input {...otherField} value={otherField.value ?? ''} placeholder={`Please specify the ${label.toLowerCase()}`} className="max-w-md" />
+                                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="max-w-md" />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -457,7 +459,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
                                         aria-expanded={open}
                                         className="w-full max-w-md justify-between font-normal"
                                     >
-                                        {selectedOption ? translateOption(selectedOption.label, isFrench ? 'fr' : 'en') : (isFrench ? `Sélectionnez ${label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}...` : `Select a ${label.toLowerCase()}...`)}
+                                        {selectedOption ? translateOption(selectedOption.label, isFrench ? 'fr' : 'en') : (isFrench ? `Sélectionnez ${label.toLowerCase() === 'hospital' ? 'un hôpital' : label.toLowerCase() === 'department' ? 'un département' : label.toLowerCase() === 'city' ? 'une ville' : 'une option'}...` : `Select a ${label.toLowerCase()}...`)}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </FormControl>
@@ -465,7 +467,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
                             <PopoverContent className="w-full p-0" align="start">
                                 <div className="p-2">
                                     <Input
-                                        placeholder={isFrench ? `Rechercher ${label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}...` : `Search ${label.toLowerCase()}...`}
+                                        placeholder={isFrench ? `Rechercher ${label.toLowerCase() === 'hospital' ? 'un hôpital' : label.toLowerCase() === 'department' ? 'un département' : label.toLowerCase() === 'city' ? 'une ville' : 'une option'}...` : `Search ${label.toLowerCase()}...`}
                                         value={searchValue}
                                         onChange={(e) => setSearchValue(e.target.value)}
                                         className="mb-2"
@@ -474,7 +476,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
                                 <div className="max-h-60 overflow-y-auto">
                                     {filteredOptions.length === 0 ? (
                                         <div className="p-2 text-sm text-muted-foreground">
-                                            {isFrench ? `Aucun${label.toLowerCase() === 'hospital' ? ' hôpital' : 'e option'} trouvé${label.toLowerCase() === 'hospital' ? '' : 'e'}.` : `No ${label.toLowerCase()} found.`}
+                                            {isFrench ? `${label.toLowerCase() === 'hospital' ? 'Aucun hôpital trouvé.' : label.toLowerCase() === 'department' ? 'Aucun département trouvé.' : label.toLowerCase() === 'city' ? 'Aucune ville trouvée.' : 'Aucune option trouvée.'}` : `No ${label.toLowerCase()} found.`}
                                         </div>
                                     ) : (
                                         filteredOptions.map((option) => (
@@ -510,7 +512,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
                     render={({ field: otherField }) => (
                         <FormItem>
                             <FormControl>
-                                <Input {...otherField} value={otherField.value ?? ''} placeholder={`Please specify the ${label.toLowerCase()}`} className="max-w-md" />
+                                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="max-w-md" />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -900,7 +902,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             </Select>
                         );
                     case 'department-on':
-                        return <SelectWithOtherField field={field} options={hospitalDepartments} label="Department" isFrench={isFrench} />;
+                        return <SelectWithOtherField field={field} options={hospitalDepartments} label={isFrench ? 'Department' : 'Department'} isFrench={isFrench} />;
                     case 'city-on':
                         return <OntarioCityField field={field} isFrench={isFrench} />;
                     case 'hospital-on':

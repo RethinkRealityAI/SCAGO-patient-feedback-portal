@@ -1,0 +1,328 @@
+---
+description: when working with Firebase, Firestore operations, survey creation, survey editing, or any authenticated database writes
+alwaysApply: false
+---
+# Firebase Authentication & Firestore Operations Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: All files performing Firestore write operations
+**Apply To**: 
+- `src/app/*/actions.ts` (server actions)
+- `src/lib/client-actions.ts` (client actions)
+- `src/components/**/*.tsx` (React components)
+- Any file importing Firebase or Firestore
+
+## 🔐 **Critical Architecture Pattern**
+
+### **CLIENT ACTIONS vs SERVER ACTIONS**
+
+This is a **CRITICAL DISTINCTION** that affects authentication and Firestore security rules.
+
+#### ✅ **CLIENT ACTIONS** (`src/lib/client-actions.ts`)
+**When to Use:**
+- Creating surveys
+- Updating surveys
+- Deleting surveys
+- ANY operation requiring admin authentication
+- ANY write operation protected by Firestore security rules
+
+**Why:**
+```typescript
+// CLIENT ACTIONS run in the BROWSER
+// ✅ Has Firebase Auth context (user is authenticated)
+// ✅ Firestore rules can check request.auth.token.email
+// ✅ Admin verification works: isAdmin() checks request.auth
+```
+
+**Import Pattern:**
+```typescript
+// ✅ CORRECT for components
+import { createSurvey, updateSurvey, deleteSurvey } from '@/lib/client-actions';
+```
+
+#### ❌ **SERVER ACTIONS** (`src/app/*/actions.ts`)
+**When to Use:**
+- Read operations (listSurveys, getSurvey)
+- Operations that don't require authentication
+- Server-side rendering data fetching
+- Operations using Firebase Admin SDK (when implemented)
+
+**Why:**
+```typescript
+// SERVER ACTIONS run on the SERVER
+// ❌ NO Firebase Auth context (request.auth is null)
+// ❌ Firestore rules CANNOT check request.auth.token.email
+// ❌ Admin verification FAILS: isAdmin() returns false
+```
+
+**Import Pattern:**
+```typescript
+// ✅ CORRECT for server-side data fetching
+import { listSurveys, getSurvey } from '@/app/editor/actions';
+
+// ❌ WRONG for authenticated writes
+import { createSurvey, updateSurvey } from '@/app/editor/actions'; // PERMISSION DENIED!
+```
+
+## 🚨 **CRITICAL RULES - NEVER VIOLATE**
+
+### Rule 1: Client Components → Client Actions
+```typescript
+// ✅ CORRECT
+'use client';
+import { createSurvey } from '@/lib/client-actions';
+
+function MyComponent() {
+  const handleCreate = async () => {
+    await createSurvey(); // Has auth context
+  };
+}
+```
+
+```typescript
+// ❌ WRONG - Will cause PERMISSION_DENIED errors
+'use client';
+import { createSurvey } from '@/app/editor/actions'; // NO AUTH CONTEXT!
+
+function MyComponent() {
+  const handleCreate = async () => {
+    await createSurvey(); // FAILS - no auth context
+  };
+}
+```
+
+### Rule 2: Check Auth Before Write Operations
+```typescript
+// ✅ CORRECT - Always check auth state
+export async function updateSurvey(surveyId: string, data: any) {
+  // REQUIRED: Check authentication
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.error('[updateSurvey] No authenticated user found');
+    return { error: 'You must be logged in to update surveys.' };
+  }
+  console.log('[updateSurvey] Authenticated as:', currentUser.email);
+  
+  // Proceed with operation
+  await setDoc(doc(db, 'surveys', surveyId), data);
+}
+```
+
+### Rule 3: Imports Must Match Operation Type
+```typescript
+// ✅ CORRECT - Client action imports
+import { db, auth } from '@/lib/firebase'; // Client SDK
+import { setDoc, doc } from 'firebase/firestore'; // Client SDK
+
+// ❌ WRONG - Don't mix Admin SDK patterns without proper setup
+import { getFirestore } from 'firebase-admin/firestore'; // Requires service account
+```
+
+## 📋 **File-Specific Rules**
+
+### `src/lib/client-actions.ts`
+**Purpose:** Client-side Firestore operations WITH authentication
+
+**Required Patterns:**
+```typescript
+'use client'; // MUST be at the top
+
+import { db, auth } from '@/lib/firebase'; // MUST import auth
+
+export async function anyWriteOperation() {
+  // MUST check auth state
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    return { error: 'Not authenticated' };
+  }
+  
+  // MUST log for debugging
+  console.log('[functionName] Authenticated as:', currentUser.email);
+  
+  try {
+    // Perform operation
+  } catch (error) {
+    // MUST provide helpful error messages
+    const err = error as any;
+    if (err?.code === 'permission-denied') {
+      return { 
+        error: `Permission denied. Your email (${currentUser?.email}) must be listed in Firestore config/admins document.` 
+      };
+    }
+  }
+}
+```
+
+### `src/app/*/actions.ts`
+**Purpose:** Server-side operations WITHOUT authentication
+
+**Required Patterns:**
+```typescript
+'use server'; // MUST be at the top
+
+import { db } from '@/lib/firebase'; // NO auth import needed
+
+// ✅ READ operations are OK
+export async function listSurveys() {
+  const snapshot = await getDocs(collection(db, 'surveys'));
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+// ❌ WRITE operations will FAIL
+export async function createSurvey() {
+  // This will get PERMISSION_DENIED because request.auth is null
+  await setDoc(doc(db, 'surveys', id), data); // FAILS!
+}
+```
+
+### Component Files (`src/components/**/*.tsx`, `src/app/**/client.tsx`)
+**Required Patterns:**
+```typescript
+'use client';
+
+// ✅ CORRECT - Use client actions for writes
+import { createSurvey, updateSurvey, deleteSurvey } from '@/lib/client-actions';
+
+// ✅ CORRECT - Can use server actions for reads (in server components)
+import { listSurveys, getSurvey } from '@/app/editor/actions';
+
+function SurveyEditor() {
+  const handleSave = async () => {
+    // ✅ Uses client action - has auth context
+    const result = await updateSurvey(id, data);
+    if (result.error) {
+      // Error message will be helpful
+      toast({ title: 'Error', description: result.error });
+    }
+  };
+}
+```
+
+## 🔍 **Detection Patterns**
+
+### Anti-Pattern Detection
+If you see these patterns, they are **WRONG**:
+
+```typescript
+// 🚨 WRONG - Client component using server action for writes
+'use client';
+import { createSurvey } from './actions'; // From server actions!
+
+// 🚨 WRONG - No auth check before write
+export async function updateSurvey(id, data) {
+  await setDoc(doc(db, 'surveys', id), data); // No auth check!
+}
+
+// 🚨 WRONG - Generic error messages
+catch (error) {
+  return { error: 'Failed' }; // Not helpful!
+}
+```
+
+### Correct Pattern Detection
+These patterns are **CORRECT**:
+
+```typescript
+// ✅ Client component using client action
+'use client';
+import { createSurvey } from '@/lib/client-actions';
+
+// ✅ Auth check before write
+export async function updateSurvey(id, data) {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return { error: 'Not authenticated' };
+  await setDoc(doc(db, 'surveys', id), data);
+}
+
+// ✅ Helpful error messages
+catch (error) {
+  if (error.code === 'permission-denied') {
+    return { error: `Permission denied. Email ${currentUser.email} not in admins list.` };
+  }
+}
+```
+
+## 🧪 **Testing Checklist**
+
+When adding new Firestore operations:
+
+- [ ] Determine if operation needs authentication
+- [ ] If YES → Use `src/lib/client-actions.ts`
+- [ ] If NO → Use `src/app/*/actions.ts`
+- [ ] Add auth check: `const currentUser = auth.currentUser;`
+- [ ] Add logging: `console.log('[functionName] Authenticated as:', currentUser.email);`
+- [ ] Add helpful error messages with email and instructions
+- [ ] Import from correct location in components
+- [ ] Test with browser console open
+- [ ] Verify console shows authentication logs
+- [ ] Test error cases (not authenticated, not admin)
+
+## 📊 **Error Message Standards**
+
+### Authentication Error
+```typescript
+if (!currentUser) {
+  return { error: 'You must be logged in to [operation]. Please refresh the page and try again.' };
+}
+```
+
+### Permission Error
+```typescript
+if (error.code === 'permission-denied') {
+  return { 
+    error: `Permission denied. Your email (${currentUser.email}) must be listed in Firestore config/admins document. Please contact your administrator.` 
+  };
+}
+```
+
+### Generic Error
+```typescript
+catch (error) {
+  console.error('Error in [functionName]:', error);
+  console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
+  return { error: 'Failed to [operation]. Please try again.' };
+}
+```
+
+## 🎯 **Quick Reference**
+
+| Operation | Location | Auth Context | Use For |
+|-----------|----------|--------------|---------|
+| Create Survey | `client-actions.ts` | ✅ Yes | Components |
+| Update Survey | `client-actions.ts` | ✅ Yes | Components |
+| Delete Survey | `client-actions.ts` | ✅ Yes | Components |
+| List Surveys | `actions.ts` | ❌ No | SSR/Reading |
+| Get Survey | `actions.ts` | ❌ No | SSR/Reading |
+
+## 🚨 **If You Get PERMISSION_DENIED**
+
+**Check List:**
+1. Are you importing from `@/lib/client-actions`? (not `./actions`)
+2. Does the function check `auth.currentUser`?
+3. Is your email in Firestore `config/admins` document?
+4. Did you logout/login after being added to admins?
+5. Are Firestore rules deployed correctly?
+
+**Debug Steps:**
+1. Open browser console
+2. Look for log: `[functionName] Authenticated as: your-email`
+3. If "NOT AUTHENTICATED" → Login issue
+4. If shows email but fails → Admin list issue
+5. Check Firestore rules are published
+
+## 💡 **Remember**
+
+**The Golden Rule:**
+> If a Firestore operation requires the user to be an admin (as defined in Firestore security rules), it MUST use CLIENT ACTIONS from `src/lib/client-actions.ts` and be called from a client component.
+
+**Why This Matters:**
+- Server actions have NO authentication context
+- Firestore rules check `request.auth.token.email`
+- Without auth context, `request.auth` is null
+- Therefore, admin checks fail
+- Result: PERMISSION_DENIED error
+
+**Keep It Simple:**
+- Writes that need auth → Client Actions (`@/lib/client-actions`)
+- Reads that don't need auth → Server Actions (`@/app/*/actions`)
+- When in doubt → Use Client Actions

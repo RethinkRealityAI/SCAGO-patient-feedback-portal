@@ -99,6 +99,42 @@ export interface Translation {
   selectAnOption: string;
   selectAHospital: string;
   
+  // Hospital Engagement and Experience
+  hospitalExperienceInDetail: string;
+  dateOfInteraction: string;
+  hospitalNameLabel: string;
+  departmentOrService: string;
+  clinicianNamesDetails: string;
+  yourExperienceLabel: string;
+  timelyMedicationsQuestion: string;
+  rightInvestigationsQuestion: string;
+  pleaseProvideDetails: string;
+  timelyMannerQuestion: string;
+  pleaseProvideRationale: string;
+  concernsAddressedQuestion: string;
+  optimalTimeQuestion: string;
+  reportedToHospitalQuestion: string;
+  reportOutcomeQuestion: string;
+  reportNotDoneReasonQuestion: string;
+  notAwareOfComplaintProcess: string;
+  notComfortable: string;
+  ifOtherPleaseSpecify: string;
+  anythingElseHospitalInteraction: string;
+  npsRatingQuestion: string;
+  receptionFirstPerson: string;
+  reasonForVisit: string;
+  hcpFamiliarityQuestion: string;
+  hcpRespectfulnessQuestion: string;
+  wasVisitForPainCrisis: string;
+  timeToAnalgesiaQuestion: string;
+  howLongWasHospitalStay: string;
+  howLongWasEdStay: string;
+  unitDepartment: string;
+  beforeDischargeFollowUpPlan: string;
+  advisedFollowUpWithScago: string;
+  additionalFeedbackPrompt: string;
+  experiencedEffectsQuestion: string;
+  
   // Consent and Information Collection Terms
   scagoDigitalConsent: string;
   aboutScago: string;
@@ -195,6 +231,12 @@ export interface Translation {
   outpatientClinicVisit: string;
   emergencyDepartment: string;
   inpatientAdmission: string;
+  
+  // Common options used in engagement
+  notApplicable: string;
+  veryFamiliar: string;
+  somewhatFamiliar: string;
+  notAtAllFamiliar: string;
   
   // Patient types
   patientOption: string;
@@ -314,11 +356,56 @@ export const translations: Record<'en' | 'fr', Translation> = {
     selectACity: 'Select a city',
     selectAnOption: 'Select an option',
     selectAHospital: 'Select a hospital...',
+  
+  // Hospital Engagement and Experience
+  hospitalExperienceInDetail: 'Section 2: Hospital Experience in Detail',
+  dateOfInteraction: 'Date of Interaction',
+  hospitalNameLabel: 'Hospital Name',
+  departmentOrService: 'Department or Service',
+  clinicianNamesDetails: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
+  yourExperienceLabel: 'Your Experience',
+  timelyMedicationsQuestion: 'Did you receive timely medications while in the hospital?',
+  rightInvestigationsQuestion: 'Did you feel the right investigation/tests were conducted?',
+  pleaseProvideDetails: 'Please provide details:',
+  timelyMannerQuestion: 'Did you feel you were attended to in a timely manner?',
+  pleaseProvideRationale: 'Please provide rationale:',
+  concernsAddressedQuestion: 'Did you feel your concerns were well addressed?',
+  optimalTimeQuestion: 'Did you feel that you had an optimal amount of time?',
+  reportedToHospitalQuestion: 'Did you report this situation to the hospital?',
+  reportOutcomeQuestion: 'If “Yes”, what was the outcome of your report?',
+  reportNotDoneReasonQuestion: 'If “No”, why not?',
+  notAwareOfComplaintProcess: 'Not aware of complaint process',
+  notComfortable: 'Not comfortable',
+  ifOtherPleaseSpecify: 'If other, please specify:',
+  anythingElseHospitalInteraction: 'Is there anything else you would like us to know about this hospital interaction?',
+  npsRatingQuestion: 'On a scale of 1-10, what would you rate the quality of care you received?',
+  receptionFirstPerson: 'Reception with the first person encountered',
+  reasonForVisit: 'Reason for this visit (e.g., pain, fever, surgery, regular visit)',
+  hcpFamiliarityQuestion: 'How familiar were the health care providers (HCP) with your condition?',
+  hcpRespectfulnessQuestion: 'How respectful were the HCPs of your needs and concerns?',
+  wasVisitForPainCrisis: 'Was this visit for a pain crisis?',
+  timeToAnalgesiaQuestion: 'If pain crisis, how long before the first analgesia was administered?',
+  howLongWasHospitalStay: 'How long was your hospital stay?',
+  howLongWasEdStay: 'How long was your emergency department stay?',
+  unitDepartment: 'Unit/department',
+  beforeDischargeFollowUpPlan: 'Before being discharged, were you provided with any follow-up plan?',
+  advisedFollowUpWithScago: 'Were you advised to follow up with SCAGO after being discharged?',
+  additionalFeedbackPrompt: 'Anything else you might want to add in your own words?',
+  nameOfTriageNurse: 'Name of Triage Nurse',
+  nameOfPhysician: 'Name of Physician',
+  pleaseElaborate: 'Please elaborate:',
+    experiencedEffectsQuestion: 'Did you experience any of the following as a result of seeking treatment during this interaction? (Select all that apply)',
     
     // Visit types
     outpatientClinicVisit: 'Outpatient clinic visit (in person or virtual)',
     emergencyDepartment: 'Emergency department (in person or virtual)',
     inpatientAdmission: 'Inpatient admission',
+  
+  // Common options used in engagement
+  notApplicable: 'Not Applicable',
+  veryFamiliar: 'Very Familiar',
+  somewhatFamiliar: 'Somewhat Familiar',
+  notAtAllFamiliar: 'Not at all Familiar',
     
     // Patient types
     patientOption: 'Patient',
@@ -530,10 +617,55 @@ export const translations: Record<'en' | 'fr', Translation> = {
     selectAnOption: 'Sélectionnez une option',
     selectAHospital: 'Sélectionnez un hôpital...',
     
+    // Hospital Engagement and Experience
+    hospitalExperienceInDetail: 'Section 2 : Expérience hospitalière en détail',
+    dateOfInteraction: 'Date de l’interaction',
+    hospitalNameLabel: 'Nom de l’hôpital',
+    departmentOrService: 'Département ou service',
+    clinicianNamesDetails: 'Nom du médecin, de l’infirmière et des autres cliniciens offrant des soins optimaux ou sous-optimaux',
+    yourExperienceLabel: 'Votre expérience',
+    timelyMedicationsQuestion: 'Avez-vous reçu vos médicaments en temps opportun à l’hôpital ?',
+    rightInvestigationsQuestion: 'Pensez-vous que les bonnes investigations/tests ont été effectués ?',
+    pleaseProvideDetails: 'Veuillez fournir des détails :',
+    timelyMannerQuestion: 'Avez-vous le sentiment d’avoir été pris(e) en charge en temps opportun ?',
+    pleaseProvideRationale: 'Veuillez fournir la raison :',
+    concernsAddressedQuestion: 'Avez-vous le sentiment que vos préoccupations ont été bien prises en compte ?',
+    optimalTimeQuestion: 'Avez-vous l’impression d’avoir eu un temps suffisant ?',
+    reportedToHospitalQuestion: 'Avez-vous rapporté cette situation à l’hôpital ?',
+    reportOutcomeQuestion: 'Si « Oui », quel a été le résultat de votre signalement ?',
+    reportNotDoneReasonQuestion: 'Si « Non », pourquoi ?',
+    notAwareOfComplaintProcess: 'Non informé(e) du processus de plainte',
+    notComfortable: 'Pas à l’aise',
+    ifOtherPleaseSpecify: 'Si autre, veuillez préciser :',
+    anythingElseHospitalInteraction: 'Souhaitez-vous ajouter autre chose au sujet de cette interaction à l’hôpital ?',
+    npsRatingQuestion: 'Sur une échelle de 1 à 10, quelle note donneriez-vous à la qualité des soins reçus ?',
+    receptionFirstPerson: 'Accueil avec la première personne rencontrée',
+    reasonForVisit: 'Raison de cette visite (p. ex., douleur, fièvre, chirurgie, visite de routine)',
+    hcpFamiliarityQuestion: 'Dans quelle mesure les professionnels de la santé connaissaient-ils votre condition ?',
+    hcpRespectfulnessQuestion: 'Dans quelle mesure les professionnels ont-ils respecté vos besoins et préoccupations ?',
+    wasVisitForPainCrisis: 'S’agissait-il d’une visite pour une crise douloureuse ?',
+    timeToAnalgesiaQuestion: 'En cas de crise douloureuse, combien de temps avant la première analgésie ?',
+    howLongWasHospitalStay: 'Quelle a été la durée de votre hospitalisation ?',
+    howLongWasEdStay: 'Quelle a été la durée de votre séjour à l’urgence ?',
+    unitDepartment: 'Unité/département',
+    beforeDischargeFollowUpPlan: 'Avant votre congé, vous a-t-on fourni un plan de suivi ?',
+    advisedFollowUpWithScago: 'Vous a-t-on conseillé de faire un suivi avec SCAGO après votre congé ?',
+    additionalFeedbackPrompt: 'Autre chose à ajouter avec vos propres mots ?',
+    nameOfTriageNurse: 'Nom de l’infirmier(ère) au triage',
+    nameOfPhysician: 'Nom du médecin',
+    pleaseElaborate: 'Veuillez préciser :',
+    experiencedEffectsQuestion: 'Avez-vous vécu l’un des éléments suivants à la suite de cette interaction pour obtenir des soins? (Sélectionnez tout ce qui s’applique)',
+    
     // Visit types
     outpatientClinicVisit: 'Visite de clinique externe (en personne ou virtuelle)',
     emergencyDepartment: 'Service d\'urgence (en personne ou virtuel)',
     inpatientAdmission: 'Admission en hospitalisation',
+    
+    // Common options used in engagement
+    notApplicable: 'Non applicable',
+    veryFamiliar: 'Très familier',
+    somewhatFamiliar: 'Assez familier',
+    notAtAllFamiliar: 'Pas du tout familier',
     
     // Patient types
     patientOption: 'Patient',
@@ -688,6 +820,45 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
     'Are you a patient or a caregiver?': 'areYouPatientOrCaregiver',
     'Which type of hospital encounter did you have on your most recent visit?': 'whichTypeOfHospitalEncounter',
     'Submit anonymously': 'submitAnonymously',
+    // Hospital Engagement and Experience labels
+    'Section 2: Hospital Experience in Detail': 'hospitalExperienceInDetail',
+    'Date of Interaction': 'dateOfInteraction',
+    'Hospital Name': 'hospitalNameLabel',
+    'Department or Service': 'departmentOrService',
+    'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care': 'clinicianNamesDetails',
+    'Your Experience': 'yourExperienceLabel',
+    'Did you receive timely medications while in the hospital?': 'timelyMedicationsQuestion',
+    'Did you feel the right investigation/tests were conducted?': 'rightInvestigationsQuestion',
+    'Please provide details:': 'pleaseProvideDetails',
+    'Did you feel you were attended to in a timely manner?': 'timelyMannerQuestion',
+    'Please provide rationale:': 'pleaseProvideRationale',
+    'Did you feel your concerns were well addressed?': 'concernsAddressedQuestion',
+    'Did you feel that you had an optimal amount of time?': 'optimalTimeQuestion',
+    'Did you report this situation to the hospital?': 'reportedToHospitalQuestion',
+    'If “Yes”, what was the outcome of your report?': 'reportOutcomeQuestion',
+    'If “No”, why not?': 'reportNotDoneReasonQuestion',
+    'If other, please specify:': 'ifOtherPleaseSpecify',
+    'Is there anything else you would like us to know about this hospital interaction?': 'anythingElseHospitalInteraction',
+    'Is there anything else would you like us to know about this hospital interaction?': 'anythingElseHospitalInteraction',
+    'On a scale of 1-10, what would you rate the quality of care you received?': 'npsRatingQuestion',
+    'Reception with the first person encountered': 'receptionFirstPerson',
+    'Reception with the first person encountered (e.g., Triage Nurse)': 'receptionFirstPerson',
+    'Reason for this visit (e.g., pain, fever, surgery, regular visit)': 'reasonForVisit',
+    'Reason for this visit? (e.g., fever, surgery, if other please specify)': 'reasonForVisit',
+    'How familiar were the health care providers (HCP) with your condition?': 'hcpFamiliarityQuestion',
+    'How respectful were the HCPs of your needs and concerns?': 'hcpRespectfulnessQuestion',
+    'Was this visit for a pain crisis?': 'wasVisitForPainCrisis',
+    'If pain crisis, how long before the first analgesia was administered?': 'timeToAnalgesiaQuestion',
+    'How long was your hospital stay?': 'howLongWasHospitalStay',
+    'How long was your emergency department stay?': 'howLongWasEdStay',
+    'Unit/department': 'unitDepartment',
+    'Before being discharged, were you provided with any follow-up plan?': 'beforeDischargeFollowUpPlan',
+    'Were you advised to follow up with SCAGO after being discharged?': 'advisedFollowUpWithScago',
+    'Anything else you might want to add in your own words?': 'additionalFeedbackPrompt',
+    'Name of Triage Nurse': 'nameOfTriageNurse',
+    'Name of Physician': 'nameOfPhysician',
+    'Please elaborate:': 'pleaseElaborate',
+    'Which type of hospital encounter did you have on your most recent visit? (Select all that apply)': 'whichTypeOfHospitalEncounter',
     // Consent form labels
     'Title': 'title',
     'Street Address': 'streetAddress',
@@ -748,6 +919,12 @@ export function translateOption(option: string, language: 'en' | 'fr' = 'en'): s
     'Yes': 'yes',
     'No': 'no',
     'Other': 'other',
+    'Not Applicable': 'notApplicable',
+    'Very Familiar': 'veryFamiliar',
+    'Somewhat Familiar': 'somewhatFamiliar',
+    'Not at all Familiar': 'notAtAllFamiliar',
+    'Not aware of complaint process': 'notAwareOfComplaintProcess',
+    'Not comfortable': 'notComfortable',
     'Patient': 'patientOption',
     'Caregiver': 'caregiverOption',
     'Visitor': 'visitor',
@@ -815,7 +992,8 @@ export function translateSectionTitle(title: string, language: 'en' | 'fr' = 'en
   
   const sectionMappings: Record<string, keyof Translation> = {
     'Contact Information and Demographics': 'contactInformationAndDemographics',
-    'Hospital Engagement': 'hospitalEngagement'
+    'Hospital Engagement': 'hospitalEngagement',
+    'Section 2: Hospital Experience in Detail': 'hospitalExperienceInDetail'
   };
   
   const mappedKey = sectionMappings[title];

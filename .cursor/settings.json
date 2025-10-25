@@ -45,6 +45,16 @@
       ],
       "priority": "critical",
       "description": "Rule creation, update, and management patterns - always applied"
+    },
+    "firebase-auth-pattern-rules.mdc": {
+      "applyTo": [
+        "src/lib/client-actions.ts",
+        "src/app/**/actions.ts",
+        "src/components/**/*editor*.tsx",
+        "src/app/editor/**/*"
+      ],
+      "priority": "critical",
+      "description": "Firebase authentication context and Firestore operation rules - CRITICAL for preventing PERMISSION_DENIED errors"
     }
   },
   "filePatterns": {
@@ -116,6 +126,23 @@
         "Maintain consistent rule structure and formatting",
         "Remove outdated information from rules",
         "Add new useful patterns to existing rules"
+      ]
+    },
+    "firebase-auth-operations": {
+      "files": [
+        "src/lib/client-actions.ts",
+        "src/app/**/actions.ts",
+        "src/app/editor/client.tsx",
+        "src/components/survey-editor.tsx"
+      ],
+      "rules": [
+        "CRITICAL: Client components MUST use client-actions for authenticated writes",
+        "NEVER import write operations from server actions (./actions)",
+        "Server actions run without auth context and will fail with PERMISSION_DENIED",
+        "Always check auth.currentUser before Firestore write operations",
+        "Log authentication state for debugging: [functionName] Authenticated as: email",
+        "Provide helpful error messages with user email and next steps",
+        "Import pattern: '@/lib/client-actions' for writes, './actions' for reads only"
       ]
     }
   }

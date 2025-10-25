@@ -6,7 +6,21 @@ import { useTransition, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader, Trash2, Plus, ChevronDown } from 'lucide-react';
-import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey } from './actions';
+
+/**
+ * ⚠️ CRITICAL IMPORT - DO NOT CHANGE
+ * 
+ * These functions MUST be imported from '@/lib/client-actions' (not './actions')
+ * 
+ * ✅ CORRECT: '@/lib/client-actions' - Has auth context, operations succeed
+ * ❌ WRONG: './actions' or '@/app/editor/actions' - No auth context, PERMISSION_DENIED
+ * 
+ * Why: Client actions run in the browser with Firebase Auth context.
+ * Server actions run on the server without auth context and will fail.
+ * 
+ * See: .cursor/rules/firebase-auth-pattern-rules.mdc for details
+ */
+import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey } from '@/lib/client-actions';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +70,7 @@ export function CreateSurveyV2Button() {
 
 export function CreateSurveyDropdown() {
   const router = useRouter();
+  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
   const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent') => {
@@ -74,6 +89,16 @@ export function CreateSurveyDropdown() {
         default:
           survey = await createSurvey();
       }
+      
+      if (survey.error) {
+        toast({
+          title: 'Failed to Create Survey',
+          description: survey.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+      
       router.push(`/editor/${survey.id}`);
     });
   };

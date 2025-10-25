@@ -13,8 +13,54 @@ import {
 import { revalidatePath } from 'next/cache';
 import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
 
+/**
+ * ⚠️ CRITICAL: SERVER-SIDE ACTIONS WITHOUT AUTHENTICATION CONTEXT
+ * 
+ * These functions run on the SERVER and DO NOT have Firebase Auth context.
+ * 
+ * ❌ WARNING: WRITE OPERATIONS WILL FAIL WITH PERMISSION_DENIED
+ * Server-side operations using Firebase client SDK have NO auth context.
+ * Firestore security rules check request.auth, which is NULL on the server.
+ * Result: PERMISSION_DENIED errors for any admin-protected operations.
+ * 
+ * ✅ USE THESE FUNCTIONS FOR:
+ * - READ operations (listSurveys, getSurvey) - don't require auth
+ * - Server-side rendering data fetching
+ * - Operations that don't need user authentication
+ * 
+ * ❌ DO NOT USE THESE FOR:
+ * - Creating surveys (use client-actions.ts)
+ * - Updating surveys (use client-actions.ts)
+ * - Deleting surveys (use client-actions.ts)
+ * - Any operation requiring admin authentication
+ * 
+ * 🔄 FOR AUTHENTICATED WRITES, USE:
+ * Import from: '@/lib/client-actions'
+ * Functions: createSurvey, updateSurvey, deleteSurvey, etc.
+ * 
+ * 📖 WHY THIS SEPARATION EXISTS:
+ * - Client actions run in browser → Has auth context → Rules pass
+ * - Server actions run on server → No auth context → Rules fail
+ * - Firebase client SDK requires browser auth for security rules
+ * 
+ * 💡 ARCHITECTURE:
+ * [Browser Client] → Client Actions → Firebase (with auth token) → ✅ Success
+ * [Next.js Server] → Server Actions → Firebase (no auth token) → ❌ PERMISSION_DENIED
+ * 
+ * Note: CREATE operations below are LEGACY and should NOT be imported by client components.
+ * They are kept for backwards compatibility but will fail due to no auth context.
+ * Use '@/lib/client-actions' instead.
+ */
+
 const surveyActionSchema = z.record(z.any());
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use createBlankSurvey from '@/lib/client-actions' instead
+ */
 export async function createBlankSurvey() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {
@@ -58,6 +104,13 @@ export async function createBlankSurvey() {
   return { id: newSurveyRef.id };
 }
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use createSurvey from '@/lib/client-actions' instead
+ */
 export async function createSurvey() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {
@@ -71,6 +124,13 @@ export async function createSurvey() {
   return { id: newSurveyRef.id };
 }
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use createSurveyV2 from '@/lib/client-actions' instead
+ */
 export async function createSurveyV2() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {
@@ -84,6 +144,13 @@ export async function createSurveyV2() {
   return { id: newSurveyRef.id };
 }
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use createConsentSurvey from '@/lib/client-actions' instead
+ */
 export async function createConsentSurvey() {
   const newSurveyRef = doc(collection(db, 'surveys'));
   const newSurvey = {
@@ -155,6 +222,13 @@ export async function getSurvey(id: string) {
   }
 }
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use updateSurvey from '@/lib/client-actions' instead
+ */
 export async function updateSurvey(
   id: string,
   data: z.infer<typeof surveyActionSchema>
@@ -168,6 +242,11 @@ export async function updateSurvey(
     delete dataToSave.id;
 
     const surveyRef = doc(db, 'surveys', id);
+    // Log approximate payload size to help diagnose Firestore limits (1 MiB per document)
+    try {
+      const payloadSizeBytes = Buffer.from(JSON.stringify(dataToSave)).length;
+      console.log('[updateSurvey] Payload size (bytes):', payloadSizeBytes);
+    } catch {}
     await setDoc(surveyRef, dataToSave, { merge: true });
 
     revalidatePath(`/survey/${id}`);
@@ -178,24 +257,27 @@ export async function updateSurvey(
     return {};
   } catch (e) {
     console.error('updateSurvey error:', e);
-    console.error('Error details:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+    try { console.error('Error details:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2)); } catch {}
     if (e instanceof Error) {
       console.error('Error message:', e.message);
-      console.error('Error stack:', e.stack);
       if (e.message.includes('permission-denied')) {
-        return {
-          error:
-            'Saving failed due to a permission error. Please check your Firestore security rules.',
-        };
+        return { error: 'Saving failed due to a permission error. Please check your Firestore security rules.' };
+      }
+      if (e.message.toLowerCase().includes('maximum') || e.message.toLowerCase().includes('too large') || e.message.toLowerCase().includes('4 invalid_argument') || e.message.toLowerCase().includes('payload')) {
+        return { error: 'Survey is too large to save as a single document. Consider reducing options, collapsing templates, or splitting into multiple docs.' };
       }
     }
-    return {
-      error:
-        'An unexpected error occurred while saving the survey. Please try again later.',
-    };
+    return { error: 'An unexpected error occurred while saving the survey. Please try again later.' };
   }
 }
 
+/**
+ * ⚠️ DEPRECATED - DO NOT USE FROM CLIENT COMPONENTS
+ * This function will fail with PERMISSION_DENIED because it runs on the server
+ * without authentication context. Use the version in @/lib/client-actions instead.
+ * 
+ * @deprecated Use deleteSurvey from '@/lib/client-actions' instead
+ */
 export async function deleteSurvey(id: string): Promise<{ error?: string }> {
   try {
     if (!id) {
