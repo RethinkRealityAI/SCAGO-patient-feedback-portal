@@ -330,6 +330,161 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
             </div>
           </div>
         )}
+        {showOptions && (
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="other-option" className="border rounded-lg">
+              <AccordionTrigger onPointerDown={stopPropagation} className="px-4 hover:no-underline hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  <span>Other Option</span>
+                  {watch(`${fieldPath}.otherOption.enabled` as any) && (
+                    <span className="ml-2 px-2 py-0.5 bg-amber-500/10 text-amber-600 text-xs rounded-full font-medium">
+                      Active
+                    </span>
+                  )}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="p-4 space-y-4 bg-muted/30">
+                <div className="flex items-start gap-2 p-3 bg-background rounded-lg border border-border">
+                  <Zap className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                  <FormDescription className="text-xs leading-relaxed">
+                    Automatically show a text field when a specific option (like "Other") is selected. Perfect for collecting additional details.
+                  </FormDescription>
+                </div>
+                
+                <FormField control={control} name={`${fieldPath}.otherOption.enabled` as any} render={({ field: formField }) => (
+                  <FormItem className="flex items-center justify-between space-y-0 rounded-lg border p-3">
+                    <div className="space-y-1">
+                      <FormLabel className="text-sm font-medium">Enable Other Option</FormLabel>
+                      <FormDescription className="text-xs">
+                        Show an additional input field for a specific option value
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={formField.value || false}
+                        onCheckedChange={formField.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )} />
+                
+                {watch(`${fieldPath}.otherOption.enabled` as any) && (
+                  <>
+                    <FormField control={control} name={`${fieldPath}.otherOption.optionValue` as any} render={({ field: formField }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Trigger Option Value</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...formField} 
+                            value={formField.value ?? ''} 
+                            onPointerDown={stopPropagation}
+                            placeholder="e.g., other"
+                            className="font-mono text-sm"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Enter the option value that triggers the text field (e.g., <code className="px-1 py-0.5 bg-muted rounded">other</code>)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    
+                    <FormField control={control} name={`${fieldPath}.otherOption.fieldType` as any} render={({ field: formField }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Input Field Type</FormLabel>
+                        <Select onValueChange={formField.onChange} value={formField.value || 'text'}>
+                          <FormControl>
+                            <SelectTrigger onPointerDown={stopPropagation}>
+                              <SelectValue placeholder="Select field type..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="text">Text (single line)</SelectItem>
+                            <SelectItem value="textarea">Text Area (multiple lines)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Choose the type of input field to show
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    
+                    <FormField control={control} name={`${fieldPath}.otherOption.label` as any} render={({ field: formField }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Field Label (Optional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...formField} 
+                            value={formField.value ?? ''} 
+                            onPointerDown={stopPropagation}
+                            placeholder="Please specify"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Custom label for the text field. Defaults to "Please specify"
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    
+                    <FormField control={control} name={`${fieldPath}.otherOption.placeholder` as any} render={({ field: formField }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Placeholder (Optional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            {...formField} 
+                            value={formField.value ?? ''} 
+                            onPointerDown={stopPropagation}
+                            placeholder="Enter details..."
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Placeholder text shown inside the input field
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    
+                    <FormField control={control} name={`${fieldPath}.otherOption.required` as any} render={({ field: formField }) => (
+                      <FormItem className="flex items-center justify-between space-y-0 rounded-lg border p-3">
+                        <div className="space-y-1">
+                          <FormLabel className="text-sm font-medium">Required Field</FormLabel>
+                          <FormDescription className="text-xs">
+                            Make the other option field required when shown
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={formField.value || false}
+                            onCheckedChange={formField.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                    
+                    <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Zap className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                        <div className="text-xs space-y-1">
+                          <div className="font-medium text-amber-600">Preview</div>
+                          <div className="text-muted-foreground">
+                            When <strong className="text-foreground">
+                              {watch(`${fieldPath}.otherOption.optionValue` as any) || '(trigger value)'}
+                            </strong> is selected, a <strong className="text-foreground">
+                              {watch(`${fieldPath}.otherOption.fieldType` as any) === 'textarea' ? 'text area' : 'text input'}
+                            </strong> will appear{watch(`${fieldPath}.otherOption.required` as any) ? ' (required)' : ''}.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
         {field?.type === 'group' && (
           <GroupChildrenEditor parentFieldPath={fieldPath} />
         )}

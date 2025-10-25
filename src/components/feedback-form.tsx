@@ -250,6 +250,13 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
 
       // Make base fields optional; we'll enforce conditional required in superRefine
       schema[field.id] = fieldSchema.optional();
+      
+      // Add automatic "other option" fields if configured
+      if (field.otherOption?.enabled && field.otherOption?.optionValue && ['select', 'radio', 'checkbox'].includes(field.type)) {
+        const otherFieldId = `${field.id}_otherValue`;
+        const otherFieldSchema = z.string();
+        schema[otherFieldId] = field.otherOption.required ? otherFieldSchema : otherFieldSchema.optional();
+      }
     });
     const base = z.object(schema);
     return base.superRefine((values: Record<string, any>, ctx) => {
@@ -295,6 +302,31 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
             const v = values[f.id];
             if (isEmpty(f, v)) {
                 ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'This field is required.', path: [f.id] });
+            }
+            
+            // Validate automatic "other option" fields when required and shown
+            if (f.otherOption?.enabled && f.otherOption?.required && f.otherOption?.optionValue) {
+                const triggerValue = f.otherOption.optionValue;
+                const mainValue = values[f.id];
+                let isOtherSelected = false;
+                
+                if (f.type === 'checkbox' && Array.isArray(mainValue)) {
+                    isOtherSelected = mainValue.includes(triggerValue);
+                } else {
+                    isOtherSelected = mainValue === triggerValue;
+                }
+                
+                if (isOtherSelected) {
+                    const otherFieldId = `${f.id}_otherValue`;
+                    const otherValue = values[otherFieldId];
+                    if (!otherValue || (typeof otherValue === 'string' && otherValue.trim() === '')) {
+                        ctx.addIssue({ 
+                            code: z.ZodIssueCode.custom, 
+                            message: 'This field is required.', 
+                            path: [otherFieldId] 
+                        });
+                    }
+                }
             }
         }
     });
@@ -1087,8 +1119,71 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             }
                             const fieldDef = fieldMap.get(field.id);
                             if (!fieldDef || !shouldShowField(fieldDef)) return null;
+                            
+                            // Check if this field has an automatic "other option" configured
+                            const hasOtherOption = fieldDef.otherOption?.enabled && 
+                                                   fieldDef.otherOption?.optionValue &&
+                                                   ['select', 'radio', 'checkbox'].includes(fieldDef.type);
+                            
+                            // If it has other option, we need to check if it should be shown
+                            const showOtherField = hasOtherOption && (() => {
+                              const mainValue = form.watch(fieldDef.id);
+                              const triggerValue = fieldDef.otherOption.optionValue;
+                              
+                              if (fieldDef.type === 'checkbox' && Array.isArray(mainValue)) {
+                                return mainValue.includes(triggerValue);
+                              }
+                              return mainValue === triggerValue;
+                            })();
+                            
+                            const otherFieldId = `${fieldDef.id}_otherValue`;
+                            
                             return (
-                              <div key={fieldDef.id} id={`field-${fieldDef.id}`} className={labelSizeClass}>{renderField(fieldDef, form, isFrench)}</div>
+                              <div key={fieldDef.id} className="space-y-3">
+                                <div id={`field-${fieldDef.id}`} className={labelSizeClass}>
+                                  {renderField(fieldDef, form, isFrench)}
+                                </div>
+                                {showOtherField && (
+                                  <div id={`field-${otherFieldId}`} className={labelSizeClass}>
+                                    <FormField
+                                      control={form.control}
+                                      name={otherFieldId}
+                                      render={({ field: otherField }) => (
+                                        <FormItem>
+                                          <FormLabel>
+                                            {translateFieldLabel(
+                                              fieldDef.otherOption.label || 'Please specify',
+                                              isFrench ? 'fr' : 'en'
+                                            )}
+                                          </FormLabel>
+                                          <FormControl>
+                                            {fieldDef.otherOption.fieldType === 'textarea' ? (
+                                              <Textarea 
+                                                {...otherField} 
+                                                placeholder={translateFieldLabel(
+                                                  fieldDef.otherOption.placeholder || 'Enter details...',
+                                                  isFrench ? 'fr' : 'en'
+                                                )}
+                                                className="max-w-2xl"
+                                              />
+                                            ) : (
+                                              <Input 
+                                                {...otherField} 
+                                                placeholder={translateFieldLabel(
+                                                  fieldDef.otherOption.placeholder || 'Enter details...',
+                                                  isFrench ? 'fr' : 'en'
+                                                )}
+                                                className="max-w-md"
+                                              />
+                                            )}
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>

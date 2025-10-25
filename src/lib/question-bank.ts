@@ -28,6 +28,15 @@ export interface FieldConfig {
   min?: number;
   max?: number;
   step?: number;
+  // Other option configuration
+  otherOption?: {
+    enabled: boolean;
+    optionValue: string;      // Which option value triggers the other field (e.g., "other")
+    fieldType: 'text' | 'textarea';  // Type of input field to show
+    label?: string;           // Custom label for the other field
+    placeholder?: string;     // Placeholder for the other field
+    required?: boolean;       // Whether the other field is required
+  };
 }
 
 export interface QuestionTemplate {
