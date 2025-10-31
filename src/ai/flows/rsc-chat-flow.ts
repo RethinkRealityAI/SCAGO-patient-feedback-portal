@@ -1,5 +1,5 @@
 // 'use server'
-// Implement a simple chat flow using Genkit gemini25FlashLite
+// Implement a simple chat flow using Genkit gemini15Flash
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 

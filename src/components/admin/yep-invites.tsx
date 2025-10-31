@@ -60,11 +60,11 @@ export function YEPInvites() {
           getMentors(),
         ]);
 
-        if (participantsResult.participants) {
-          setParticipants(participantsResult.participants);
+        if (Array.isArray(participantsResult)) {
+          setParticipants(participantsResult);
         }
-        if (mentorsResult.mentors) {
-          setMentors(mentorsResult.mentors);
+        if (Array.isArray(mentorsResult)) {
+          setMentors(mentorsResult);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -334,6 +334,7 @@ export function YEPInvites() {
                 <Label htmlFor="existingUser">Select Existing User (Optional)</Label>
                 <Select
                   value={selectedUserId}
+                  disabled={loadingData}
                   onValueChange={(value) => {
                     if (value === 'none') {
                       // Clear selection
@@ -352,7 +353,7 @@ export function YEPInvites() {
                   }}
                 >
                   <SelectTrigger id="existingUser">
-                    <SelectValue placeholder="Or select from existing..." />
+                    <SelectValue placeholder={loadingData ? "Loading users..." : "Or select from existing..."} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-</SelectItem>
@@ -381,7 +382,7 @@ export function YEPInvites() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Select a user without auth to auto-fill their details
+                  {loadingData ? 'Loading users...' : `Select a user without auth to auto-fill their details (${participants.length} participants, ${mentors.length} mentors loaded)`}
                 </p>
               </div>
 

@@ -1,5 +1,5 @@
 import { ai } from './genkit';
-import { gemini25FlashLite } from '@genkit-ai/googleai';
+import { gemini15Flash } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
 export const virtualAssistant = ai.defineFlow(
@@ -10,7 +10,7 @@ export const virtualAssistant = ai.defineFlow(
   },
   async (prompt: string) => {
     const llmResponse = await ai.generate({
-      model: gemini25FlashLite,
+      model: gemini15Flash,
       prompt: `
     You are a virtual assistant for a survey application.
     Your goal is to help users understand their survey data.

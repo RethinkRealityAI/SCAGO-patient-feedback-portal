@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import Header from '@/components/header';
 import { AuthProvider } from '@/components/auth/auth-provider';
 
-// Hide navigation for public pages, login, unauthorized, and setup-admin
-const HIDDEN_NAV_PATHS = ['/survey', '/login', '/unauthorized', '/setup-admin'];
+// Hide navigation for public pages, login, unauthorized, setup-admin, and dashboard pages
+const HIDDEN_NAV_PATHS = ['/survey', '/login', '/unauthorized', '/setup-admin', '/dashboard', '/youth-empowerment'];
 
 // Show sidebar only on admin page
 const ADMIN_PATH = '/admin';

@@ -118,7 +118,7 @@ export function WebhookSettings() {
         event: 'test',
         timestamp: new Date().toISOString(),
         data: {
-          message: 'This is a test webhook from SCAGO Patient Feedback Portal',
+          message: 'This is a test webhook from SCAGO Portal',
         },
       };
 

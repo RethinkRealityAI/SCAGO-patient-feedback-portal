@@ -7,7 +7,7 @@ import AppBody from './app-body'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'Patient Feedback Portal',
+  title: 'SCAGO Portal',
   description: 'A patient feedback portal for the Sickle Cell Awareness Group of Ontario.',
 }
 
