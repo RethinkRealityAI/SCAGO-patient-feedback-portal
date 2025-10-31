@@ -1,12 +1,12 @@
 'use server';
-import { createAI, getMutableAIState, streamUI } from '@/lib/ai/rsc';
+import { createAI, getMutableAIState } from '@/lib/ai/rsc';
 import { z } from 'zod';
-import { google } from '@ai-sdk/google';
 import { ReactNode } from 'react';
 import { nanoid } from 'nanoid';
 import { BotMessage } from '@/components/bot-message';
 import { collection, getDocs, addDoc, DocumentData } from 'firebase/firestore';
 import { db as clientDb } from '@/lib/firebase';
+import { unstable_noStore as noStore } from 'next/cache';
 
 // Note: We intentionally use the Web Firestore client on the server for writes
 // to respect Firestore security rules and avoid admin credential requirements
@@ -14,6 +14,7 @@ import { db as clientDb } from '@/lib/firebase';
 
 // Existing functions
 export async function getSurveys() {
+  noStore(); // Disable caching for this function
   try {
     const surveysCollection = collection(clientDb, 'surveys');
     const snapshot = await getDocs(surveysCollection);
@@ -44,7 +45,21 @@ export async function submitFeedback(
       surveyId,
       submittedAt: new Date(),
     };
-    await addDoc(collection(clientDb, 'feedback'), submissionData);
+    const docRef = await addDoc(collection(clientDb, 'feedback'), submissionData);
+    
+    // Send webhook notification (fire and forget)
+    import('@/lib/webhook-sender').then(({ sendWebhook }) => {
+      sendWebhook({
+        submissionId: docRef.id,
+        surveyId,
+        submittedAt: submissionData.submittedAt,
+        fields: formData,
+      }).catch((error) => {
+        // Log but don't fail submission if webhook fails
+        console.error('Webhook notification failed:', error);
+      });
+    });
+    
     return {};
   } catch (e) {
     console.error('Error submitting feedback:', e);
@@ -81,28 +96,39 @@ async function submitUserMessage(content: string): Promise<ClientMessage> {
     },
   ]);
 
-  const ui = await streamUI({
-    model: google('gemini-1.5-flash'),
-    prompt: content,
-    text: ({ content, done }: { content: string; done: boolean; }) => {
-      if (done) {
-        aiState.done([
-          ...aiState.get(),
-          {
-            role: 'assistant',
-            content,
-          },
-        ]);
-      }
-      return <BotMessage>{content}</BotMessage>;
-    },
-  });
+  try {
+    await import('@/ai/genkit');
+    const { rscChat } = await import('@/ai/flows/rsc-chat-flow');
+    const response = await rscChat(content);
 
-  return {
-    id: nanoid(),
-    role: 'assistant',
-    display: ui.value,
-  };
+    aiState.done([
+      ...aiState.get(),
+      {
+        role: 'assistant',
+        content: response,
+      },
+    ]);
+
+    return {
+      id: nanoid(),
+      role: 'assistant',
+      display: <BotMessage>{response}</BotMessage>,
+    };
+  } catch (error) {
+    const fallback = 'Sorry, I could not process that right now.';
+    aiState.done([
+      ...aiState.get(),
+      {
+        role: 'assistant',
+        content: fallback,
+      },
+    ]);
+    return {
+      id: nanoid(),
+      role: 'assistant',
+      display: <BotMessage>{fallback}</BotMessage>,
+    };
+  }
 }
 
 export const AI = createAI<ServerMessage[], ClientMessage[]>({

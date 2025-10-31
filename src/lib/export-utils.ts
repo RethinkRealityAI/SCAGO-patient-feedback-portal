@@ -120,11 +120,67 @@ export function exportToJSON(data: any, filename: string): void {
   document.body.removeChild(link);
 }
 
-export function exportToXLSX(data: any[], filename: string): void {
-  // This would require the xlsx library
-  // For now, we'll export as CSV with .xlsx extension
-  console.warn('XLSX export requires additional library. Exporting as CSV instead.');
-  exportToCSV(data, filename);
+export function exportToXLSX(data: any[], filename: string, headers?: string[]): void {
+  try {
+    // Dynamic import to avoid SSR issues
+    import('xlsx').then((XLSX) => {
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      
+      // Prepare data with proper formatting
+      const formattedData = data.map(row => {
+        const formattedRow: any = {};
+        const keys = headers || Object.keys(row);
+        
+        keys.forEach(key => {
+          const value = row[key];
+          // Format different value types
+          if (value === null || value === undefined) {
+            formattedRow[key] = '';
+          } else if (typeof value === 'object' && !(value instanceof Date)) {
+            // Handle objects and arrays
+            if (Array.isArray(value)) {
+              formattedRow[key] = value.join('; ');
+            } else if (value.selection) {
+              // Handle select-with-other fields
+              formattedRow[key] = value.other ? `${value.selection} (${value.other})` : value.selection;
+            } else {
+              formattedRow[key] = JSON.stringify(value);
+            }
+          } else if (value instanceof Date) {
+            formattedRow[key] = value.toISOString();
+          } else {
+            formattedRow[key] = String(value);
+          }
+        });
+        
+        return formattedRow;
+      });
+      
+      // Create worksheet from formatted data
+      const ws = XLSX.utils.json_to_sheet(formattedData, { header: headers || Object.keys(data[0] || {}) });
+      
+      // Set column widths for better readability
+      const columnWidths = (headers || Object.keys(data[0] || {})).map(key => ({
+        wch: Math.max(key.length, 15) // Minimum width 15, or header length
+      }));
+      ws['!cols'] = columnWidths;
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Data');
+      
+      // Generate file and trigger download
+      XLSX.writeFile(wb, `${filename}.xlsx`);
+    }).catch((error) => {
+      console.error('Error exporting to XLSX:', error);
+      // Fallback to CSV
+      exportToCSV(data, filename);
+    });
+  } catch (error) {
+    console.error('Error exporting to XLSX:', error);
+    // Fallback to CSV
+    exportToCSV(data, filename);
+  }
 }
 
 export function generateExportFilename(prefix: string, options: ExportOptions): string {

@@ -10,7 +10,7 @@ import {
   setDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
 
 /**
@@ -164,6 +164,7 @@ export async function createConsentSurvey() {
 }
 
 export async function listSurveys() {
+  noStore(); // Disable caching to always fetch fresh survey list
   try {
     const surveysCollection = collection(db, 'surveys');
     const snapshot = await getDocs(surveysCollection);

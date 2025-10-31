@@ -43,6 +43,7 @@
     "@radix-ui/react-toast": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@types/bcryptjs": "^2.4.6",
+    "@types/nodemailer": "^7.0.3",
     "ai": "^5.0.55",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
@@ -56,6 +57,7 @@
     "lucide-react": "^0.475.0",
     "nanoid": "^5.1.6",
     "next": "15.3.3",
+    "nodemailer": "^7.0.10",
     "papaparse": "^5.5.3",
     "patch-package": "^8.0.0",
     "pdf-lib": "^1.17.1",
@@ -68,6 +70,7 @@
     "recharts": "^2.15.4",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {

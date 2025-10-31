@@ -1,108 +1,116 @@
-'use client'
+'use client';
 
-import { useState, useCallback, useEffect } from 'react'
-
-export interface Notification {
-  id: string
-  type: 'info' | 'success' | 'warning' | 'error'
-  title: string
-  description?: string
-  duration?: number
-  action?: {
-    label: string
-    onClick: () => void
-  }
-}
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { getUnreadCount } from '@/app/youth-empowerment/messaging-actions';
+import { getPendingMeetingRequests } from '@/app/youth-empowerment/meeting-actions';
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-
-  const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
-    const id = Math.random().toString(36).substring(2, 15)
-    const newNotification: Notification = {
-      id,
-      duration: 5000, // Default 5 seconds
-      ...notification,
-    }
-
-    setNotifications(prev => [...prev, newNotification])
-
-    // Auto remove after duration
-    if (newNotification.duration && newNotification.duration > 0) {
-      setTimeout(() => {
-        removeNotification(id)
-      }, newNotification.duration)
-    }
-
-    return id
-  }, [])
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }, [])
-
-  const clearAllNotifications = useCallback(() => {
-    setNotifications([])
-  }, [])
-
-  return {
-    notifications,
-    addNotification,
-    removeNotification,
-    clearAllNotifications,
-  }
-}
-
-// Analytics notifications
-export function useAnalyticsNotifications(submissions: any[]) {
-  const { addNotification } = useNotifications()
+  const { user } = useAuth();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingMeetings, setPendingMeetings] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (submissions.length === 0) return
-    
-    // Delay to avoid hydration issues
-    const timer = setTimeout(() => {
-      // Check for low ratings in recent submissions
-      const recentSubmissions = submissions
-        .filter(s => {
-          const submissionDate = new Date(s.submittedAt)
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-          return submissionDate >= oneDayAgo
-        })
+    if (!user) {
+      setUnreadMessages(0);
+      setPendingMeetings(0);
+      setLoading(false);
+      return;
+    }
 
-      const lowRatings = recentSubmissions.filter(s => s.rating < 5)
-      
-      if (lowRatings.length > 0) {
-        addNotification({
-          type: 'warning',
-          title: 'Low Rating Alert',
-          description: `${lowRatings.length} submission(s) with ratings below 5 in the last 24 hours`,
-          duration: 10000,
-        })
-      }
+    const loadNotifications = async () => {
+      try {
+        const [messagesResult, meetingsResult] = await Promise.all([
+          getUnreadCount(user.uid),
+          getPendingMeetingRequests(user.uid),
+        ]);
 
-      // Check for high volume of submissions
-      if (recentSubmissions.length > 10) {
-        addNotification({
-          type: 'info',
-          title: 'High Activity',
-          description: `${recentSubmissions.length} new submissions in the last 24 hours`,
-          duration: 7000,
-        })
-      }
+        if (messagesResult.success) {
+          setUnreadMessages(messagesResult.count || 0);
+        }
 
-      // Check for excellent ratings
-      const excellentRatings = recentSubmissions.filter(s => s.rating >= 9)
-      if (excellentRatings.length >= 3) {
-        addNotification({
-          type: 'success',
-          title: 'Excellent Feedback',
-          description: `${excellentRatings.length} submissions with 9+ ratings today!`,
-          duration: 8000,
-        })
+        if (meetingsResult.success) {
+          setPendingMeetings(meetingsResult.meetings?.length || 0);
+        }
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+      } finally {
+        setLoading(false);
       }
-    }, 1000) // 1 second delay
-    
-    return () => clearTimeout(timer)
-  }, [submissions, addNotification])
+    };
+
+    loadNotifications();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(loadNotifications, 30000);
+
+    // Refresh on window focus
+    const handleFocus = () => {
+      loadNotifications();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [user]);
+
+  return {
+    unreadMessages,
+    pendingMeetings,
+    loading,
+    refresh: async () => {
+      if (!user) return;
+      const [messagesResult, meetingsResult] = await Promise.all([
+        getUnreadCount(user.uid),
+        getPendingMeetingRequests(user.uid),
+      ]);
+      if (messagesResult.success) {
+        setUnreadMessages(messagesResult.count || 0);
+      }
+      if (meetingsResult.success) {
+        setPendingMeetings(meetingsResult.meetings?.length || 0);
+      }
+    },
+  };
+}
+
+// Notification center types and hooks for in-app notifications
+export type Notification = {
+  id: string;
+  title: string;
+  description?: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  action?: { label: string; onClick: () => void };
+};
+
+// Local notification center state for dashboards and pages
+export function useNotificationCenter() {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const addNotification = (notification: Omit<Notification, 'id'> & { id?: string }) => {
+    const id = notification.id || String(Date.now());
+    const next: Notification = { id, title: notification.title, type: notification.type, description: notification.description, action: notification.action };
+    setNotifications(prev => [...prev, next]);
+    return id;
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  return { notifications, addNotification, removeNotification, clearAllNotifications };
+}
+
+// Analytics-driven notifications hook (no-op placeholder to satisfy imports)
+export function useAnalyticsNotifications(_submissions: unknown[]) {
+  useEffect(() => {
+    // Intentionally empty: analytics-driven notifications may be added later
+  }, [_submissions]);
 }

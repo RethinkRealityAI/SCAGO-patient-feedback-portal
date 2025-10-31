@@ -36,7 +36,7 @@ service cloud.firestore {
     // Feedback submissions - Create by anyone, Read/Update/Delete by admin only
     match /feedback/{feedbackId} {
       allow create: if true;  // Anyone can submit feedback
-      allow read: if isAdminOrYEPManager() || request.auth == null;  // Admin/YEP Manager or server-side (no auth)
+      allow read: if isAdmin();  // Only admins can read feedback
       allow update, delete: if isAdmin();  // Only admins can modify
     }
     
@@ -63,13 +63,45 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     
-    // Youth Empowerment Program Collections - Admin or YEP Manager
+    // Youth Empowerment Program Collections - Admin, YEP Manager, or Owner
     match /yep_participants/{participantId} {
+      // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
+      
+      // Participants can read their own profile
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || 
+                      resource.data.authEmail == request.auth.token.email);
+      
+      // Participants can update limited fields on their own profile
+      allow update: if isAuthenticated() && 
+                       (resource.data.userId == request.auth.uid || 
+                        resource.data.authEmail == request.auth.token.email) &&
+                       // Only allow updating specific fields
+                       request.resource.data.diff(resource.data).changedKeys()
+                         .hasOnly(['phoneNumber', 'emergencyContactRelationship', 'emergencyContactNumber', 
+                                   'mailingAddress', 'streetAddress', 'city', 'province', 'postalCode', 
+                                   'availability', 'notes', 'fileUrl', 'fileName', 'fileType', 
+                                   'lastLoginAt', 'profileCompleted', 'updatedAt']);
     }
     
     match /yep_mentors/{mentorId} {
+      // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
+      
+      // Mentors can read their own profile
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || 
+                      resource.data.authEmail == request.auth.token.email);
+      
+      // Mentors can update limited fields on their own profile
+      allow update: if isAuthenticated() && 
+                       (resource.data.userId == request.auth.uid || 
+                        resource.data.authEmail == request.auth.token.email) &&
+                       // Only allow updating specific fields
+                       request.resource.data.diff(resource.data).changedKeys()
+                         .hasOnly(['phone', 'availability', 'fileUrl', 'fileName', 'fileType', 
+                                   'lastLoginAt', 'profileCompleted', 'updatedAt']);
     }
     
     match /yep_workshops/{workshopId} {
@@ -82,6 +114,42 @@ service cloud.firestore {
     
     match /yep_advisor_meetings/{meetingId} {
       allow read, write: if isAdminOrYEPManager();
+    }
+    
+    // YEP Messages - Users can only read messages they sent or received
+    match /yep_messages/{messageId} {
+      // Users can only read messages they sent or received
+      allow read: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || 
+         resource.data.recipientId == request.auth.uid);
+      
+      // Users can create messages if they are the sender
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      
+      // Users can update messages they received (mark as read)
+      allow update: if isAuthenticated() && 
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['read', 'readAt', 'updatedAt']);
+    }
+    
+    // YEP Meetings - Both participant and mentor can read their meetings
+    match /yep_meetings/{meetingId} {
+      // Both participant and mentor can read their meetings
+      allow read: if isAuthenticated() && 
+        (resource.data.participantUserId == request.auth.uid || 
+         resource.data.mentorUserId == request.auth.uid);
+      
+      // Both can create meeting requests
+      allow create: if isAuthenticated() && 
+        (request.resource.data.participantUserId == request.auth.uid || 
+         request.resource.data.mentorUserId == request.auth.uid);
+      
+      // Both can update meetings (approve, reject, cancel)
+      allow update: if isAuthenticated() && 
+        (resource.data.participantUserId == request.auth.uid || 
+         resource.data.mentorUserId == request.auth.uid);
     }
     
     // YEP Form Templates - Admin or YEP Manager

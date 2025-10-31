@@ -17,7 +17,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Upload, FileText, Eye, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createParticipant, updateParticipant, getMentors } from '@/app/youth-empowerment/actions';
-import { regionOptions, canadianStatusOptions, validateSINLenient } from '@/lib/youth-empowerment';
+import { getMentorByNameOrId } from '@/app/youth-empowerment/relationship-actions';
+import { regionOptions, canadianStatusOptions, validateSINLenient, looksLikeFirestoreId } from '@/lib/youth-empowerment';
 import { SINSecureField } from '@/components/yep-forms/sin-secure-field';
 import { SelectWithOther } from '@/components/ui/select-with-other';
 import { AvailabilitySelector } from '@/components/youth-empowerment/availability-selector';
@@ -151,92 +152,118 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
   // Reset form when participant changes
   useEffect(() => {
-    if (participant) {
-      form.reset({
-        youthParticipant: participant.youthParticipant || '',
-        email: participant.email || '',
-        etransferEmailAddress: participant.etransferEmailAddress || '',
-        mailingAddress: participant.mailingAddress || '',
-        phoneNumber: participant.phoneNumber || '',
-        region: participant.region || '',
-        approved: participant.approved || false,
-        contractSigned: participant.contractSigned || false,
-        signedSyllabus: participant.signedSyllabus || false,
-        availability: participant.availability || '',
-        assignedMentor: participant.assignedMentor || '',
-        idProvided: participant.idProvided || false,
-        canadianStatus: participant.canadianStatus || 'Canadian Citizen',
-        canadianStatusOther: participant.canadianStatusOther || '',
-        sin: '', // Never pre-fill SIN for security - always empty when editing
-        youthProposal: participant.youthProposal || '',
-        proofOfAffiliationWithSCD: participant.proofOfAffiliationWithSCD || false,
-        scagoCounterpart: participant.scagoCounterpart || '',
-        dob: participant.dob || '',
-        // New fields
-        age: participant.age || undefined,
-        citizenshipStatus: participant.citizenshipStatus || '',
-        location: participant.location || '',
-        projectCategory: participant.projectCategory || '',
-        duties: participant.duties || '',
-        affiliationWithSCD: participant.affiliationWithSCD || '',
-        notes: participant.notes || '',
-        nextSteps: participant.nextSteps || '',
-        interviewed: participant.interviewed || false,
-        interviewNotes: participant.interviewNotes || '',
-        recruited: participant.recruited || false,
-      });
-      // Explicitly clear the SIN field to ensure it's completely empty
-      form.setValue('sin', '');
-      // Clear any validation errors for SIN field
-      form.clearErrors('sin');
-      // Reset file states
-      setUploadedFile(null);
-      setExistingFileUrl(participant.fileUrl || null);
-    } else {
-      // Reset to default values for new participant
-      form.reset({
-        youthParticipant: '',
-        email: '',
-        etransferEmailAddress: '',
-        mailingAddress: '',
-        phoneNumber: '',
-        region: '',
-        streetAddress: '',
-        city: '',
-        province: '',
-        postalCode: '',
-        approved: false,
-        contractSigned: false,
-        signedSyllabus: false,
-        availability: '',
-        assignedMentor: '',
-        idProvided: false,
-        canadianStatus: 'Canadian Citizen',
-        canadianStatusOther: '',
-        sin: '',
-        youthProposal: '',
-        proofOfAffiliationWithSCD: false,
-        scagoCounterpart: '',
-        dob: '',
-        // New fields
-        age: undefined,
-        citizenshipStatus: '',
-        location: '',
-        projectCategory: '',
-        duties: '',
-        affiliationWithSCD: '',
-        notes: '',
-        nextSteps: '',
-        interviewed: false,
-        interviewNotes: '',
-        recruited: false,
-      });
-      // Reset file states for new participant
-      setUploadedFile(null);
-      setExistingFileUrl(null);
-      // Clear any validation errors for SIN field
-      form.clearErrors('sin');
-    }
+    const resolveMentorName = async (assignedMentor: string | undefined) => {
+      if (!assignedMentor) return '';
+      
+        // If it looks like a Firestore ID (20 chars alphanumeric), resolve it to name
+        if (assignedMentor && looksLikeFirestoreId(assignedMentor)) {
+        const result = await getMentorByNameOrId(assignedMentor);
+        if (result.success && result.mentor) {
+          return result.mentor.name;
+        }
+      }
+      
+      // Otherwise assume it's already a name
+      return assignedMentor;
+    };
+
+    const initializeForm = async () => {
+      if (participant) {
+        // Resolve mentor ID to name if needed
+        const mentorName = await resolveMentorName(participant.assignedMentor);
+        
+        form.reset({
+          youthParticipant: participant.youthParticipant || '',
+          email: participant.email || '',
+          etransferEmailAddress: participant.etransferEmailAddress || '',
+          mailingAddress: participant.mailingAddress || '',
+          phoneNumber: participant.phoneNumber || '',
+          region: participant.region || '',
+          streetAddress: participant.streetAddress || '',
+          city: participant.city || '',
+          province: participant.province || '',
+          postalCode: participant.postalCode || '',
+          approved: participant.approved || false,
+          contractSigned: participant.contractSigned || false,
+          signedSyllabus: participant.signedSyllabus || false,
+          availability: participant.availability || '',
+          assignedMentor: mentorName,
+          idProvided: participant.idProvided || false,
+          canadianStatus: participant.canadianStatus || 'Canadian Citizen',
+          canadianStatusOther: participant.canadianStatusOther || '',
+          sin: '', // Never pre-fill SIN for security - always empty when editing
+          youthProposal: participant.youthProposal || '',
+          proofOfAffiliationWithSCD: participant.proofOfAffiliationWithSCD || false,
+          scagoCounterpart: participant.scagoCounterpart || '',
+          dob: participant.dob || '',
+          // New fields
+          age: participant.age || undefined,
+          citizenshipStatus: participant.citizenshipStatus || '',
+          location: participant.location || '',
+          projectCategory: participant.projectCategory || '',
+          duties: participant.duties || '',
+          affiliationWithSCD: participant.affiliationWithSCD || '',
+          notes: participant.notes || '',
+          nextSteps: participant.nextSteps || '',
+          interviewed: participant.interviewed || false,
+          interviewNotes: participant.interviewNotes || '',
+          recruited: participant.recruited || false,
+        });
+        // Explicitly clear the SIN field to ensure it's completely empty
+        form.setValue('sin', '');
+        // Clear any validation errors for SIN field
+        form.clearErrors('sin');
+        // Reset file states
+        setUploadedFile(null);
+        setExistingFileUrl(participant.fileUrl || null);
+      } else {
+        // Reset to default values for new participant
+        form.reset({
+          youthParticipant: '',
+          email: '',
+          etransferEmailAddress: '',
+          mailingAddress: '',
+          phoneNumber: '',
+          region: '',
+          streetAddress: '',
+          city: '',
+          province: '',
+          postalCode: '',
+          approved: false,
+          contractSigned: false,
+          signedSyllabus: false,
+          availability: '',
+          assignedMentor: '',
+          idProvided: false,
+          canadianStatus: 'Canadian Citizen',
+          canadianStatusOther: '',
+          sin: '',
+          youthProposal: '',
+          proofOfAffiliationWithSCD: false,
+          scagoCounterpart: '',
+          dob: '',
+          // New fields
+          age: undefined,
+          citizenshipStatus: '',
+          location: '',
+          projectCategory: '',
+          duties: '',
+          affiliationWithSCD: '',
+          notes: '',
+          nextSteps: '',
+          interviewed: false,
+          interviewNotes: '',
+          recruited: false,
+        });
+        // Reset file states for new participant
+        setUploadedFile(null);
+        setExistingFileUrl(null);
+        // Clear any validation errors for SIN field
+        form.clearErrors('sin');
+      }
+    };
+
+    initializeForm();
   }, [participant?.id, form]); // Only depend on participant ID, not the entire participant object
 
   const loadMentors = async () => {
@@ -265,6 +292,37 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   const onSubmit = async (data: ParticipantFormData) => {
     setIsLoading(true);
     try {
+        // Resolve mentor ID to name if needed (for backward compatibility)
+        let mentorName = data.assignedMentor || '';
+        if (mentorName && looksLikeFirestoreId(mentorName)) {
+        // Looks like an ID, resolve to name
+        const mentorResult = await getMentorByNameOrId(mentorName);
+        if (mentorResult.success && mentorResult.mentor) {
+          mentorName = mentorResult.mentor.name;
+        } else {
+          // Mentor not found - clear assignment
+          toast({
+            title: 'Warning',
+            description: 'Assigned mentor not found. Assignment cleared.',
+            variant: 'destructive',
+          });
+          mentorName = '';
+        }
+      } else if (mentorName) {
+        // Validate mentor exists by name
+        const mentorResult = await getMentorByNameOrId(mentorName);
+        if (!mentorResult.success) {
+          toast({
+            title: 'Warning',
+            description: 'Assigned mentor not found. Please select a valid mentor.',
+            variant: 'destructive',
+          });
+          mentorName = '';
+        } else {
+          mentorName = mentorResult.mentor!.name;
+        }
+      }
+      
       // Clean the data to remove undefined values
       const formData: any = {
         youthParticipant: data.youthParticipant,
@@ -277,7 +335,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         contractSigned: data.contractSigned,
         signedSyllabus: data.signedSyllabus,
         availability: data.availability || '',
-        assignedMentor: data.assignedMentor || '',
+        assignedMentor: mentorName, // Store mentor name, not ID
         idProvided: data.idProvided,
         canadianStatus: data.canadianStatus,
         canadianStatusOther: data.canadianStatusOther || '',
@@ -747,11 +805,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {mentors.map((mentor) => (
-                                  <SelectItem key={mentor.id} value={mentor.id}>
-                                    {mentor.name}
-                                  </SelectItem>
-                                ))}
+                                {mentors.length === 0 ? (
+                                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                                    No mentors available. Please add mentors first.
+                                  </div>
+                                ) : (
+                                  mentors.map((mentor) => (
+                                    <SelectItem key={mentor.id} value={mentor.name}>
+                                      {mentor.name}
+                                      {mentor.title && ` - ${mentor.title}`}
+                                    </SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                             <FormMessage />

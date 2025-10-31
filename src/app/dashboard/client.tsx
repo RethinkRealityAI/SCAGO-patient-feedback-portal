@@ -50,7 +50,7 @@ import { FeedbackSubmission } from './types'
 import { analyzeFeedback, generateAnalysisPdf } from './actions'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
-import { useNotifications, useAnalyticsNotifications } from '@/hooks/use-notifications'
+import { useNotificationCenter, useAnalyticsNotifications } from '@/hooks/use-notifications'
 import { NotificationSystem } from '@/components/notification-system'
 import FloatingChatButton from '@/components/floating-chat-button'
 import AnalysisDisplay from '@/components/analysis-display'
@@ -744,6 +744,55 @@ export default function Dashboard() {
     document.body.removeChild(link)
   }, [filtered, isConsent])
 
+  const exportToExcel = useCallback(() => {
+    import('@/lib/export-utils').then(({ exportToXLSX }) => {
+      // Prepare comprehensive data for Excel export
+      const exportData = filtered.map(sub => {
+        const s = sub as any
+        const row: any = {
+          'Submission ID': sub.id,
+          'Date': new Date(sub.submittedAt).toLocaleDateString(),
+          'Time': new Date(sub.submittedAt).toLocaleTimeString(),
+          'Survey ID': sub.surveyId || '',
+        }
+
+        // Add all submission fields dynamically
+        Object.entries(sub).forEach(([key, value]) => {
+          if (['id', 'submittedAt', 'surveyId'].includes(key)) return
+          
+          let formattedValue = value
+          if (value === null || value === undefined) {
+            formattedValue = ''
+          } else if (Array.isArray(value)) {
+            formattedValue = value.join('; ')
+          } else if (typeof value === 'object' && value !== null) {
+            if (value.selection) {
+              formattedValue = value.other ? `${value.selection} (${value.other})` : value.selection
+            } else if (value.hours !== undefined || value.minutes !== undefined || value.days !== undefined) {
+              // Handle time objects
+              const parts = []
+              if (value.days) parts.push(`${value.days}d`)
+              if (value.hours) parts.push(`${value.hours}h`)
+              if (value.minutes) parts.push(`${value.minutes}m`)
+              formattedValue = parts.join(' ')
+            } else {
+              formattedValue = JSON.stringify(value)
+            }
+          }
+          
+          // Format field name nicely
+          const fieldName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+          row[fieldName] = formattedValue
+        })
+
+        return row
+      })
+
+      const filename = `${isConsent ? 'consent' : 'feedback'}_export_${new Date().toISOString().split('T')[0]}`
+      exportToXLSX(exportData, filename)
+    })
+  }, [filtered, isConsent])
+
   // Calculate trend compared to previous period
   const calculateTrend = useCallback((currentMetrics: any, previousPeriod: FeedbackSubmission[]) => {
     if (isConsent) return null
@@ -784,7 +833,7 @@ export default function Dashboard() {
   ].reduce((a, b) => a + b, 0)
 
   // Notification system
-  const { notifications, addNotification, removeNotification, clearAllNotifications } = useNotifications()
+  const { notifications, addNotification, removeNotification, clearAllNotifications } = useNotificationCenter()
   
   // Analytics notifications
   useAnalyticsNotifications(submissions)
@@ -2506,7 +2555,7 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Export Data</DialogTitle>
             <DialogDescription>
-              Download {isConsent ? 'consent form' : 'feedback'} submissions in CSV format
+              Download {isConsent ? 'consent form' : 'feedback'} submissions in CSV or Excel format
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -2547,10 +2596,21 @@ export default function Dashboard() {
                 exportToCSV()
                 setShowExportDialog(false)
               }}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button 
+              onClick={() => {
+                exportToExcel()
+                setShowExportDialog(false)
+              }}
               className="flex items-center gap-2"
             >
               <Download className="h-4 w-4" />
-              Export CSV
+              Export Excel
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,6 +2,7 @@
 
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -51,6 +52,42 @@ export async function signIn(
     }
 
     console.error('Sign in error:', authError);
+    return { error: errorMessage };
+  }
+}
+
+/**
+ * Sign up with email and password
+ */
+export async function signUp(
+  email: string,
+  password: string
+): Promise<{ user?: User; error?: string }> {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    return { user: userCredential.user };
+  } catch (error) {
+    const authError = error as AuthError;
+    let errorMessage = 'Failed to create account';
+
+    switch (authError.code) {
+      case 'auth/email-already-in-use':
+        errorMessage = 'An account with this email already exists';
+        break;
+      case 'auth/invalid-email':
+        errorMessage = 'Invalid email address';
+        break;
+      case 'auth/operation-not-allowed':
+        errorMessage = 'Email/password accounts are not enabled';
+        break;
+      case 'auth/weak-password':
+        errorMessage = 'Password is too weak. Please use at least 6 characters';
+        break;
+      default:
+        errorMessage = authError.message;
+    }
+
+    console.error('Sign up error:', authError);
     return { error: errorMessage };
   }
 }

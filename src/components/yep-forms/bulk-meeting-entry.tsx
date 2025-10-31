@@ -8,14 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Plus, 
-  Trash2, 
-  Users, 
-  Calendar, 
+import Papa from 'papaparse';
+import {
+  Plus,
+  Trash2,
+  Users,
+  Calendar,
   Clock,
   MessageSquare,
   CheckCircle,
+  Circle,
   AlertCircle,
   Download,
   Upload
@@ -141,13 +143,77 @@ export function BulkMeetingEntry({
   };
 
   const handleImport = () => {
-    // TODO: Implement CSV import functionality
-    console.log('Import CSV functionality');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const rows = (results.data as any[]).filter(Boolean);
+          const mapped: MeetingRecord[] = rows.map((row) => {
+            const findParticipantId = () => {
+              const byId = String(row.studentId || row.participantId || '').trim();
+              if (byId) return byId;
+              const name = String(row.studentName || row.participantName || row.participant || '').trim().toLowerCase();
+              if (!name) return '';
+              const match = participants.find((p) => (p.youthParticipant || '').toLowerCase() === name || (p.email || '').toLowerCase() === name);
+              return match?.id || '';
+            };
+            const findMentorId = () => {
+              const byId = String(row.advisorId || row.mentorId || '').trim();
+              if (byId) return byId;
+              const name = String(row.advisorName || row.mentorName || '').trim().toLowerCase();
+              if (!name) return '';
+              const match = mentors.find((m) => (m.name || '').toLowerCase() === name || (m.email || '').toLowerCase() === name);
+              return match?.id || '';
+            };
+            const topicsRaw = String(row.topics || '').trim();
+            const topics = topicsRaw ? topicsRaw.split(/[,;]|\n/).map((t: string) => t.trim()).filter(Boolean) : [];
+            const parseBool = (v: any) => String(v || '').toLowerCase() === 'true' || String(v || '').toLowerCase() === 'yes' || String(v || '').toLowerCase() === '1';
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              studentId: findParticipantId(),
+              studentName: row.studentName || row.participantName || '',
+              advisorId: findMentorId(),
+              advisorName: row.advisorName || row.mentorName || '',
+              meetingDate: row.meetingDate || row.date || new Date().toISOString().slice(0, 16),
+              duration: Number(row.duration || 60),
+              topics,
+              notes: row.notes || '',
+              completed: parseBool(row.completed),
+            } as MeetingRecord;
+          });
+          setMeetingRecords((prev) => [...prev, ...mapped]);
+        },
+      });
+    };
+    input.click();
   };
 
   const handleExport = () => {
-    // TODO: Implement CSV export functionality
-    console.log('Export CSV functionality');
+    const rows = meetingRecords.map((r) => ({
+      studentId: r.studentId,
+      studentName: r.studentName,
+      advisorId: r.advisorId,
+      advisorName: r.advisorName,
+      meetingDate: r.meetingDate,
+      duration: r.duration,
+      topics: r.topics.join(', '),
+      notes: r.notes,
+      completed: r.completed,
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'meetings.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const completedCount = meetingRecords.filter(r => r.completed).length;
@@ -182,7 +248,7 @@ export function BulkMeetingEntry({
                 <div className="flex items-center gap-2">
                   <Checkbox
                     checked={record.completed}
-                    onCheckedChange={(checked) => updateRecord(record.id, 'completed', checked)}
+                    onCheckedChange={(checked: boolean) => updateRecord(record.id, 'completed', checked)}
                     disabled={disabled}
                   />
                   <span className="text-sm text-muted-foreground">Completed</span>
@@ -280,22 +346,26 @@ export function BulkMeetingEntry({
                 <label className="text-sm font-medium">Discussion Topics</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {commonTopics.map((topic) => (
-                    <div
+                    <button
                       key={topic}
-                      className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      type="button"
+                      className={`w-full text-left flex items-center space-x-2 p-2 rounded-lg border transition-colors ${
                         record.topics.includes(topic)
                           ? 'bg-primary/10 border-primary'
-                          : 'hover:bg-muted/50'
+                          : 'hover:bg-muted/50 border-border'
                       }`}
                       onClick={() => handleTopicToggle(record.id, topic)}
+                      disabled={disabled}
                     >
-                      <Checkbox
-                        checked={record.topics.includes(topic)}
-                        onChange={() => handleTopicToggle(record.id, topic)}
-                        disabled={disabled}
-                      />
-                      <span className="text-sm">{topic}</span>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        {record.topics.includes(topic) ? (
+                          <CheckCircle className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className="text-sm">{topic}</span>
+                      </div>
+                    </button>
                   ))}
                 </div>
                 {record.topics.length > 0 && (

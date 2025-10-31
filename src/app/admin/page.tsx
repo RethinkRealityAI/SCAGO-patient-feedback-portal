@@ -15,6 +15,9 @@ import { ActivityLog } from '@/components/admin/activity-log';
 import { PlatformStats } from '@/components/admin/platform-stats';
 import { CurrentParticipantsImporter } from '@/components/youth-empowerment/current-participants-importer';
 import { ImportDialog } from '@/components/youth-empowerment/import-dialog';
+import { YEPInvites } from '@/components/admin/yep-invites';
+import { YEPBackfill } from '@/components/admin/yep-backfill';
+import { WebhookSettings } from '@/components/admin/webhook-settings';
 
 export default function AdminPage() {
   const { user, isAdmin, loading } = useAuth();
@@ -92,10 +95,14 @@ export default function AdminPage() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-8">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Users</span>
+          </TabsTrigger>
+          <TabsTrigger value="yep-invites" className="flex items-center gap-2">
+            <GraduationCap className="h-4 w-4" />
+            <span className="hidden sm:inline">YEP Invites</span>
           </TabsTrigger>
           <TabsTrigger value="health" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
@@ -128,6 +135,24 @@ export default function AdminPage() {
           <EnhancedUserManagement />
         </TabsContent>
 
+        {/* YEP Invites Tab */}
+        <TabsContent value="yep-invites" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5" />
+                YEP Invitations
+              </CardTitle>
+              <CardDescription>
+                Invite participants and mentors to the Youth Empowerment Program
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <YEPInvites />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* System Health Tab */}
         <TabsContent value="health" className="space-y-4">
           <SystemHealth />
@@ -150,6 +175,9 @@ export default function AdminPage() {
 
         {/* Youth Empowerment Program Tab */}
         <TabsContent value="yep" className="space-y-4">
+          {/* Backfill Tools */}
+          <YEPBackfill />
+          
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -261,19 +289,7 @@ export default function AdminPage() {
 
         {/* Platform Settings Tab */}
         <TabsContent value="settings" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Settings</CardTitle>
-              <CardDescription>
-                Configure global platform settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Coming soon: Environment variables, feature flags, and more.
-              </p>
-            </CardContent>
-          </Card>
+          <WebhookSettings />
         </TabsContent>
       </Tabs>
 

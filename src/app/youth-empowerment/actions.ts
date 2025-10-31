@@ -17,8 +17,10 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 // import { revalidatePath } from 'next/cache'; // Removed - not compatible with client-side usage
-import { hashSIN, extractSINLast4, validateSINLenient } from '@/lib/youth-empowerment';
+import { hashSIN, extractSINLast4, validateSINLenient, looksLikeFirestoreId } from '@/lib/youth-empowerment';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { syncMentorParticipantRelationship, getMentorByNameOrId } from './relationship-actions';
+
 
 // Helper: parse a YYYY-MM-DD string into a local Date at noon to avoid UTC shifts
 function parseLocalDateFromYMD(ymd: string): Date {
@@ -209,6 +211,7 @@ const mentorSchema = z.object({
   availability: z.string().optional().or(z.literal('')),
   assignedStudents: z.array(z.string()).default([]),
   file: z.string().optional().or(z.literal('')),
+  fileUpload: z.instanceof(File).optional(),
 });
 
 const workshopSchema = z.object({
@@ -324,6 +327,20 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
 
     const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
     
+    // Sync mentor-participant relationship if mentor assigned on creation
+    if (validatedData.assignedMentor) {
+      try {
+        const syncResult = await syncMentorParticipantRelationship(docRef.id, undefined, validatedData.assignedMentor);
+        if (!syncResult.success) {
+          console.warn('Failed to sync mentor relationship during participant creation:', syncResult.error);
+          // Don't fail participant creation if sync fails - relationship can be fixed later
+        }
+      } catch (syncError) {
+        console.warn('Error syncing mentor relationship during participant creation:', syncError);
+        // Continue - participant was created successfully
+      }
+    }
+    
     // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
     return { success: true, id: docRef.id };
   } catch (error) {
@@ -334,6 +351,12 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
 
 export async function updateParticipant(id: string, data: Partial<z.infer<typeof participantSchema>>) {
   try {
+    // Get current participant data to check for mentor changes
+    const participantDoc = await getDoc(doc(db, 'yep_participants', id));
+    const currentData = participantDoc.exists() ? participantDoc.data() : null;
+    const oldMentor = currentData?.assignedMentor;
+    const newMentor = data.assignedMentor !== undefined ? data.assignedMentor : oldMentor;
+    
     // Clean the data to remove undefined values and only include fields that are actually provided
     const updateData: any = {
       updatedAt: serverTimestamp(),
@@ -400,6 +423,11 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
 
     await updateDoc(doc(db, 'yep_participants', id), updateData);
     
+    // Sync mentor-participant relationship if mentor changed
+    if (data.assignedMentor !== undefined && oldMentor !== newMentor) {
+      await syncMentorParticipantRelationship(id, oldMentor, newMentor);
+    }
+    
     return { success: true };
   } catch (error) {
     console.error('Error updating participant:', error);
@@ -451,17 +479,30 @@ export async function upsertParticipantByEmail(data: z.infer<typeof participantS
 
 export async function deleteParticipant(id: string) {
   try {
-    // Delete associated file if exists
+    // Get participant data before deletion to clean up relationships
     const participantDoc = await getDoc(doc(db, 'yep_participants', id));
-    if (participantDoc.exists()) {
-      const data = participantDoc.data();
-      if (data.fileUrl) {
-        const fileRef = ref(storage, data.fileUrl);
-        try {
-          await deleteObject(fileRef);
-        } catch (fileError) {
-          console.warn('Could not delete file:', fileError);
-        }
+    if (!participantDoc.exists()) {
+      return { error: 'Participant not found' };
+    }
+
+    const participantData = participantDoc.data();
+    
+    // Clean up mentor relationship if participant has assigned mentor
+    if (participantData.assignedMentor) {
+      const syncResult = await syncMentorParticipantRelationship(id, participantData.assignedMentor, undefined);
+      if (!syncResult.success) {
+        console.warn('Failed to sync mentor relationship during deletion:', syncResult.error);
+        // Continue with deletion even if sync fails - log warning but don't block
+      }
+    }
+
+    // Delete associated file if exists
+    if (participantData.fileUrl) {
+      const fileRef = ref(storage, participantData.fileUrl);
+      try {
+        await deleteObject(fileRef);
+      } catch (fileError) {
+        console.warn('Could not delete file:', fileError);
       }
     }
 
@@ -490,7 +531,17 @@ export async function getParticipants(filters?: {
       q = query(q, where('region', '==', filters.region));
     }
     if (filters?.mentor) {
-      q = query(q, where('assignedMentor', '==', filters.mentor));
+      // Resolve mentor ID to name if needed
+      let mentorName = filters.mentor;
+      // Check if it looks like a Firestore ID (20 chars alphanumeric)
+      if (looksLikeFirestoreId(mentorName)) {
+        const mentorResult = await getMentorByNameOrId(mentorName);
+        if (mentorResult.success && mentorResult.mentor) {
+          mentorName = mentorResult.mentor.name;
+        }
+        // If mentor not found, filter will return empty results
+      }
+      q = query(q, where('assignedMentor', '==', mentorName));
     }
 
     const snapshot = await getDocs(q);
@@ -544,6 +595,12 @@ export async function getParticipants(filters?: {
         interviewed: data.interviewed || false,
         interviewNotes: data.interviewNotes || '',
         recruited: data.recruited || false,
+        // Auth-related fields
+        userId: data.userId || '',
+        authEmail: data.authEmail || '',
+        inviteCode: data.inviteCode || '',
+        profileCompleted: data.profileCompleted || false,
+        lastLoginAt: data.lastLoginAt?.toDate() || null,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
       };
@@ -559,6 +616,18 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
   try {
     const validatedData = mentorSchema.parse(data);
     
+    // Handle file upload if provided
+    let fileUrl = '';
+    let fileName = '';
+    let fileType = '';
+    if (validatedData.fileUpload) {
+      const fileRef = ref(storage, `yep-files/mentors/${Date.now()}-${validatedData.fileUpload.name}`);
+      const snapshot = await uploadBytes(fileRef, validatedData.fileUpload);
+      fileUrl = await getDownloadURL(snapshot.ref);
+      fileName = validatedData.fileUpload.name;
+      fileType = validatedData.fileUpload.type;
+    }
+    
     const mentorData: any = {
       name: validatedData.name,
       title: validatedData.title || '',
@@ -569,6 +638,9 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
       availability: validatedData.availability || '',
       assignedStudents: validatedData.assignedStudents || [],
       file: validatedData.file || '',
+      fileUrl: fileUrl || '',
+      fileName: fileName || '',
+      fileType: fileType || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -585,6 +657,12 @@ export async function createMentor(data: z.infer<typeof mentorSchema>) {
 
 export async function updateMentor(id: string, data: Partial<z.infer<typeof mentorSchema>>) {
   try {
+    // Get current mentor data to check for assignedStudents changes
+    const mentorDoc = await getDoc(doc(db, 'yep_mentors', id));
+    const currentData = mentorDoc.exists() ? mentorDoc.data() : null;
+    const oldAssignedStudents = currentData?.assignedStudents || [];
+    const newAssignedStudents = data.assignedStudents !== undefined ? data.assignedStudents : oldAssignedStudents;
+    
     // Clean the data to remove undefined values and only include fields that are actually provided
     const updateData: any = {
       updatedAt: serverTimestamp(),
@@ -601,7 +679,53 @@ export async function updateMentor(id: string, data: Partial<z.infer<typeof ment
     if (data.assignedStudents !== undefined) updateData.assignedStudents = data.assignedStudents;
     if (data.file !== undefined) updateData.file = data.file;
 
+    // Handle file upload if provided
+    if (data.fileUpload) {
+      const fileRef = ref(storage, `yep-files/mentors/${id}/${Date.now()}-${data.fileUpload.name}`);
+      const snapshot = await uploadBytes(fileRef, data.fileUpload);
+      updateData.fileUrl = await getDownloadURL(snapshot.ref);
+      updateData.fileName = data.fileUpload.name;
+      updateData.fileType = data.fileUpload.type;
+    }
+
     await updateDoc(doc(db, 'yep_mentors', id), updateData);
+    
+    // Sync mentor-participant relationships if assignedStudents changed
+    if (data.assignedStudents !== undefined) {
+      const mentorName = data.name || currentData?.name || '';
+      if (mentorName) {
+        // Get removed participants (in old but not in new)
+        const removed = oldAssignedStudents.filter((id: string) => !newAssignedStudents.includes(id));
+        // Get added participants (in new but not in old)
+        const added = newAssignedStudents.filter((id: string) => !oldAssignedStudents.includes(id));
+        
+        // Remove mentor from participants that were removed
+        for (const participantId of removed) {
+          try {
+            const syncResult = await syncMentorParticipantRelationship(participantId, mentorName, undefined);
+            if (!syncResult.success) {
+              console.warn(`Failed to remove mentor from participant ${participantId}:`, syncResult.error);
+            }
+          } catch (error) {
+            console.warn(`Error syncing participant ${participantId}:`, error);
+            // Continue with other participants even if one fails
+          }
+        }
+        
+        // Add mentor to participants that were added
+        for (const participantId of added) {
+          try {
+            const syncResult = await syncMentorParticipantRelationship(participantId, undefined, mentorName);
+            if (!syncResult.success) {
+              console.warn(`Failed to assign mentor to participant ${participantId}:`, syncResult.error);
+            }
+          } catch (error) {
+            console.warn(`Error syncing participant ${participantId}:`, error);
+            // Continue with other participants even if one fails
+          }
+        }
+      }
+    }
     
     return { success: true };
   } catch (error) {
@@ -612,6 +736,30 @@ export async function updateMentor(id: string, data: Partial<z.infer<typeof ment
 
 export async function deleteMentor(id: string) {
   try {
+    // Get mentor data before deletion to clean up relationships
+    const mentorDoc = await getDoc(doc(db, 'yep_mentors', id));
+    if (!mentorDoc.exists()) {
+      return { error: 'Mentor not found' };
+    }
+
+    const mentorData = mentorDoc.data();
+    const mentorName = mentorData.name;
+
+    // Clean up participant relationships - remove mentor assignment from all assigned participants
+    if (mentorData.assignedStudents && Array.isArray(mentorData.assignedStudents)) {
+      for (const participantId of mentorData.assignedStudents) {
+        try {
+          const syncResult = await syncMentorParticipantRelationship(participantId, mentorName, undefined);
+          if (!syncResult.success) {
+            console.warn(`Failed to sync relationship for participant ${participantId}:`, syncResult.error);
+          }
+        } catch (syncError) {
+          // Log but continue - participant might already be deleted
+          console.warn(`Failed to sync relationship for participant ${participantId}:`, syncError);
+        }
+      }
+    }
+
     await deleteDoc(doc(db, 'yep_mentors', id));
     
     // revalidatePath('/youth-empowerment'); // Removed - not compatible with client-side usage
@@ -639,6 +787,12 @@ export async function getMentors() {
         availability: data.availability || '',
         assignedStudents: data.assignedStudents || [],
         file: data.file || '',
+        // Auth-related fields
+        userId: data.userId || '',
+        authEmail: data.authEmail || '',
+        inviteCode: data.inviteCode || '',
+        profileCompleted: data.profileCompleted || false,
+        lastLoginAt: data.lastLoginAt?.toDate() || null,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
       };

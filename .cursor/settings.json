@@ -55,6 +55,20 @@
       ],
       "priority": "critical",
       "description": "Firebase authentication context and Firestore operation rules - CRITICAL for preventing PERMISSION_DENIED errors"
+    },
+    "yep-profile-system-rules.mdc": {
+      "applyTo": [
+        "src/app/profile/**/*",
+        "src/app/auth/**/*",
+        "src/components/profile/**/*",
+        "src/components/admin/yep-invites.tsx",
+        "src/components/admin/yep-backfill.tsx",
+        "src/app/youth-empowerment/invite-actions.ts",
+        "src/app/youth-empowerment/profile-actions.ts",
+        "src/app/youth-empowerment/backfill-auth-fields.ts"
+      ],
+      "priority": "high",
+      "description": "YEP profile system, authentication, invites, and user portals"
     }
   },
   "filePatterns": {

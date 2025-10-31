@@ -39,6 +39,7 @@ import { getMentors, deleteMentor, getParticipants } from '@/app/youth-empowerme
 import { YEPMentor, YEPParticipant } from '@/lib/youth-empowerment';
 import { MentorForm } from './mentor-form';
 import { ImportDialog } from './import-dialog';
+import { ProfileViewerModal } from '@/components/admin/profile-viewer-modal';
 
 interface MentorsTableProps {
   onRefresh?: () => void;
@@ -54,8 +55,10 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isProfileViewOpen, setIsProfileViewOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [mentorToDelete, setMentorToDelete] = useState<YEPMentor | null>(null);
+  const [mentorToView, setMentorToView] = useState<YEPMentor | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -108,6 +111,19 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
   const handleView = (mentor: YEPMentor) => {
     setSelectedMentor(mentor);
     setIsViewOpen(true);
+  };
+
+  const handleViewProfile = (mentor: YEPMentor) => {
+    setMentorToView(mentor);
+    setIsProfileViewOpen(true);
+  };
+
+  const handleEditFromProfile = () => {
+    if (mentorToView) {
+      setIsProfileViewOpen(false);
+      setSelectedMentor(mentorToView);
+      setIsFormOpen(true);
+    }
   };
 
   const handleDelete = (mentor: YEPMentor) => {
@@ -322,6 +338,10 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => handleViewProfile(mentor)}>
+                                <User className="mr-2 h-4 w-4" />
+                                View Profile
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleView(mentor)}>
                                 <Eye className="mr-2 h-4 w-4" />
                                 View Details
@@ -352,6 +372,14 @@ export function MentorsTable({ onRefresh }: MentorsTableProps) {
       </Card>
 
       {/* Forms and Modals */}
+      <ProfileViewerModal
+        open={isProfileViewOpen}
+        onOpenChange={setIsProfileViewOpen}
+        profile={mentorToView}
+        role="mentor"
+        onEdit={handleEditFromProfile}
+      />
+
       <MentorForm
         mentor={selectedMentor || undefined}
         isOpen={isFormOpen}

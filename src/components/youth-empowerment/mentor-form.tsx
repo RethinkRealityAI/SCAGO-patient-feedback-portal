@@ -32,6 +32,7 @@ const mentorFormSchema = z.object({
   contractSigned: z.boolean().optional().default(false),
   availability: z.string().optional().or(z.literal('')),
   file: z.string().optional().or(z.literal('')),
+  fileUpload: z.instanceof(File).optional(),
   assignedStudents: z.array(z.string()).default([]),
 });
 
@@ -48,6 +49,8 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
   const [isLoading, setIsLoading] = useState(false);
   const [participants, setParticipants] = useState<YEPParticipant[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<MentorFormData>({
@@ -68,8 +71,11 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
   useEffect(() => {
     if (isOpen) {
       loadParticipants();
+      if (mentor?.fileUrl) {
+        setExistingFileUrl(mentor.fileUrl);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, mentor]);
 
   // Reset form when mentor changes
   useEffect(() => {
@@ -124,11 +130,17 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
   const onSubmit = async (data: MentorFormData) => {
     setIsLoading(true);
     try {
+      // Include uploaded file if provided
+      const submitData = {
+        ...data,
+        fileUpload: uploadedFile || undefined,
+      };
+
       let result;
       if (mentor) {
-        result = await updateMentor(mentor.id, data);
+        result = await updateMentor(mentor.id, submitData);
       } else {
-        result = await createMentor(data);
+        result = await createMentor(submitData);
       }
 
       if (result.success) {
@@ -142,6 +154,8 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
         onClose();
         form.reset();
         setSelectedStudents([]);
+        setUploadedFile(null);
+        setExistingFileUrl(null);
       } else {
         toast({
           title: 'Error',
@@ -309,6 +323,61 @@ export function MentorForm({ mentor, isOpen, onClose, onSuccess }: MentorFormPro
                     </FormItem>
                   )}
                 />
+
+                {/* File Upload */}
+                <div className="space-y-2">
+                  <Label>Upload Document</Label>
+                  <div className="space-y-2">
+                    <Input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          // Check file size (max 10MB)
+                          if (file.size > 10 * 1024 * 1024) {
+                            toast({
+                              title: 'File Too Large',
+                              description: 'Maximum file size is 10MB',
+                              variant: 'destructive',
+                            });
+                            e.target.value = '';
+                            return;
+                          }
+                          setUploadedFile(file);
+                        }
+                      }}
+                    />
+                    {uploadedFile && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Badge variant="secondary">{uploadedFile.name}</Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setUploadedFile(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    {existingFileUrl && !uploadedFile && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <a
+                          href={existingFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          View current file
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  <FormDescription>
+                    Upload contract, background check, or other documents (max 10MB)
+                  </FormDescription>
+                </div>
               </CardContent>
             </Card>
 

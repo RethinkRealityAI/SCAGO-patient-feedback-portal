@@ -19,6 +19,7 @@ import {
   Download,
   Upload
 } from 'lucide-react';
+import Papa from 'papaparse';
 import { getParticipants, getWorkshops } from '@/app/youth-empowerment/actions';
 
 interface AttendanceRecord {
@@ -113,13 +114,62 @@ export function BulkAttendanceEntry({
   };
 
   const handleImport = () => {
-    // TODO: Implement CSV import functionality
-    console.log('Import CSV functionality');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const rows = (results.data as any[]).filter(Boolean);
+          const mapped: AttendanceRecord[] = rows.map((row) => {
+            const findParticipantId = () => {
+              const byId = String(row.participantId || row.studentId || '').trim();
+              if (byId) return byId;
+              const name = String(row.participantName || row.studentName || row.participant || '').trim().toLowerCase();
+              if (!name) return '';
+              const match = participants.find((p) => (p.youthParticipant || '').toLowerCase() === name || (p.email || '').toLowerCase() === name);
+              return match?.id || '';
+            };
+            const parseBool = (v: any) => String(v || '').toLowerCase() === 'true' || String(v || '').toLowerCase() === 'yes' || String(v || '').toLowerCase() === '1';
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              participantId: findParticipantId(),
+              participantName: row.participantName || row.studentName || '',
+              attended: parseBool(row.attended),
+              notes: row.notes || '',
+              checkInTime: row.checkInTime || row.checkIn || '',
+              checkOutTime: row.checkOutTime || row.checkOut || '',
+            } as AttendanceRecord;
+          });
+          setAttendanceRecords((prev) => [...prev, ...mapped]);
+        },
+      });
+    };
+    input.click();
   };
 
   const handleExport = () => {
-    // TODO: Implement CSV export functionality
-    console.log('Export CSV functionality');
+    const rows = attendanceRecords.map((r) => ({
+      participantId: r.participantId,
+      participantName: r.participantName,
+      attended: r.attended,
+      notes: r.notes,
+      checkInTime: r.checkInTime,
+      checkOutTime: r.checkOutTime,
+      workshopId: selectedWorkshop || '',
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'attendance.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const attendedCount = attendanceRecords.filter(r => r.attended).length;
@@ -202,7 +252,7 @@ export function BulkAttendanceEntry({
                   <span className="text-sm font-medium text-muted-foreground">#{index + 1}</span>
                   <Checkbox
                     checked={record.attended}
-                    onCheckedChange={(checked) => updateRecord(record.id, 'attended', checked)}
+                    onCheckedChange={(checked: boolean) => updateRecord(record.id, 'attended', checked)}
                     disabled={disabled}
                   />
                 </div>

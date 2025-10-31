@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,8 @@ import { AdvancedMetrics } from '@/components/youth-empowerment/advanced-metrics
 import { ExportDialog } from '@/components/youth-empowerment/export-dialog';
 import { AttendanceAnalytics } from '@/components/youth-empowerment/attendance-analytics';
 import YEPFormsManagement from '@/components/yep-forms/yep-forms-management';
+import { YEPInvites } from '@/components/admin/yep-invites';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 export default function YouthEmpowermentClient() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -95,6 +97,16 @@ export default function YouthEmpowermentClient() {
     loadData();
   };
 
+  // Add error boundary for better error handling
+  const handleError = (error: Error, errorInfo: any) => {
+    console.error('Dashboard Error:', error, errorInfo);
+    toast({
+      title: 'Error',
+      description: 'An unexpected error occurred. Please refresh the page.',
+      variant: 'destructive',
+    });
+  };
+
   // Calculate dashboard metrics
   const approvedParticipants = participants.filter(p => p.approved).length;
   const pendingParticipants = participants.filter(p => !p.approved).length;
@@ -103,11 +115,14 @@ export default function YouthEmpowermentClient() {
   const totalMentors = mentors.length;
   const participantsWithMentors = participants.filter(p => p.assignedMentor).length;
 
-  // Regional distribution
-  const regionalDistribution = participants.reduce((acc, p) => {
-    acc[p.region] = (acc[p.region] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Regional distribution with better performance
+  const regionalDistribution = useMemo(() => {
+    return participants.reduce((acc, p) => {
+      const key = p.region || 'Unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [participants]);
 
   // Document completion rates
   const contractSigned = participants.filter(p => p.contractSigned).length;
@@ -126,7 +141,8 @@ export default function YouthEmpowermentClient() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <ErrorBoundary onError={handleError}>
+      <div className="container mx-auto py-6 space-y-6">
       {/* Header Section */}
       <div className="space-y-4">
         <div className="flex items-start justify-between">
@@ -407,7 +423,25 @@ export default function YouthEmpowermentClient() {
         </TabsContent>
 
         <TabsContent value="participants">
-          <ParticipantsTable onRefresh={handleRefresh} />
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Participant Management</span>
+                  <Badge variant="secondary">{participants.length} Total</Badge>
+                </CardTitle>
+                <CardDescription>
+                  Manage participants, send invites, and access profiles
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-6">
+                  <YEPInvites />
+                </div>
+              </CardContent>
+            </Card>
+            <ParticipantsTable onRefresh={handleRefresh} />
+          </div>
         </TabsContent>
 
         <TabsContent value="mentors">
@@ -451,6 +485,7 @@ export default function YouthEmpowermentClient() {
         isOpen={isExportDialogOpen}
         onClose={() => setIsExportDialogOpen(false)}
       />
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }

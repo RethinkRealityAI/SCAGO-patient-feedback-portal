@@ -1,11 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useTransition, ReactNode } from 'react';
+import { useTransition, ReactNode, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { DeleteSurveyConfirmation } from '@/components/delete-survey-confirmation';
 
 /**
  * ⚠️ CRITICAL IMPORT - DO NOT CHANGE
@@ -172,14 +173,25 @@ export function CreateSurveyDropdown() {
 export function DeleteSurveyButton({
   surveyId,
   children,
+  onDelete,
+  onError,
+  originalSurvey,
 }: {
   surveyId: string;
   children: ReactNode;
+  onDelete?: (surveyId: string) => void;
+  onError?: (surveyId: string, originalSurvey: any) => void;
+  originalSurvey?: any;
 }) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
-  const handleDelete = () => {
+  const handleDeleteClick = () => {
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmDelete = () => {
     startTransition(async () => {
       const result = await deleteSurvey(surveyId);
       if (result?.error) {
@@ -188,27 +200,53 @@ export function DeleteSurveyButton({
           description: result.error,
           variant: 'destructive',
         });
+        // Call error callback to restore the survey in UI
+        if (onError && originalSurvey) {
+          onError(surveyId, originalSurvey);
+        }
+        setShowConfirmation(false);
         return;
       }
       toast({
         title: 'Success',
         description: 'Survey deleted successfully.',
       });
+      // Call success callback to remove survey from UI
+      if (onDelete) {
+        onDelete(surveyId);
+      }
+      setShowConfirmation(false);
     });
   };
 
+  const handleCancelDelete = () => {
+    setShowConfirmation(false);
+  };
+
+  const surveyName = originalSurvey?.name || originalSurvey?.title || 'Untitled Survey';
+
   return (
-    <Button
-      variant="destructive"
-      size="sm"
-      onClick={handleDelete}
-      disabled={isPending}
-    >
-      {isPending ? (
-        <Loader className="h-4 w-4 animate-spin" />
-      ) : (
-        children
-      )}
-    </Button>
+    <>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={handleDeleteClick}
+        disabled={isPending}
+      >
+        {isPending ? (
+          <Loader className="h-4 w-4 animate-spin" />
+        ) : (
+          children
+        )}
+      </Button>
+
+      <DeleteSurveyConfirmation
+        isOpen={showConfirmation}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        surveyName={surveyName}
+        isDeleting={isPending}
+      />
+    </>
   );
 }

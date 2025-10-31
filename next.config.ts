@@ -43,6 +43,7 @@ const nextConfig: NextConfig = {
         '@/ai/flows/chat-with-data-flow$': false,
         '@/ai/flows/generate-report-flow$': false,
         '@/ai/flows/csv-participant-mapper-flow$': false,
+        '@/ai/flows/rsc-chat-flow$': false,
       };
     }
     return config;

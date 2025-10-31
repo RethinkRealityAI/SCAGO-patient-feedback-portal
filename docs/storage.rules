@@ -28,8 +28,30 @@ service firebase.storage {
       return isAdmin() || isYEPManager();
     }
     
-    // YEP Files - Admin or YEP Manager can read/write
-    match /yep-files/{allPaths=**} {
+    // YEP Files - Admin, YEP Manager, or record owner can read/write
+    // Path structure: yep-files/participants/{participantId}/{fileName} or yep-files/mentors/{mentorId}/{fileName}
+    match /yep-files/participants/{participantId}/{fileName} {
+      // Admins and YEP Managers have full access
+      allow read, write: if isAdminOrYEPManager();
+      
+      // Participants can manage their own files
+      allow read, write: if isAuthenticated() && 
+                            (firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.userId == request.auth.uid ||
+                             firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.authEmail == request.auth.token.email);
+    }
+    
+    match /yep-files/mentors/{mentorId}/{fileName} {
+      // Admins and YEP Managers have full access
+      allow read, write: if isAdminOrYEPManager();
+      
+      // Mentors can manage their own files
+      allow read, write: if isAuthenticated() && 
+                            (firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.userId == request.auth.uid ||
+                             firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.authEmail == request.auth.token.email);
+    }
+    
+    // Legacy YEP files path (backwards compatibility) - Admin or YEP Manager only
+    match /yep-files/{fileName} {
       allow read, write: if isAdminOrYEPManager();
     }
     

@@ -1,0 +1,570 @@
+---
+description: when working with YEP profile system, authentication, invites, and user portals
+alwaysApply: false
+---
+# YEP Profile System & Authentication Rules
+
+## 🎯 **Rule Application Scope**
+**Target Files**: Profile system and authentication
+**Apply To**: 
+- `src/app/profile/**`
+- `src/app/auth/**`
+- `src/components/profile/**`
+- `src/components/admin/yep-invites.tsx`
+- `src/app/youth-empowerment/invite-actions.ts`
+- `src/app/youth-empowerment/profile-actions.ts`
+
+## 🔐 **Authentication Architecture**
+
+### Firebase Admin SDK for Invites
+```typescript
+// Server-side only - uses Firebase Admin SDK
+import { getAdminAuth } from '@/lib/firebase-admin';
+
+// Create user and send password reset link (acts as magic link)
+const auth = getAdminAuth();
+const userRecord = await auth.createUser({
+  email: 'user@example.com',
+  emailVerified: false,
+});
+
+// Send password reset link
+const actionCodeSettings = {
+  url: `${process.env.NEXT_PUBLIC_APP_URL}/profile?welcome=true`,
+  handleCodeInApp: false,
+};
+await auth.generatePasswordResetLink(email, actionCodeSettings);
+```
+
+### Profile Claiming Flow
+```typescript
+// 1. User signs in via magic link from email
+// 2. On /profile, check if userId is linked to a record
+// 3. If not, attempt to claim profile by email or inviteCode
+// 4. Update record with userId and authEmail
+// 5. Redirect to profile dashboard
+
+export async function claimYEPProfile(
+  userId: string,
+  email: string,
+  inviteCode?: string
+): Promise<ClaimResult> {
+  // Try to find by email first
+  const byEmail = await findRecordByEmail(email);
+  if (byEmail) {
+    // Verify not already claimed
+    if (byEmail.userId && byEmail.userId !== userId) {
+      return { success: false, error: 'Already claimed' };
+    }
+    // Claim it
+    await updateRecord({ userId, authEmail: email, lastLoginAt: new Date() });
+    return { success: true, role: 'participant' };
+  }
+  
+  // Try invite code if provided
+  if (inviteCode) {
+    const byCode = await findRecordByInviteCode(inviteCode);
+    // Similar logic...
+  }
+  
+  return { success: false, error: 'No profile found' };
+}
+```
+
+## 🗄️ **Updated Schema with Auth Fields**
+
+### Participant Schema (Updated)
+```typescript
+interface YEPParticipant {
+  // ... all existing fields ...
+  
+  // Auth and Profile Fields (NEW)
+  userId?: string;                // Firebase Auth UID when claimed
+  authEmail?: string;             // Email used for auth (may differ from contact email)
+  profileCompleted?: boolean;     // Has user completed their profile?
+  inviteCode?: string;           // Optional invite code for claiming
+  lastLoginAt?: Date;            // Track last login
+}
+```
+
+### Mentor Schema (Updated)
+```typescript
+interface YEPMentor {
+  // ... all existing fields ...
+  
+  // Auth and Profile Fields (NEW)
+  userId?: string;                // Firebase Auth UID when claimed
+  authEmail?: string;             // Email used for auth
+  profileCompleted?: boolean;     // Has user completed their profile?
+  inviteCode?: string;           // Optional invite code for claiming
+  lastLoginAt?: Date;            // Track last login
+}
+```
+
+## 🔒 **Firestore Security Rules**
+
+### Owner-Based Access
+```javascript
+// Participants can read/update their own profile (limited fields)
+match /yep_participants/{participantId} {
+  // Admins and YEP Managers have full access
+  allow read, write: if isAdminOrYEPManager();
+  
+  // Participants can read their own profile
+  allow read: if isAuthenticated() && 
+                 (resource.data.userId == request.auth.uid || 
+                  resource.data.authEmail == request.auth.token.email);
+  
+  // Participants can update LIMITED fields on their own profile
+  allow update: if isAuthenticated() && 
+                   (resource.data.userId == request.auth.uid || 
+                    resource.data.authEmail == request.auth.token.email) &&
+                   request.resource.data.diff(resource.data).changedKeys()
+                     .hasOnly(['phoneNumber', 'emergencyContactRelationship', 
+                               'emergencyContactNumber', 'mailingAddress', 
+                               'streetAddress', 'city', 'province', 'postalCode', 
+                               'availability', 'notes', 'fileUrl', 'fileName', 
+                               'fileType', 'lastLoginAt', 'profileCompleted', 'updatedAt']);
+}
+
+// Similar rules for mentors
+match /yep_mentors/{mentorId} {
+  allow read, write: if isAdminOrYEPManager();
+  allow read: if isAuthenticated() && 
+                 (resource.data.userId == request.auth.uid || 
+                  resource.data.authEmail == request.auth.token.email);
+  allow update: if isAuthenticated() && 
+                   (resource.data.userId == request.auth.uid || 
+                    resource.data.authEmail == request.auth.token.email) &&
+                   request.resource.data.diff(resource.data).changedKeys()
+                     .hasOnly(['phone', 'availability', 'fileUrl', 'fileName', 
+                               'fileType', 'lastLoginAt', 'profileCompleted', 'updatedAt']);
+}
+```
+
+## 📁 **Storage Security Rules**
+
+### Owner-Based File Access
+```javascript
+// Participants can manage their own files
+match /yep-files/participants/{participantId}/{fileName} {
+  allow read, write: if isAdminOrYEPManager();
+  allow read, write: if isAuthenticated() && 
+                        (firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.userId == request.auth.uid ||
+                         firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.authEmail == request.auth.token.email);
+}
+
+// Mentors can manage their own files
+match /yep-files/mentors/{mentorId}/{fileName} {
+  allow read, write: if isAdminOrYEPManager();
+  allow read, write: if isAuthenticated() && 
+                        (firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.userId == request.auth.uid ||
+                         firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.authEmail == request.auth.token.email);
+}
+```
+
+## 📧 **Invite System Patterns**
+
+### Sending Invites (Admin Only)
+```typescript
+// Server action using Admin SDK
+export async function sendYEPInvite(data: {
+  email: string;
+  role: 'participant' | 'mentor';
+  name: string;
+  sendEmail: boolean;
+}): Promise<InviteResult> {
+  const auth = getAdminAuth();
+  const firestore = getAdminFirestore();
+  
+  // Generate unique invite code
+  const inviteCode = nanoid(10);
+  
+  // Create or get Firebase Auth user
+  const userRecord = await createOrGetUser(email);
+  
+  // Create/update record in Firestore
+  const collection = role === 'participant' ? 'yep_participants' : 'yep_mentors';
+  await firestore.collection(collection).add({
+    [role === 'participant' ? 'youthParticipant' : 'name']: name,
+    email,
+    userId: userRecord.uid,
+    authEmail: email,
+    inviteCode,
+    profileCompleted: false,
+    // ... required fields ...
+  });
+  
+  // Send password reset link (magic link)
+  if (sendEmail) {
+    await auth.generatePasswordResetLink(email, actionCodeSettings);
+  }
+  
+  return { success: true, userId: userRecord.uid, inviteCode };
+}
+```
+
+### Bulk Invites
+```typescript
+export async function sendBulkYEPInvites(
+  invites: InviteData[]
+): Promise<{ success: boolean; results: InviteResult[] }> {
+  const results = await Promise.all(
+    invites.map(invite => sendYEPInvite(invite))
+  );
+  return { success: true, results };
+}
+```
+
+## 🏠 **Profile Portal Patterns**
+
+### Profile Detection
+```typescript
+// On /profile page load
+const result = await getYEPProfileByUserId(user.uid);
+
+if (result.success && result.profile) {
+  // Show profile dashboard with tabs
+  setProfile(result.profile);
+  setRole(result.role); // 'participant' or 'mentor'
+} else {
+  // Show claiming UI
+  setNeedsClaiming(true);
+}
+```
+
+### Profile Tabs Structure
+```typescript
+// /profile page has three tabs:
+1. Details - View/edit contact info, address, availability
+2. Documents - Upload/view files, see checklist
+3. Security - View email, last login, sign out, request new link
+```
+
+### Field Restrictions
+```typescript
+// Participants can edit these fields only:
+const PARTICIPANT_EDITABLE_FIELDS = [
+  'phoneNumber',
+  'emergencyContactRelationship',
+  'emergencyContactNumber',
+  'mailingAddress',
+  'streetAddress',
+  'city',
+  'province',
+  'postalCode',
+  'availability',
+  'notes',
+];
+
+// Mentors can edit these fields only:
+const MENTOR_EDITABLE_FIELDS = [
+  'phone',
+  'availability',
+];
+
+// Admin-only fields (cannot be edited by users):
+// - approved, assignedMentor, contractSigned, signedSyllabus, etc.
+```
+
+## 🔄 **Data Migration Patterns**
+
+### Backfill Existing Records
+```typescript
+export async function backfillAuthFields() {
+  const participants = await getDocs(collection(db, 'yep_participants'));
+  
+  for (const doc of participants.docs) {
+    const data = doc.data();
+    const updates: any = {};
+    
+    // Add authEmail if email exists and authEmail is not set
+    if (data.email && !data.authEmail) {
+      updates.authEmail = data.email;
+    }
+    
+    // Add profileCompleted if not set
+    if (data.profileCompleted === undefined) {
+      updates.profileCompleted = false;
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(doc.ref, { ...updates, updatedAt: new Date() });
+    }
+  }
+  
+  // Same for mentors...
+}
+```
+
+### Generate Invite Codes
+```typescript
+export async function generateInviteCodes() {
+  // For records without userId or inviteCode, generate a code
+  const records = await getRecordsWithoutCodes();
+  
+  for (const record of records) {
+    await updateDoc(record.ref, {
+      inviteCode: nanoid(10),
+      updatedAt: new Date(),
+    });
+  }
+}
+```
+
+## 📋 **Environment Variables Required**
+
+```bash
+# Client-side (Public)
+NEXT_PUBLIC_APP_URL=https://yourapp.com
+
+# Server-side (Private - for Admin SDK)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+## 🚨 **Critical Rules**
+
+### DO:
+- ✅ Always use Admin SDK server-side for user creation
+- ✅ Validate that userId is not already claimed before linking
+- ✅ Track lastLoginAt on profile claims and updates
+- ✅ Restrict user-editable fields in both code and Firestore rules
+- ✅ Use password reset links as magic links (Firebase built-in)
+- ✅ Generate unique invite codes for fallback claiming
+
+### DON'T:
+- ❌ Allow users to edit admin-managed fields (approved, assignedMentor, etc.)
+- ❌ Expose Admin SDK credentials client-side
+- ❌ Allow claiming of profiles already linked to another user
+- ❌ Skip validation when claiming profiles
+- ❌ Forget to update lastLoginAt on logins
+
+## 🧪 **Testing Checklist**
+
+### Admin Invite Flow
+1. Admin sends invite via /admin → YEP Invites tab
+2. User receives password reset email
+3. User clicks link, sets password
+4. User redirected to /profile
+5. Profile auto-claimed by email match
+6. User sees profile dashboard
+
+### Profile Self-Service
+1. User logs in and goes to /profile
+2. Can edit contact info, address, availability
+3. Cannot edit admin fields (grayed out)
+4. Can upload documents to Firebase Storage
+5. Can view document checklist
+6. Can request new sign-in link
+7. Can sign out
+
+### Security Validation
+1. Non-owners cannot access other profiles
+2. Storage files restricted to owners + admins
+3. Firestore rules block unauthorized updates
+4. Invite codes work as fallback when email doesn't match
+5. Already-claimed profiles cannot be re-claimed
+
+## 📚 **Key Files**
+
+### Server Actions
+- `src/app/youth-empowerment/invite-actions.ts` - Send invites, manage users
+- `src/app/youth-empowerment/profile-actions.ts` - Claim profiles, get by userId
+- `src/app/youth-empowerment/backfill-auth-fields.ts` - Migration scripts
+
+### Admin UI
+- `src/components/admin/yep-invites.tsx` - Invite management UI
+- `src/components/admin/yep-backfill.tsx` - Data migration UI
+
+### User Portal
+- `src/app/profile/page.tsx` - Main profile portal
+- `src/components/profile/profile-details.tsx` - Edit contact info
+- `src/components/profile/profile-documents.tsx` - Document management
+- `src/components/profile/profile-security.tsx` - Account security
+
+### Auth Flow
+- `src/app/auth/complete/page.tsx` - Email link sign-in completion
+
+### Core Infrastructure
+- `src/lib/firebase-admin.ts` - Admin SDK initialization
+- `docs/firestore.rules` - Database security rules
+- `docs/storage.rules` - File storage security rules
+
+## 🎯 **Implementation Patterns**
+
+### Invite Creation Pattern
+```typescript
+// Admin creates invite
+const result = await sendYEPInvite({
+  email: 'participant@example.com',
+  role: 'participant',
+  name: 'John Doe',
+  sendEmail: true,
+});
+
+// This:
+// 1. Creates Firebase Auth user
+// 2. Creates/updates Firestore record with userId, authEmail, inviteCode
+// 3. Sends password reset email
+```
+
+### Profile Update Pattern
+```typescript
+// User updates their profile
+const updates = {
+  phoneNumber: '555-1234',
+  availability: 'Weekdays 6-9pm',
+};
+
+// Only allowed fields can be updated
+await updateParticipant(profileId, updates);
+
+// Firestore rules enforce field restrictions
+```
+
+### Document Upload Pattern
+```typescript
+// Upload to role-specific path
+const path = `yep-files/${role}s/${recordId}/${timestamp}-${filename}`;
+const fileRef = ref(storage, path);
+await uploadBytes(fileRef, file);
+const url = await getDownloadURL(fileRef);
+
+// Update record
+await updateDoc(recordRef, {
+  fileUrl: url,
+  fileName: file.name,
+  fileType: file.type,
+});
+```
+
+## 📊 **Access Control Matrix**
+
+| Action | Admin | YEP Manager | Record Owner | Public |
+|--------|-------|-------------|--------------|--------|
+| View all profiles | ✅ | ✅ | ❌ | ❌ |
+| View own profile | ✅ | ✅ | ✅ | ❌ |
+| Edit all fields | ✅ | ✅ | ❌ | ❌ |
+| Edit contact fields | ✅ | ✅ | ✅ | ❌ |
+| Upload documents | ✅ | ✅ | ✅ | ❌ |
+| View all documents | ✅ | ✅ | ❌ | ❌ |
+| View own documents | ✅ | ✅ | ✅ | ❌ |
+| Send invites | ✅ | ❌ | ❌ | ❌ |
+| Claim profile | ✅ | ✅ | ✅ | ✅ |
+
+## 🔧 **Common Operations**
+
+### Create Invite with Record
+```typescript
+// Step 1: Admin sends invite
+await sendYEPInvite({
+  email: 'newuser@example.com',
+  role: 'participant',
+  name: 'New User',
+  sendEmail: true,
+});
+
+// This creates:
+// - Firebase Auth user
+// - Firestore record with minimal data
+// - Sends password reset email
+```
+
+### User First Login
+```typescript
+// Step 1: User clicks email link and sets password
+// Step 2: User lands on /profile
+// Step 3: Auto-claim by email
+const result = await claimYEPProfile(userId, email);
+
+// Step 4: Profile dashboard shows
+```
+
+### User Updates Profile
+```typescript
+// User edits contact info
+await updateParticipant(profileId, {
+  phoneNumber: '555-1234',
+  streetAddress: '123 Main St',
+  city: 'Toronto',
+});
+
+// Firestore rules validate:
+// - User owns this profile
+// - Only allowed fields are updated
+```
+
+## 🎨 **UI/UX Patterns**
+
+### Profile Claiming UI
+- Show email they're signed in with
+- Button to claim by email match
+- Input field for invite code (fallback)
+- Clear error messages if claiming fails
+
+### Profile Dashboard
+- Header shows name and role
+- Three tabs: Details, Documents, Security
+- Read-only fields are grayed out with explanation
+- Editable fields have clear edit/save flow
+- Document upload with progress feedback
+
+### Admin Invite UI
+- Single invite form
+- Bulk CSV import
+- Results display with success/failure indicators
+- Resend invite option
+
+## ⚠️ **Error Handling**
+
+### Common Errors
+```typescript
+// Profile already claimed
+if (record.userId && record.userId !== userId) {
+  return { error: 'This profile has already been claimed' };
+}
+
+// No profile found
+if (!foundByEmail && !foundByCode) {
+  return { error: 'No profile found for this email or code' };
+}
+
+// Unauthorized field update
+// Firestore rules will reject - show user-friendly message
+```
+
+### User Feedback
+- Clear success messages after actions
+- Specific error messages (not generic "failed")
+- Loading states during async operations
+- Confirmation dialogs for destructive actions
+
+## 🚀 **Deployment Checklist**
+
+1. ✅ Add environment variables (FIREBASE_PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY)
+2. ✅ Deploy updated Firestore rules to Firebase Console
+3. ✅ Deploy updated Storage rules to Firebase Console
+4. ✅ Run backfill script to update existing records
+5. ✅ Generate invite codes for records without them
+6. ✅ Test invite flow end-to-end
+7. ✅ Test profile claiming and editing
+8. ✅ Verify security rules block unauthorized access
+9. ✅ Update login page to remove public signup option
+
+## 📖 **User Documentation**
+
+### For Administrators
+- Send invites via Admin → YEP Invites
+- Users receive password reset email
+- Monitor profile claims in YEP dashboard
+- Run backfill tools once after deployment
+
+### For Participants/Mentors
+- Click link in invite email
+- Set password when prompted
+- Land on /profile automatically
+- Profile auto-claims if email matches
+- Edit contact info and upload documents
+- Request new sign-in link from Security tab

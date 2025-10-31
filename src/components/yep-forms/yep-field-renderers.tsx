@@ -18,6 +18,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { SINSecureField } from './sin-secure-field';
 import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
+import { ParticipantLookupField } from '@/components/yep-forms/participant-lookup-field';
+import { MentorLookupField } from '@/components/yep-forms/mentor-lookup-field';
 
 interface YEPFieldRendererProps {
   field: YEPField;
@@ -178,9 +180,33 @@ export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
       // 'switch' is not a supported ExtendedFieldType; render as checkbox if present
       // fallthrough handled by default
       case YEPFieldType.yepParticipantLookup:
-        return <div className="p-4 border rounded-lg bg-muted/50">Participant Lookup Field (To be implemented)</div>;
+        return (
+          <Controller
+            control={control}
+            name={fieldName}
+            render={({ field: controllerField }) => (
+              <ParticipantLookupField
+                value={controllerField.value || ''}
+                onChange={controllerField.onChange}
+                allowCreate={true}
+              />
+            )}
+          />
+        );
       case YEPFieldType.yepMentorLookup:
-        return <div className="p-4 border rounded-lg bg-muted/50">Mentor Lookup Field (To be implemented)</div>;
+        return (
+          <Controller
+            control={control}
+            name={fieldName}
+            render={({ field: controllerField }) => (
+              <MentorLookupField
+                value={controllerField.value || ''}
+                onChange={controllerField.onChange}
+                allowCreate={true}
+              />
+            )}
+          />
+        );
       case YEPFieldType.yepSIN:
         return (
           <Controller

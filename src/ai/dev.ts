@@ -6,3 +6,4 @@ config();
 import './flows/analyze-feedback-flow';
 import './flows/chat-with-data-flow';
 import './flows/generate-report-flow';
+import './flows/rsc-chat-flow';

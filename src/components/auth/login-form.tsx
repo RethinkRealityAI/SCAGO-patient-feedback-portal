@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, resetPassword } from '@/lib/firebase-auth';
+import { signIn, resetPassword, getUserRole } from '@/lib/firebase-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -45,17 +45,30 @@ export default function LoginForm() {
     } else {
       // Login flow
       const result = await signIn(email, password);
-      setLoading(false);
-
+      
       if (result.error) {
+        setLoading(false);
         setError(result.error);
         setPassword('');
+      } else if (result.user) {
+        // Check user role and route accordingly
+        const role = await getUserRole(result.user.email);
+        setLoading(false);
+
+        if (redirectUrl) {
+          // If there's a redirect URL, use it
+          const destination = decodeURIComponent(redirectUrl);
+          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/dashboard';
+          router.push(safeDestination);
+        } else if (role === 'admin' || role === 'yep-manager') {
+          // Admins and YEP managers go to dashboard
+          router.push('/dashboard');
+        } else {
+          // Regular users (participants/mentors) go to their profile
+          router.push('/profile');
+        }
       } else {
-        // Redirect to the intended page or dashboard as fallback
-        const destination = redirectUrl ? decodeURIComponent(redirectUrl) : '/dashboard';
-        // Ensure the destination is safe (starts with / and doesn't contain dangerous characters)
-        const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/dashboard';
-        router.push(safeDestination);
+        setLoading(false);
       }
     }
   };
@@ -68,12 +81,12 @@ export default function LoginForm() {
             <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">
-            {resetMode ? 'Reset Password' : 'Admin Login'}
+            {resetMode ? 'Reset Password' : 'Youth Empowerment Portal'}
           </CardTitle>
           <CardDescription>
             {resetMode 
               ? 'Enter your email to receive a password reset link'
-              : 'Sign in to access the dashboard'
+              : 'Sign in to access your portal'
             }
           </CardDescription>
         </CardHeader>
@@ -104,7 +117,7 @@ export default function LoginForm() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@example.com"
+                  placeholder="your-email@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
@@ -170,8 +183,23 @@ export default function LoginForm() {
           </form>
 
           {/* Help Text */}
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Need access? Contact your administrator</p>
+          <div className="mt-6 text-center space-y-2">
+            <div className="pt-2">
+              <p className="text-sm text-muted-foreground">
+                Don't have an account?{' '}
+                <Button
+                  variant="link"
+                  onClick={() => router.push('/yep-register')}
+                  className="p-0 h-auto font-medium"
+                  type="button"
+                >
+                  Register here
+                </Button>
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground pt-2 border-t">
+              Need help? Contact your program administrator
+            </p>
           </div>
         </CardContent>
       </Card>

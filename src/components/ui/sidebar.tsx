@@ -12,6 +12,7 @@ import {
   User,
   Shield,
   Users,
+  GraduationCap,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -37,27 +38,48 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isPinned, setIsPinned] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const { user, isAdmin, isYEPManager, userRole } = useContext(AuthContext);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('sidebarCollapsed');
+      const stored = localStorage.getItem('sidebarPinned');
       if (stored !== null) {
-        setIsCollapsed(stored === 'true');
+        const pinned = stored === 'true';
+        setIsPinned(pinned);
+        setIsCollapsed(!pinned);
       }
     } catch {}
   }, []);
 
-  const toggleCollapsed = () => {
-    const next = !isCollapsed;
-    setIsCollapsed(next);
+  const togglePin = () => {
+    const nextPinned = !isPinned;
+    setIsPinned(nextPinned);
+    setIsCollapsed(!nextPinned);
     try {
-      localStorage.setItem('sidebarCollapsed', String(next));
+      localStorage.setItem('sidebarPinned', String(nextPinned));
     } catch {}
   };
+
+  const handleMouseEnter = () => {
+    if (!isPinned) {
+      setIsHovering(true);
+      setIsCollapsed(false);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (!isPinned) {
+      setIsHovering(false);
+      setIsCollapsed(true);
+    }
+  };
+
+  const shouldShowExpanded = !isCollapsed || isHovering;
 
   const handleLogout = async () => {
     const result = await signOut();
@@ -88,38 +110,67 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="sticky top-0 flex h-screen w-fit flex-col border-r bg-background p-4 overflow-y-auto">
+    <aside 
+      className={cn(
+        "sticky top-0 flex h-screen flex-col border-r bg-background p-4 overflow-y-auto transition-all duration-300 ease-in-out",
+        shouldShowExpanded ? "w-64" : "w-fit"
+      )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <div className="flex flex-1 flex-col gap-y-2">
         <SidebarLink
           href="/"
           icon={<FileText />}
           label="Surveys"
-          isCollapsed={isCollapsed}
+          isCollapsed={!shouldShowExpanded}
         />
         <SidebarLink
           href="/dashboard"
           icon={<Home />}
           label="Dashboard"
-          isCollapsed={isCollapsed}
+          isCollapsed={!shouldShowExpanded}
         />
         <SidebarLink
           href="/editor"
           icon={<ClipboardList />}
           label="Survey Editor"
-          isCollapsed={isCollapsed}
+          isCollapsed={!shouldShowExpanded}
         />
         <SidebarLink
           href="/resources"
           icon={<Book />}
           label="Resources"
-          isCollapsed={isCollapsed}
+          isCollapsed={!shouldShowExpanded}
+        />
+        {(isAdmin || isYEPManager) && (
+          <SidebarLink
+            href="/youth-empowerment"
+            icon={<GraduationCap />}
+            label="YEP Dashboard"
+            isCollapsed={!shouldShowExpanded}
+          />
+        )}
+        {isAdmin && (
+          <SidebarLink
+            href="/admin"
+            icon={<Shield />}
+            label="Admin Panel"
+            isCollapsed={!shouldShowExpanded}
+          />
+        )}
+        <SidebarLink
+          href="/profile"
+          icon={<User />}
+          label="Profile"
+          isCollapsed={!shouldShowExpanded}
         />
       </div>
 
       <div className="mt-auto space-y-2">
         {user && (
           <div className="border-t pt-2">
-            {isCollapsed ? (
+            {!shouldShowExpanded ? (
               <TooltipProvider>
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>
@@ -198,13 +249,34 @@ export function Sidebar() {
           </div>
         )}
         
-        <Button
-          variant="ghost"
-          className="w-full justify-start"
-          onClick={toggleCollapsed}
-        >
-          {isCollapsed ? <ChevronsRight /> : <ChevronsLeft />}
-        </Button>
+        {shouldShowExpanded && (
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={togglePin}
+                >
+                  {isPinned ? (
+                    <>
+                      <ChevronsLeft className="h-4 w-4" />
+                      <span className="ml-2">Unpin</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronsRight className="h-4 w-4" />
+                      <span className="ml-2">Pin Open</span>
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {isPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     </aside>
   );
@@ -253,7 +325,10 @@ const SidebarLink = ({
         'w-full justify-start'
       )}
     >
-      {icon} <span className="ml-4">{label}</span>
+      {icon} 
+      <span className="ml-4 whitespace-nowrap overflow-hidden transition-opacity duration-200">
+        {label}
+      </span>
     </Link>
   );
 };

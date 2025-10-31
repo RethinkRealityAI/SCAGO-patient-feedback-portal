@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -51,6 +51,7 @@ import { getParticipants, deleteParticipant } from '@/app/youth-empowerment/acti
 import { YEPParticipant } from '@/lib/youth-empowerment';
 import { ParticipantForm } from './participant-form';
 import { ParticipantImporter } from './participant-importer';
+import { ProfileViewerModal } from '@/components/admin/profile-viewer-modal';
 
 interface ParticipantsTableProps {
   onRefresh?: () => void;
@@ -70,8 +71,10 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isProfileViewOpen, setIsProfileViewOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [participantToDelete, setParticipantToDelete] = useState<YEPParticipant | null>(null);
+  const [participantToView, setParticipantToView] = useState<YEPParticipant | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
     }
   };
 
-  const filterParticipants = () => {
+  const filterParticipants = useCallback(() => {
     let filtered = participants;
 
     // Search filter
@@ -165,7 +168,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
     }
 
     setFilteredParticipants(filtered);
-  };
+  }, [participants, searchTerm, statusFilter, regionFilter, ageFilter, documentFilter, recruitmentFilter]);
 
   const handleEdit = (participant: YEPParticipant) => {
     setSelectedParticipant(participant);
@@ -175,6 +178,19 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
   const handleView = (participant: YEPParticipant) => {
     setSelectedParticipant(participant);
     setIsViewOpen(true);
+  };
+
+  const handleViewProfile = (participant: YEPParticipant) => {
+    setParticipantToView(participant);
+    setIsProfileViewOpen(true);
+  };
+
+  const handleEditFromProfile = () => {
+    if (participantToView) {
+      setIsProfileViewOpen(false);
+      setSelectedParticipant(participantToView);
+      setIsFormOpen(true);
+    }
   };
 
   const handleDelete = (participant: YEPParticipant) => {
@@ -480,7 +496,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                   filteredParticipants.map((participant) => (
                     <TableRow key={participant.id} className="h-auto hover:bg-muted/40 transition-all duration-200 group">
                       <TableCell className="sticky left-0 bg-background group-hover:bg-muted/40 w-[200px] py-4 transition-colors">
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <div className="font-semibold text-sm truncate" title={participant.youthParticipant}>
                             {participant.youthParticipant}
                           </div>
@@ -488,6 +504,15 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                             <Mail className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="truncate" title={participant.email}>{participant.email}</span>
                           </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewProfile(participant)}
+                            className="h-7 text-xs px-2 py-1 gap-1.5 w-full"
+                          >
+                            <User className="h-3 w-3" />
+                            View Profile
+                          </Button>
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
@@ -588,18 +613,55 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                         )}
                       </TableCell>
                       <TableCell className="py-4">
-                        {participant.fileUrl ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(participant.fileUrl, '_blank')}
-                            className="gap-1.5"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            View
-                          </Button>
+                        {participant.fileUrl || participant.healthCardUrl || participant.photoIdUrl || participant.consentFormUrl ? (
+                          <div className="flex flex-col gap-1">
+                            {participant.fileUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(participant.fileUrl, '_blank')}
+                                className="gap-1.5 h-7 text-xs"
+                              >
+                                <Download className="h-3 w-3" />
+                                File
+                              </Button>
+                            )}
+                            {participant.healthCardUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(participant.healthCardUrl, '_blank')}
+                                className="gap-1.5 h-7 text-xs"
+                              >
+                                <Download className="h-3 w-3" />
+                                Health Card
+                              </Button>
+                            )}
+                            {participant.photoIdUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(participant.photoIdUrl, '_blank')}
+                                className="gap-1.5 h-7 text-xs"
+                              >
+                                <Download className="h-3 w-3" />
+                                Photo ID
+                              </Button>
+                            )}
+                            {participant.consentFormUrl && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(participant.consentFormUrl, '_blank')}
+                                className="gap-1.5 h-7 text-xs"
+                              >
+                                <Download className="h-3 w-3" />
+                                Consent
+                              </Button>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-muted-foreground text-sm italic">No file</span>
+                          <span className="text-muted-foreground text-sm italic">No files</span>
                         )}
                       </TableCell>
                       <TableCell className="sticky right-0 bg-background group-hover:bg-muted/40 py-4 transition-colors">
@@ -611,6 +673,10 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuLabel className="font-semibold">Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleViewProfile(participant)} className="cursor-pointer">
+                              <User className="mr-2 h-4 w-4" />
+                              View Profile
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleView(participant)} className="cursor-pointer">
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
@@ -640,6 +706,14 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
       </Card>
 
       {/* Forms and Modals */}
+      <ProfileViewerModal
+        open={isProfileViewOpen}
+        onOpenChange={setIsProfileViewOpen}
+        profile={participantToView}
+        role="participant"
+        onEdit={handleEditFromProfile}
+      />
+
       <ParticipantForm
         participant={selectedParticipant || undefined}
         isOpen={isFormOpen}
@@ -822,16 +896,31 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewOpen(false)}>
-              Close
+          <DialogFooter className="flex justify-between">
+            <Button 
+              variant="secondary" 
+              onClick={() => {
+                setIsViewOpen(false);
+                if (selectedParticipant) {
+                  handleViewProfile(selectedParticipant);
+                }
+              }}
+              className="gap-2"
+            >
+              <User className="h-4 w-4" />
+              View Full Profile
             </Button>
-            <Button onClick={() => {
-              setIsViewOpen(false);
-              handleEdit(selectedParticipant!);
-            }}>
-              Edit Participant
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsViewOpen(false)}>
+                Close
+              </Button>
+              <Button onClick={() => {
+                setIsViewOpen(false);
+                handleEdit(selectedParticipant!);
+              }}>
+                Edit Participant
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

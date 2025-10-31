@@ -6,6 +6,9 @@
   "firestore": {
     "rules": "docs/firestore.rules"
   },
+  "storage": {
+    "rules": "docs/storage.rules"
+  },
   "hosting": {
     "public": "out",
     "ignore": [

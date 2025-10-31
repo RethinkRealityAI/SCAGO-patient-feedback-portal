@@ -38,6 +38,16 @@ export interface YEPParticipant {
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
+  // User-uploaded document URLs
+  healthCardUrl?: string;
+  healthCardFileName?: string;
+  healthCardFileType?: string;
+  photoIdUrl?: string;
+  photoIdFileName?: string;
+  photoIdFileType?: string;
+  consentFormUrl?: string;
+  consentFormFileName?: string;
+  consentFormFileType?: string;
   // Additional legacy fields
   approved?: boolean; // Made optional with default false
   canadianStatusOther?: string; // Made optional
@@ -49,6 +59,12 @@ export interface YEPParticipant {
   interviewed?: boolean;
   interviewNotes?: string;
   recruited?: boolean;
+  // Auth and Profile fields
+  userId?: string; // Firebase Auth UID when claimed
+  authEmail?: string; // Email used for auth (may differ from contact email)
+  profileCompleted?: boolean; // Has user completed their profile?
+  inviteCode?: string; // Optional invite code for claiming
+  lastLoginAt?: Date; // Track last login
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +83,25 @@ export interface YEPMentor {
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
+  // User-uploaded document URLs
+  policeCheckUrl?: string;
+  policeCheckFileName?: string;
+  policeCheckFileType?: string;
+  resumeUrl?: string;
+  resumeFileName?: string;
+  resumeFileType?: string;
+  referencesUrl?: string;
+  referencesFileName?: string;
+  referencesFileType?: string;
+  // Document status flags (for tracking)
+  resumeProvided?: boolean;
+  referencesProvided?: boolean;
+  // Auth and Profile fields
+  userId?: string; // Firebase Auth UID when claimed
+  authEmail?: string; // Email used for auth (may differ from contact email)
+  profileCompleted?: boolean; // Has user completed their profile?
+  inviteCode?: string; // Optional invite code for claiming
+  lastLoginAt?: Date; // Track last login
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +138,46 @@ export interface YEPAdvisorMeeting {
   duration?: number;
   notes?: string;
   topics?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface YEPMessage {
+  id: string;
+  senderId: string;          // userId of sender
+  senderRole: 'participant' | 'mentor';
+  senderName: string;        // Name for display
+  recipientId: string;       // userId of recipient
+  recipientRole: 'participant' | 'mentor';
+  recipientName: string;
+  subject: string;
+  content: string;
+  read: boolean;
+  readAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface YEPMeeting {
+  id: string;
+  participantId: string;     // Document ID from yep_participants
+  participantUserId: string; // Firebase Auth userId
+  participantName: string;
+  mentorId: string;          // Document ID from yep_mentors
+  mentorUserId: string;      // Firebase Auth userId
+  mentorName: string;
+  requestedBy: 'participant' | 'mentor';
+  title: string;
+  description?: string;
+  proposedDate: Date;
+  proposedTime: string;      // e.g., "14:00"
+  duration: number;          // in minutes
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  location?: string;         // Virtual/In-person
+  meetingLink?: string;      // Zoom/Google Meet link
+  rejectionReason?: string;
+  approvedAt?: Date;
+  rejectedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -246,6 +321,11 @@ export const mentorTitleOptions = [
   'Community Liaison',
   'Other'
 ];
+
+// Firestore ID Validation
+export function looksLikeFirestoreId(str: string): boolean {
+  return str.length === 20 && /^[a-zA-Z0-9]{20}$/.test(str);
+}
 
 // AI Analysis Configuration for YEP
 export const yepAnalysisConfig = {

@@ -6,14 +6,18 @@ import { usePathname } from 'next/navigation';
 import Header from '@/components/header';
 import { AuthProvider } from '@/components/auth/auth-provider';
 
-// Hide navigation for public pages, login, unauthorized, setup-admin, and youth empowerment dashboard
-const HIDDEN_NAV_PATHS = ['/survey', '/youth-empowerment', '/login', '/unauthorized', '/setup-admin'];
+// Hide navigation for public pages, login, unauthorized, and setup-admin
+const HIDDEN_NAV_PATHS = ['/survey', '/login', '/unauthorized', '/setup-admin'];
+
+// Show sidebar only on admin page
+const ADMIN_PATH = '/admin';
 
 export default function AppBody({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const pathname = usePathname();
 
   const hideNav = HIDDEN_NAV_PATHS.some(path => pathname.startsWith(path));
+  const showSidebar = !isMobile && pathname.startsWith(ADMIN_PATH) && !hideNav;
 
   return (
     <AuthProvider>
@@ -25,16 +29,7 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </main>
-      ) : isMobile ? (
-        <div className="flex flex-col min-h-screen">
-          <Header />
-          <main className="flex-1 relative">
-            <div className="p-4 sm:p-6">
-              {children}
-            </div>
-          </main>
-        </div>
-      ) : (
+      ) : showSidebar ? (
         <div className="flex min-h-screen">
           <Sidebar />
           <div className="flex-1 flex flex-col min-h-screen">
@@ -46,6 +41,15 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
               </div>
             </main>
           </div>
+        </div>
+      ) : (
+        <div className="flex flex-col min-h-screen">
+          <Header />
+          <main className="flex-1 relative">
+            <div className="p-4 sm:p-6">
+              {children}
+            </div>
+          </main>
         </div>
       )}
     </AuthProvider>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,8 +13,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Users, Calendar, CheckCircle, X } from 'lucide-react';
+import { Loader2, Users, Calendar, CheckCircle, X, Circle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { markWorkshopAttendance, getWorkshops, getParticipants } from '@/app/youth-empowerment/actions';
 import { YEPWorkshop, YEPParticipant } from '@/lib/youth-empowerment';
@@ -42,6 +41,7 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
   const [participants, setParticipants] = useState<YEPParticipant[]>([]);
   const [selectedWorkshops, setSelectedWorkshops] = useState<string[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [participantSearchTerm, setParticipantSearchTerm] = useState('');
   const { toast } = useToast();
 
   const form = useForm<AttendanceFormData>({
@@ -68,11 +68,36 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     }
   }, [isOpen, preselectedWorkshop, preselectedStudent]);
 
+  // Filter workshops to only show past workshops (before today)
+  const filteredWorkshops = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of today
+
+    return workshops.filter(workshop => {
+      const workshopDate = new Date(workshop.date);
+      workshopDate.setHours(0, 0, 0, 0); // Set to start of workshop date
+      return workshopDate < today;
+    });
+  }, [workshops]);
+
+  // Filter participants based on search term using useMemo to prevent infinite loops
+  const filteredParticipants = useMemo(() => {
+    if (!participantSearchTerm) {
+      return participants;
+    }
+    return participants.filter(participant =>
+      (participant.youthParticipant || '').toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
+      (participant.email || '').toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
+      (participant.region || '').toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
+      (participant.phoneNumber || '').toLowerCase().includes(participantSearchTerm.toLowerCase())
+    );
+  }, [participants, participantSearchTerm]);
+
   const loadData = async () => {
     try {
       const [workshopsData, participantsData] = await Promise.all([
         getWorkshops(),
-        getParticipants({ approved: true }), // Only show approved participants
+        getParticipants(), // Load ALL participants, not just approved ones
       ]);
       setWorkshops(workshopsData);
       setParticipants(participantsData);
@@ -81,45 +106,45 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
     }
   };
 
-  const handleWorkshopToggle = (workshopId: string) => {
+  const handleWorkshopToggle = useCallback((workshopId: string) => {
     const newSelection = selectedWorkshops.includes(workshopId)
       ? selectedWorkshops.filter(id => id !== workshopId)
       : [...selectedWorkshops, workshopId];
-    
+
     setSelectedWorkshops(newSelection);
     form.setValue('workshopIds', newSelection);
-  };
+  }, [selectedWorkshops]);
 
-  const handleStudentToggle = (studentId: string) => {
+  const handleStudentToggle = useCallback((studentId: string) => {
     const newSelection = selectedStudents.includes(studentId)
       ? selectedStudents.filter(id => id !== studentId)
       : [...selectedStudents, studentId];
-    
+
     setSelectedStudents(newSelection);
     form.setValue('studentIds', newSelection);
-  };
+  }, [selectedStudents]);
 
-  const handleSelectAllWorkshops = () => {
-    const allIds = workshops.map(w => w.id);
+  const handleSelectAllWorkshops = useCallback(() => {
+    const allIds = filteredWorkshops.map(w => w.id);
     setSelectedWorkshops(allIds);
     form.setValue('workshopIds', allIds);
-  };
+  }, [filteredWorkshops]);
 
-  const handleSelectNoneWorkshops = () => {
+  const handleSelectNoneWorkshops = useCallback(() => {
     setSelectedWorkshops([]);
     form.setValue('workshopIds', []);
-  };
+  }, []);
 
-  const handleSelectAllStudents = () => {
-    const allIds = participants.map(p => p.id);
+  const handleSelectAllStudents = useCallback(() => {
+    const allIds = filteredParticipants.map(p => p.id);
     setSelectedStudents(allIds);
     form.setValue('studentIds', allIds);
-  };
+  }, [filteredParticipants]);
 
-  const handleSelectNoneStudents = () => {
+  const handleSelectNoneStudents = useCallback(() => {
     setSelectedStudents([]);
     form.setValue('studentIds', []);
-  };
+  }, []);
 
   const onSubmit = async (data: AttendanceFormData) => {
     setIsLoading(true);
@@ -210,10 +235,11 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                   <CardDescription>Choose which workshops to mark attendance for</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {workshops.length === 0 ? (
+                  {filteredWorkshops.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No workshops available</p>
+                      <p>No past workshops available</p>
+                      <p className="text-sm">Only workshops that have already occurred can have attendance marked.</p>
                     </div>
                   ) : (
                     <>
@@ -237,41 +263,37 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                       </div>
 
                       <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {workshops.map((workshop) => (
-                          <div
+                        {filteredWorkshops.map((workshop) => (
+                          <button
                             key={workshop.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                            type="button"
+                            className={`w-full text-left flex items-center justify-between p-3 rounded-lg border transition-colors ${
                               selectedWorkshops.includes(workshop.id)
                                 ? 'bg-primary/10 border-primary'
-                                : 'hover:bg-muted/50'
+                                : 'hover:bg-muted/50 border-border'
                             }`}
                             onClick={() => handleWorkshopToggle(workshop.id)}
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox
-                                checked={selectedWorkshops.includes(workshop.id)}
-                              />
-                              <div className="flex-1">
-                                <div className="font-medium">{workshop.title}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {new Date(workshop.date).toLocaleDateString()}
-                                  {workshop.location && ` • ${workshop.location}`}
-                                </div>
-                                {workshop.capacity && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Capacity: {workshop.capacity}
-                                  </div>
-                                )}
+                            <div className="flex-1">
+                              <div className="font-medium">{workshop.title}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {new Date(workshop.date).toLocaleDateString()}
+                                {workshop.location && ` • ${workshop.location}`}
                               </div>
+                              {workshop.capacity && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Capacity: {workshop.capacity}
+                                </div>
+                              )}
                             </div>
                             <div className="ml-4">
                               {selectedWorkshops.includes(workshop.id) ? (
                                 <CheckCircle className="h-5 w-5 text-primary" />
                               ) : (
-                                <div className="w-5 h-5 rounded border-2 border-muted-foreground" />
+                                <Circle className="h-5 w-5 text-muted-foreground" />
                               )}
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
 
@@ -340,10 +362,22 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                   {participants.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No approved participants available</p>
+                      <p>No participants available</p>
                     </div>
                   ) : (
                     <>
+                      {/* Search Input */}
+                      <div className="space-y-2">
+                        <Label htmlFor="participant-search">Search Participants</Label>
+                        <Input
+                          id="participant-search"
+                          placeholder="Search by name, email, region, or phone..."
+                          value={participantSearchTerm}
+                          onChange={(e) => setParticipantSearchTerm(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+
                       <div className="flex gap-2">
                         <Button
                           type="button"
@@ -363,42 +397,42 @@ export function AttendanceForm({ isOpen, onClose, onSuccess, preselectedWorkshop
                         </Button>
                       </div>
 
+                      {/* Participant Count */}
+                      <div className="text-sm text-muted-foreground">
+                        Showing {filteredParticipants.length} of {participants.length} participants
+                      </div>
+
                       <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {participants.map((participant) => (
-                          <div
+                        {filteredParticipants.map((participant) => (
+                          <button
                             key={participant.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                            type="button"
+                            className={`w-full text-left flex items-center justify-between p-3 rounded-lg border transition-colors ${
                               selectedStudents.includes(participant.id)
                                 ? 'bg-primary/10 border-primary'
-                                : 'hover:bg-muted/50'
+                                : 'hover:bg-muted/50 border-border'
                             }`}
                             onClick={() => handleStudentToggle(participant.id)}
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox
-                                checked={selectedStudents.includes(participant.id)}
-                                // readOnly not supported on Checkbox component
-                              />
-                              <div className="flex-1">
-                                <div className="font-medium">{participant.youthParticipant}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {participant.region} • {participant.email}
-                                </div>
-                                {participant.assignedMentor && (
-                                  <Badge variant="outline" className="mt-1 text-xs">
-                                    Mentor: {participant.assignedMentor}
-                                  </Badge>
-                                )}
+                            <div className="flex-1">
+                              <div className="font-medium">{participant.youthParticipant}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {participant.region} • {participant.email}
                               </div>
+                              {participant.assignedMentor && (
+                                <Badge variant="outline" className="mt-1 text-xs">
+                                  Mentor: {participant.assignedMentor}
+                                </Badge>
+                              )}
                             </div>
                             <div className="ml-4">
                               {selectedStudents.includes(participant.id) ? (
                                 <CheckCircle className="h-5 w-5 text-primary" />
                               ) : (
-                                <div className="w-5 h-5 rounded border-2 border-muted-foreground" />
+                                <Circle className="h-5 w-5 text-muted-foreground" />
                               )}
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
 
