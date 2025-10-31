@@ -96,13 +96,10 @@ export default function Dashboard() {
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
 
   const surveyOptions = useMemo(() => {
-    // Only include surveys that exist in the surveys list
-    const existingSurveyIds = new Set(surveys.map(s => s.id))
-    const submissionSurveyIds = Array.from(new Set(submissions.map(s => s.surveyId)))
-    // Filter to only include IDs that have a corresponding survey
-    const validSurveyIds = submissionSurveyIds.filter(id => existingSurveyIds.has(id))
-    return ['all', ...validSurveyIds]
-  }, [submissions, surveys])
+    // Show all existing surveys in the dropdown, not just ones with submissions
+    const allSurveyIds = surveys.map(s => s.id)
+    return ['all', ...allSurveyIds]
+  }, [surveys])
 
   const surveyTitleMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -193,9 +190,9 @@ export default function Dashboard() {
   }, [isConsent, selectedChart, isAllSurveysMode])
 
   const filtered = useMemo(() => {
-    // First, filter to only include submissions from existing surveys
-    const existingSurveyIds = new Set(surveys.map(s => s.id))
-    let result = submissions.filter(s => existingSurveyIds.has(s.surveyId))
+    // Start with all submissions - don't filter out based on survey existence
+    // This ensures all submissions are visible even if their survey was deleted or not found
+    let result = submissions
 
     // Filter by survey
     if (selectedSurvey !== 'all') {
@@ -284,13 +281,8 @@ export default function Dashboard() {
 
   const metrics = useMemo(() => {
     const total = filtered.length
-    // Count only surveys that exist in the surveys list
-    const existingSurveyIds = new Set(surveys.map(s => s.id))
-    const surveysCount = new Set(
-      submissions
-        .filter(s => existingSurveyIds.has(s.surveyId))
-        .map(s => s.surveyId)
-    ).size
+    // Count unique surveys from all submissions (including those without matching survey docs)
+    const surveysCount = new Set(submissions.map(s => s.surveyId)).size
     
     // Overview mode: High-level metrics across all surveys
     if (isAllSurveysMode) {
@@ -1396,34 +1388,72 @@ export default function Dashboard() {
             
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent {isConsent ? 'Consent Submissions' : 'Feedback Trends'}</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Recent {isConsent ? 'Consent Submissions' : 'Feedback Trends'}</CardTitle>
+                    <CardDescription className="text-xs mt-1">Latest 10 submissions</CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const tableElement = document.getElementById('submissions-table-section')
+                      if (tableElement) {
+                        tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }
+                    }}
+                    className="text-xs"
+                  >
+                    View All →
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {filtered.slice(0, 5).map((submission, idx) => (
-                    <div key={idx} className="flex items-start gap-3">
+                  {filtered.slice(0, 10).map((submission, idx) => (
+                    <div 
+                      key={submission.id} 
+                      className="flex items-start gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer"
+                      onClick={() => openSubmissionModal(submission)}
+                    >
                       {!isConsent ? (
-                        <div className={`mt-1 h-2 w-2 rounded-full ${
+                        <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${
                           submission.rating >= 8 ? 'bg-green-500' :
                           submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
                         }`} />
                       ) : (
-                        <div className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                        <div className="mt-1 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm line-clamp-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium line-clamp-1 flex-1">
+                            {isConsent 
+                              ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'Unnamed'
+                              : submission.hospitalInteraction}
+                          </p>
+                          {!isConsent && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">
+                              {submission.rating}/10
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {surveyTitleMap.get(submission.surveyId) || 'Unknown Survey'}
+                          </Badge>
+                          <span>•</span>
                           {isConsent 
-                            ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'Unnamed'
-                            : submission.hospitalInteraction}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {isConsent 
-                            ? `${(submission as any)?.city?.selection || 'Unknown City'} • ${new Date(submission.submittedAt).toISOString().split('T')[0]}`
-                            : `${(submission as any)?.hospital || 'Unknown'} • ${isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`} • ${new Date(submission.submittedAt).toISOString().split('T')[0]}`}
+                            ? `${(submission as any)?.city?.selection || 'Unknown City'}`
+                            : `${(submission as any)?.hospital || 'Unknown'}`}
+                          <span>•</span>
+                          {new Date(submission.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
                       </div>
                     </div>
                   ))}
+                  {filtered.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No submissions to display</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1916,18 +1946,34 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card id="submissions-table-section">
           <CardHeader>
-            <CardTitle>Recent Submissions</CardTitle>
-            <CardDescription>
-              A list of the most recent survey submissions.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent Submissions</CardTitle>
+                <CardDescription>
+                  Showing {paginatedSubmissions.length} of {filtered.length} submissions
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowExportDialog(true)}
+                  className="flex items-center gap-2 bg-gradient-to-r from-[#C8262A]/10 to-[#D34040]/10 hover:from-[#C8262A]/20 hover:to-[#D34040]/20 border-[#C8262A]/30 text-[#C8262A] hover:text-[#C8262A] font-medium"
+                >
+                  <Download className="h-4 w-4" />
+                  Export Submissions
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
+                  <TableHead>Survey</TableHead>
                   {isConsent ? (
                     <>
                       <TableHead>Name</TableHead>
@@ -1937,10 +1983,11 @@ export default function Dashboard() {
                   ) : (
                     <>
                       <TableHead>Rating</TableHead>
+                      <TableHead>Hospital</TableHead>
                       <TableHead>Experience</TableHead>
                     </>
                   )}
-                  <TableHead className="text-right">View</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1973,8 +2020,19 @@ export default function Dashboard() {
                 ) : (
                   paginatedSubmissions.map(submission => (
                     <TableRow key={submission.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {new Date(submission.submittedAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </TableCell>
                       <TableCell>
-                        {new Date(submission.submittedAt).toISOString().split('T')[0]}
+                        <Badge variant="outline" className="font-normal">
+                          {surveyTitleMap.get(submission.surveyId) || submission.surveyId.substring(0, 8) + '...'}
+                        </Badge>
                       </TableCell>
                       {isConsent ? (
                         <>
@@ -1986,12 +2044,21 @@ export default function Dashboard() {
                         </>
                       ) : (
                         <>
-                          <TableCell>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</TableCell>
-                          <TableCell className="max-w-md truncate">{submission.hospitalInteraction}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className={`h-2 w-2 rounded-full ${
+                                submission.rating >= 8 ? 'bg-green-500' :
+                                submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`} />
+                              <span>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{(submission as any)?.hospital || (submission as any)?.['hospital-on']?.selection || 'N/A'}</TableCell>
+                          <TableCell className="max-w-xs truncate">{submission.hospitalInteraction}</TableCell>
                         </>
                       )}
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
+                        <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View Details</Button>
                       </TableCell>
                     </TableRow>
                   ))

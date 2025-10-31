@@ -1,5 +1,5 @@
 import {genkit} from 'genkit';
-import {googleAI, gemini25FlashLite} from '@genkit-ai/googleai';
+import {googleAI, gemini15Flash} from '@genkit-ai/googleai';
 
 // Validate API key exists but don't log it
 if (!process.env.GOOGLE_API_KEY) {
@@ -8,5 +8,5 @@ if (!process.env.GOOGLE_API_KEY) {
 
 export const ai = genkit({
   plugins: [googleAI()],
-  model: gemini25FlashLite,
+  model: gemini15Flash,
 });

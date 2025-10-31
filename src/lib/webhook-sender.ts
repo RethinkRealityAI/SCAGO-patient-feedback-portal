@@ -51,7 +51,7 @@ export async function sendWebhook(submissionData: SubmissionData): Promise<void>
     // Prepare headers
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      'User-Agent': 'SCAGO-Patient-Feedback-Portal/1.0',
+      'User-Agent': 'SCAGO-Portal/1.0',
     };
 
     if (config.secret) {

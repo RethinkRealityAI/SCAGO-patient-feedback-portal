@@ -1,5 +1,5 @@
 import { ai } from '@/ai/genkit';
-import { gemini25FlashLite } from '@genkit-ai/googleai';
+import { gemini15Flash } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
 // Define the schema for mapping suggestions
@@ -31,7 +31,7 @@ If a column is unknown, do not map it. Do not hallucinate.`;
 
     const prompt = `${system}\n\nCSV Headers: ${JSON.stringify(input.headers)}\nSample Rows: ${JSON.stringify(input.sampleRows).slice(0, 4000)}`;
 
-    const response = await ai.generate({ model: gemini25FlashLite, prompt });
+    const response = await ai.generate({ model: gemini15Flash, prompt });
 
     // Basic guard: try to parse JSON; on failure, return empty mapping
     try {

@@ -145,7 +145,7 @@ interface AIAnalysisResult {
 ### 🚀 Performance & Optimization
 
 #### AI Model Configuration
-- **Model**: Always use `gemini25FlashLite` for cost efficiency
+- **Model**: Always use `gemini15Flash` for cost efficiency
 - **Batch Processing**: Process multiple items together when possible
 - **Caching**: Cache AI results for repeated queries
 - **Rate Limiting**: Implement rate limiting for AI requests
