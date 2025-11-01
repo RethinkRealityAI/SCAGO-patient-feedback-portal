@@ -12,7 +12,8 @@ export interface ServerSession {
 
 /**
  * Verify the Firebase session cookie and resolve the application role.
- * Falls back to Firestore membership checks if no custom claim is present.
+ * Custom claims are the source of truth. Falls back to Firestore checks
+ * for participant/mentor only if no custom claim is present (legacy support).
  */
 export async function getServerSession(): Promise<ServerSession | null> {
   const cookieStore = await cookies();
@@ -35,45 +36,15 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     console.log('[ServerAuth] Session verified for email:', email);
 
-    // Check custom claim role, but don't trust "user" - always verify via Firestore
+    // Read custom claim role first; this is our source of truth when present
     const claimRole = (decoded as any).role as AppRole | undefined;
     console.log('[ServerAuth] Custom claim role found:', claimRole);
 
-    // 1) ALWAYS check Firestore config/admins first (source of truth)
-    // Even if custom claim says "user", if email is in admins list, user is admin
-    const adminDoc = await firestore.collection('config').doc('admins').get();
-    const adminEmails: string[] = adminDoc.exists 
-      ? (((adminDoc.data() as any)?.emails || []).map((e: string) => (e || '').toLowerCase())) 
-      : [];
-    
-    console.log('[ServerAuth] Admin check - doc exists:', adminDoc.exists, 'admin emails:', adminEmails, 'checking:', email);
-    
-    if (adminEmails.includes(email)) {
-      console.log('[ServerAuth] ✅ Admin role confirmed via Firestore (overriding custom claim)');
-      return { uid: decoded.uid, email, role: 'admin' };
-    }
-
-    // 2) Check YEP manager via config/yep_managers
-    const managerDoc = await firestore.collection('config').doc('yep_managers').get();
-    const managerEmails: string[] = managerDoc.exists 
-      ? (((managerDoc.data() as any)?.emails || []).map((e: string) => (e || '').toLowerCase())) 
-      : [];
-    
-    console.log('[ServerAuth] YEP Manager check - doc exists:', managerDoc.exists, 'manager emails:', managerEmails);
-    
-    if (managerEmails.includes(email)) {
-      console.log('[ServerAuth] ✅ YEP Manager role confirmed via Firestore (overriding custom claim)');
-      return { uid: decoded.uid, email, role: 'yep-manager' };
-    }
-
-    // 3) If custom claim is "admin" or "yep-manager", trust it (even if not in Firestore)
-    // This handles edge cases where custom claims are set but Firestore is out of sync
-    if (claimRole === 'admin' || claimRole === 'yep-manager') {
-      console.log('[ServerAuth] Using trusted custom claim role:', claimRole);
+    if (claimRole === 'admin' || claimRole === 'yep-manager' || claimRole === 'mentor' || claimRole === 'participant' || claimRole === 'user') {
       return { uid: decoded.uid, email, role: claimRole };
     }
 
-    // 4) Participant / Mentor membership by email
+    // Participant / Mentor membership by email (fallback for legacy users without claims)
     // Check these AFTER admin/manager to avoid conflicts
     const participantQ = await firestore
       .collection('yep_participants')
@@ -95,7 +66,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
       return { uid: decoded.uid, email, role: 'mentor' };
     }
 
-    console.log('[ServerAuth] ⚠️ No role match found, defaulting to user');
+    console.log('[ServerAuth] ⚠️ No role claim found; defaulting to user');
     return { uid: decoded.uid, email, role: 'user' };
   } catch (err: any) {
     // Invalid or expired cookie

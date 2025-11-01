@@ -59,8 +59,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (authUser) {
           // Ensure server-side session cookie is set (deduped)
           try {
-            const hasRoleCookie = typeof document !== 'undefined' && document.cookie.includes('app_role=');
-            if (!sessionPostedRef.current && !hasRoleCookie) {
+            if (!sessionPostedRef.current) {
               const idToken = await authUser.getIdToken(true);
               await fetch('/api/auth/session', {
                 method: 'POST',

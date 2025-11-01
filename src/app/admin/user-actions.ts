@@ -20,17 +20,12 @@ export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }>
 {
   await enforceAdminInAction();
   const auth = getAdminAuth();
-  const firestore = getAdminFirestore();
-
-  // Load fallback admin emails for role inference when custom claims are missing
-  const adminsDoc = await firestore.collection('config').doc('admins').get();
-  const adminEmails: string[] = adminsDoc.exists ? ((adminsDoc.data() as any)?.emails || []) : [];
 
   // Fetch up to 1000 users (sufficient for current scale); can paginate later
   const result = await auth.listUsers(1000);
   const users: PlatformUser[] = result.users.map((u) => {
     const claims = (u.customClaims || {}) as Record<string, any>;
-    const role: AppRole = (claims.role as AppRole) || (adminEmails.includes(u.email || '') ? 'admin' : 'user');
+    const role: AppRole = (claims.role as AppRole) || 'user';
     return {
       uid: u.uid,
       email: u.email || '',
@@ -89,24 +84,6 @@ export async function createPlatformUser(input: {
       // Preserve other custom claims (should be empty for new user, but safe)
       const existing = (await auth.getUser(user.uid)).customClaims || {};
       await auth.setCustomUserClaims(user.uid, { ...existing, role });
-
-      // Maintain config documents for backward compatibility
-      if (role === 'admin') {
-        const adminRef = firestore.collection('config').doc('admins');
-        const snap = await adminRef.get();
-        const emails: string[] = snap.exists ? ((snap.data() as any)?.emails || []) : [];
-        if (!emails.includes(email)) {
-          await adminRef.set({ emails: [...emails, email] }, { merge: true });
-        }
-      } else if (role === 'yep-manager') {
-        // Also maintain yep_managers doc for consistency
-        const managerRef = firestore.collection('config').doc('yep_managers');
-        const snap = await managerRef.get();
-        const emails: string[] = snap.exists ? ((snap.data() as any)?.emails || []) : [];
-        if (!emails.includes(email)) {
-          await managerRef.set({ emails: [...emails, email] }, { merge: true });
-        }
-      }
     }
 
     // Apply initial page permissions if provided
@@ -129,27 +106,10 @@ export async function setUserRole(uid: string, role: AppRole): Promise<{ success
 {
   await enforceAdminInAction();
   const auth = getAdminAuth();
-  const firestore = getAdminFirestore();
   try {
     const user = await auth.getUser(uid);
-    const email = (user.email || '').toLowerCase();
     const existing = user.customClaims || {};
     await auth.setCustomUserClaims(uid, { ...existing, role });
-
-    // Keep admins doc in sync
-    const adminRef = firestore.collection('config').doc('admins');
-    const snap = await adminRef.get();
-    const emails: string[] = snap.exists ? ((snap.data() as any)?.emails || []) : [];
-    if (role === 'admin') {
-      if (!emails.includes(email)) {
-        await adminRef.set({ emails: [...emails, email] }, { merge: true });
-      }
-    } else {
-      if (emails.includes(email)) {
-        await adminRef.set({ emails: emails.filter((e) => e !== email) }, { merge: true });
-      }
-    }
-
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to set role' };
@@ -185,20 +145,7 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
 {
   await enforceAdminInAction();
   const auth = getAdminAuth();
-  const firestore = getAdminFirestore();
   try {
-    // Remove from admins list if present
-    const user = await auth.getUser(uid);
-    const email = (user.email || '').toLowerCase();
-    const adminRef = firestore.collection('config').doc('admins');
-    const snap = await adminRef.get();
-    if (snap.exists) {
-      const emails: string[] = (snap.data() as any)?.emails || [];
-      if (emails.includes(email)) {
-        await adminRef.set({ emails: emails.filter((e) => e !== email) }, { merge: true });
-      }
-    }
-
     await auth.deleteUser(uid);
     return { success: true };
   } catch (err: any) {

@@ -143,19 +143,11 @@ export async function isUserAdmin(email: string | null): Promise<boolean> {
   if (!email) return false;
 
   try {
-    // Prefer custom claims when available (immediate, avoids Firestore consistency/casing)
     if (auth.currentUser) {
       try {
         const token = await getIdTokenResult(auth.currentUser, true);
-        if ((token.claims as any)?.role === 'admin') return true;
+        return (token.claims as any)?.role === 'admin';
       } catch {}
-    }
-
-    // Fallback to Firestore config/admins (case-insensitive)
-    const adminDoc = await getDoc(doc(db, 'config', 'admins'));
-    if (adminDoc.exists()) {
-      const adminEmails: string[] = (adminDoc.data().emails || []).map((e: string) => (e || '').toLowerCase());
-      return adminEmails.includes(email.toLowerCase());
     }
     return false;
   } catch (error) {
@@ -171,19 +163,11 @@ export async function isUserYEPManager(email: string | null): Promise<boolean> {
   if (!email) return false;
 
   try {
-    // Prefer custom claims when available
     if (auth.currentUser) {
       try {
         const token = await getIdTokenResult(auth.currentUser, true);
-        if ((token.claims as any)?.role === 'yep-manager') return true;
+        return (token.claims as any)?.role === 'yep-manager';
       } catch {}
-    }
-
-    // Fallback to Firestore config/yep_managers (case-insensitive)
-    const yepManagerDoc = await getDoc(doc(db, 'config', 'yep_managers'));
-    if (yepManagerDoc.exists()) {
-      const emails: string[] = (yepManagerDoc.data().emails || []).map((e: string) => (e || '').toLowerCase());
-      return emails.includes(email.toLowerCase());
     }
     return false;
   } catch (error) {
@@ -199,23 +183,18 @@ export async function getUserRole(email: string | null): Promise<'admin' | 'yep-
   if (!email) return null;
 
   try {
-    // Claims first
+    // Claims only
     if (auth.currentUser) {
       try {
         const token = await getIdTokenResult(auth.currentUser, true);
         const role = (token.claims as any)?.role as string | undefined;
         if (role === 'admin') return 'admin';
         if (role === 'yep-manager') return 'yep-manager';
+        if (role === 'user') return 'user';
       } catch {}
     }
 
-    // Fallback to Firestore config
-    const [admin, manager] = await Promise.all([
-      isUserAdmin(email),
-      isUserYEPManager(email)
-    ]);
-    if (admin) return 'admin';
-    if (manager) return 'yep-manager';
+    // Default role when no claim is present
     return 'user';
   } catch (error) {
     console.error('Error getting user role:', error);
