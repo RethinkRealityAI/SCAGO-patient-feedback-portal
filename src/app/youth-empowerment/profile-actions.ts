@@ -1,6 +1,7 @@
 'use server';
 
 import { getAdminFirestore } from '@/lib/firebase-admin';
+import { getServerSession } from '@/lib/server-auth';
 import { z } from 'zod';
 
 const claimProfileSchema = z.object({
@@ -21,20 +22,32 @@ interface ClaimResult {
  * Links Firebase Auth user to existing YEP record
  */
 export async function claimYEPProfile(
-  userId: string,
-  email: string,
+  _userId: string,
+  _email: string,
   inviteCode?: string
 ): Promise<ClaimResult> {
   try {
-    const validated = claimProfileSchema.parse({ userId, email, inviteCode });
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    const validated = claimProfileSchema.parse({ userId: session.uid, email: session.email, inviteCode });
     const firestore = getAdminFirestore();
 
-    // Try to find participant by email or userId first
-    const participantByEmail = await firestore
+    // Try to find participant by email fields first (email, then authEmail)
+    let participantByEmail = await firestore
       .collection('yep_participants')
       .where('email', '==', validated.email)
       .limit(1)
       .get();
+
+    if (participantByEmail.empty) {
+      participantByEmail = await firestore
+        .collection('yep_participants')
+        .where('authEmail', '==', validated.email)
+        .limit(1)
+        .get();
+    }
 
     if (!participantByEmail.empty) {
       const doc = participantByEmail.docs[0];
@@ -63,12 +76,20 @@ export async function claimYEPProfile(
       };
     }
 
-    // Try to find mentor by email
-    const mentorByEmail = await firestore
+    // Try to find mentor by email (email, then authEmail)
+    let mentorByEmail = await firestore
       .collection('yep_mentors')
       .where('email', '==', validated.email)
       .limit(1)
       .get();
+
+    if (mentorByEmail.empty) {
+      mentorByEmail = await firestore
+        .collection('yep_mentors')
+        .where('authEmail', '==', validated.email)
+        .limit(1)
+        .get();
+    }
 
     if (!mentorByEmail.empty) {
       const doc = mentorByEmail.docs[0];
@@ -222,6 +243,11 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
+    if (session.role !== 'admin' && session.uid !== userId) {
+      return { success: false, error: 'Unauthorized' };
+    }
     const firestore = getAdminFirestore();
 
     // Try participant
@@ -243,6 +269,37 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
       };
     }
 
+    // Fallback: resolve by email and auto-link userId if missing
+    const email = session.email;
+    if (email) {
+      let byEmail = await firestore
+        .collection('yep_participants')
+        .where('authEmail', '==', email)
+        .limit(1)
+        .get();
+      if (byEmail.empty) {
+        byEmail = await firestore
+          .collection('yep_participants')
+          .where('email', '==', email)
+          .limit(1)
+          .get();
+      }
+
+      if (!byEmail.empty) {
+        const doc = byEmail.docs[0];
+        const data = doc.data() as any;
+        if (!data.userId) {
+          await doc.ref.update({ userId: session.uid, authEmail: email, updatedAt: new Date() });
+        }
+        const serializedData = serializeFirestoreData({ ...data, userId: session.uid, authEmail: email });
+        return {
+          success: true,
+          role: 'participant',
+          profile: { id: doc.id, ...serializedData },
+        };
+      }
+    }
+
     // Try mentor
     const mentorQuery = await firestore
       .collection('yep_mentors')
@@ -260,6 +317,36 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
         role: 'mentor',
         profile: { id: doc.id, ...serializedData },
       };
+    }
+
+    // Fallback for mentor by email
+    if (email) {
+      let byEmail = await firestore
+        .collection('yep_mentors')
+        .where('authEmail', '==', email)
+        .limit(1)
+        .get();
+      if (byEmail.empty) {
+        byEmail = await firestore
+          .collection('yep_mentors')
+          .where('email', '==', email)
+          .limit(1)
+          .get();
+      }
+
+      if (!byEmail.empty) {
+        const doc = byEmail.docs[0];
+        const data = doc.data() as any;
+        if (!data.userId) {
+          await doc.ref.update({ userId: session.uid, authEmail: email, updatedAt: new Date() });
+        }
+        const serializedData = serializeFirestoreData({ ...data, userId: session.uid, authEmail: email });
+        return {
+          success: true,
+          role: 'mentor',
+          profile: { id: doc.id, ...serializedData },
+        };
+      }
     }
 
     return {
@@ -280,6 +367,11 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
  */
 export async function updateYEPLastLogin(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
+    if (session.role !== 'admin' && session.uid !== userId) {
+      return { success: false, error: 'Unauthorized' };
+    }
     const firestore = getAdminFirestore();
 
     // Update participant if exists

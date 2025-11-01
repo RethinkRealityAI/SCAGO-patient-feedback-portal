@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, geminiModel } from '@/ai/genkit';
 import {
     FeedbackAnalysisInput,
     FeedbackAnalysisInputSchema,
@@ -17,6 +17,7 @@ import {
 
 const analyzeFeedbackPrompt = ai.definePrompt({
   name: 'analyzeFeedbackPrompt',
+  model: geminiModel,
   input: { schema: FeedbackAnalysisInputSchema },
   output: { schema: FeedbackAnalysisOutputSchema },
   prompt: `You are an expert healthcare analyst specializing in patient feedback for Sickle Cell Disease (SCD) care. Your task is to analyze the following patient feedback and provide a structured analysis.

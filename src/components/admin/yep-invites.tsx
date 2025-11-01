@@ -23,7 +23,7 @@ import {
   Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { sendYEPInvite, sendBulkYEPInvites } from '@/app/youth-empowerment/invite-actions';
+import { sendYEPInvite, sendBulkYEPInvites, resendYEPInvite } from '@/app/youth-empowerment/invite-actions';
 import { getParticipants, getMentors } from '@/app/youth-empowerment/actions';
 
 interface InviteFormData {
@@ -48,6 +48,7 @@ export function YEPInvites() {
   const [participants, setParticipants] = useState<any[]>([]);
   const [mentors, setMentors] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [isSendingLink, setIsSendingLink] = useState(false);
   const { toast } = useToast();
 
   // Load existing participants and mentors
@@ -124,6 +125,44 @@ export function YEPInvites() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendPasswordlessLink = async () => {
+    if (!singleInvite.email) {
+      toast({
+        title: 'Email Required',
+        description: 'Please provide an email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSendingLink(true);
+    try {
+      const result = await resendYEPInvite(singleInvite.email);
+
+      if (result.success) {
+        toast({
+          title: 'Sign-In Link Sent',
+          description: `A passwordless sign-in link has been sent to ${singleInvite.email}`,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to send sign-in link',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error sending passwordless link:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingLink(false);
     }
   };
 
@@ -360,23 +399,61 @@ export function YEPInvites() {
                     {participants.length > 0 && (
                       <>
                         <div className="px-2 py-1.5 text-sm font-semibold">Participants</div>
-                        {participants.map(p => (
-                          <SelectItem key={p.id} value={`participant-${p.id}`}>
-                            {p.youthParticipant} {p.email ? `(${p.email})` : '(no email)'}
-                            {p.userId && ' ✓'}
-                          </SelectItem>
-                        ))}
+                        {participants.map(p => {
+                          const isAuthenticated = !!p.userId;
+                          return (
+                            <SelectItem key={p.id} value={`participant-${p.id}`}>
+                              <div className="flex items-center gap-2 w-full">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium truncate">{p.youthParticipant}</span>
+                                    {isAuthenticated && (
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-500" />
+                                        <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 text-xs font-medium px-1.5 py-0">
+                                          Authenticated
+                                        </Badge>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {p.email || '(no email)'}
+                                  </div>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </>
                     )}
                     {mentors.length > 0 && (
                       <>
                         <div className="px-2 py-1.5 text-sm font-semibold">Mentors</div>
-                        {mentors.map(m => (
-                          <SelectItem key={m.id} value={`mentor-${m.id}`}>
-                            {m.name} {m.email ? `(${m.email})` : '(no email)'}
-                            {m.userId && ' ✓'}
-                          </SelectItem>
-                        ))}
+                        {mentors.map(m => {
+                          const isAuthenticated = !!m.userId;
+                          return (
+                            <SelectItem key={m.id} value={`mentor-${m.id}`}>
+                              <div className="flex items-center gap-2 w-full">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium truncate">{m.name}</span>
+                                    {isAuthenticated && (
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-500" />
+                                        <Badge variant="outline" className="bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 text-xs font-medium px-1.5 py-0">
+                                          Authenticated
+                                        </Badge>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {m.email || '(no email)'}
+                                  </div>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </>
                     )}
                   </SelectContent>
@@ -423,23 +500,46 @@ export function YEPInvites() {
                 />
               </div>
 
-              <Button
-                onClick={handleSendSingleInvite}
-                disabled={isLoading}
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending Invite...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Invite
-                  </>
+              <div className="space-y-2">
+                <Button
+                  onClick={handleSendSingleInvite}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending Invite...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send Invite
+                    </>
+                  )}
+                </Button>
+                
+                {singleInvite.email && (
+                  <Button
+                    onClick={handleSendPasswordlessLink}
+                    disabled={isSendingLink || !singleInvite.email}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {isSendingLink ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending Link...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Send Passwordless Sign-In Link
+                      </>
+                    )}
+                  </Button>
                 )}
-              </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

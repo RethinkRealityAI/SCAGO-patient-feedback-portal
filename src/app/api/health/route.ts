@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,8 +29,8 @@ export async function GET() {
   // Check database connectivity
   try {
     const dbStart = Date.now();
-    const testQuery = query(collection(db, 'surveys'), limit(1));
-    await getDocs(testQuery);
+    const firestore = getAdminFirestore();
+    await firestore.collection('surveys').limit(1).get();
     const dbLatency = Date.now() - dbStart;
     
     result.checks.database = {

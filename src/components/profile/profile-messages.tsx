@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MessageSquare, Send } from 'lucide-react';
+import { Loader2, MessageSquare, Send, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 import { useMessaging } from '@/hooks/use-messaging';
@@ -12,6 +12,8 @@ import { ConversationList } from './messages/conversation-list';
 import { MessagesView } from './messages/messages-view';
 import { ContactSelector } from './messages/contact-selector';
 import { MessageComposerModal } from './messages/message-composer-modal';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface ProfileMessagesProps {
   profile: YEPParticipant | YEPMentor;
@@ -34,18 +36,8 @@ export function ProfileMessages({ profile, role }: ProfileMessagesProps) {
     handleMessageSent
   } = useMessaging(user?.uid || '', role, profile.id);
 
-  // Early return if user is not available or loading
-  if (!user || !user.uid || loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   // Memoized handlers to prevent unnecessary re-renders
+  // MUST be called before any early returns to follow Rules of Hooks
   const handleNewMessage = useCallback((contact: MessagingContact) => {
     if (!contact.userId) {
       return;
@@ -59,6 +51,18 @@ export function ProfileMessages({ profile, role }: ProfileMessagesProps) {
     handleSelectConversation(otherUserId);
     setShowComposer(false);
   }, [handleSelectConversation]);
+
+  // Early return if user is not available or loading
+  // All hooks must be called before this point
+  if (!user || !user.uid || loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   const currentConversation = conversations.find(c => c.otherUserId === selectedConversation);
   const contactForConversation = availableContacts.find(c => c.userId === selectedConversation);
@@ -80,18 +84,49 @@ export function ProfileMessages({ profile, role }: ProfileMessagesProps) {
                   : 'Communicate with your assigned participants'}
               </CardDescription>
             </div>
-            {availableContacts.length > 0 && !showComposer && (
-              <Button onClick={() => {
-                if (availableContacts.length === 1) {
-                  handleNewMessage(availableContacts[0]);
-                } else {
-                  setShowComposer(true);
-                }
-              }}>
-                <Send className="mr-2 h-4 w-4" />
-                New Message
-              </Button>
+            {!showComposer && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        onClick={() => {
+                          if (availableContacts.length === 1) {
+                            handleNewMessage(availableContacts[0]);
+                          } else if (availableContacts.length > 1) {
+                            setShowComposer(true);
+                          }
+                        }}
+                        disabled={availableContacts.length === 0}
+                      >
+                        <Send className="mr-2 h-4 w-4" />
+                        New Message
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {availableContacts.length === 0 && (
+                    <TooltipContent>
+                      <p>
+                        {role === 'participant'
+                          ? 'A mentor must be linked to your profile before you can send messages.'
+                          : 'You need assigned participants before you can send messages.'}
+                      </p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             )}
+      {/* Guidance when no contacts are available */}
+      {availableContacts.length === 0 && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            {role === 'participant'
+              ? "You can send messages once a mentor is linked to your profile. If you have been linked and still don't have access, please contact support at tech@sicklecellanemia.ca."
+              : 'You can send messages after participants are assigned to you. If you need access, please contact your program administrator.'}
+          </AlertDescription>
+        </Alert>
+      )}
           </div>
         </CardHeader>
       </Card>

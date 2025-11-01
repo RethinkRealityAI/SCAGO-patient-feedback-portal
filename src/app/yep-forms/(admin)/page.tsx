@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { CreateYEPFormDropdown, DeleteYEPFormButton } from './client';
+import { CreateYEPFormDropdown, DeleteYEPFormButton } from '../client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Trash2, FileText, Users, Calendar, ClipboardList, UserCheck, UserPlus } from 'lucide-react';
-import { getYEPFormTemplates } from './actions';
+import { getYEPFormTemplates } from '../actions';
 import { YEPFormCategory, YEPFormTemplate } from '@/lib/yep-forms-types';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 
 function YEPFormListSkeleton() {
   return (
@@ -86,7 +87,6 @@ function YEPFormList({ forms, loading }: { forms: YEPFormTemplate[]; loading: bo
           className="glass-card p-6 group hover:-translate-y-1 transition-all duration-300 hover:shadow-lg"
         >
           <div className="flex flex-col space-y-4">
-            {/* Header with title and category */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 {getCategoryIcon(form.category)}
@@ -101,13 +101,9 @@ function YEPFormList({ forms, loading }: { forms: YEPFormTemplate[]; loading: bo
                 {form.description || 'No description provided'}
               </p>
             </div>
-            
-            {/* Form stats */}
             <div className="text-sm text-muted-foreground">
               {(form.sections?.reduce((sum: number, section: any) => sum + (section.fields?.length || 0), 0)) ?? 0} fields
             </div>
-            
-            {/* Action buttons */}
             <div className="flex items-center justify-between pt-2 border-t border-border/50">
               <div className="flex items-center gap-2">
                 <Button asChild size="sm" variant="outline" className="h-8">
@@ -132,12 +128,18 @@ export default function YEPFormsPage() {
   const [forms, setForms] = useState<YEPFormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      router.push('/unauthorized');
+    }
+  }, [user, isAdmin, router]);
 
   useEffect(() => {
     async function loadForms() {
-      // Only load forms if user is authenticated
-      if (!user) {
+      if (!user || !isAdmin) {
         setLoading(false);
         return;
       }
@@ -146,7 +148,6 @@ export default function YEPFormsPage() {
         setLoading(true);
         setError(null);
         const result = await getYEPFormTemplates();
-        
         if (result.success && result.data) {
           setForms(result.data);
         } else {
@@ -163,9 +164,8 @@ export default function YEPFormsPage() {
     }
 
     loadForms();
-  }, [user]);
+  }, [user, isAdmin]);
 
-  // Show authentication message if not logged in
   if (!user) {
     return (
       <div className="container flex flex-col gap-6 py-6">
@@ -182,7 +182,6 @@ export default function YEPFormsPage() {
     );
   }
 
-  // Show error state
   if (error && !loading) {
     return (
       <div className="container flex flex-col gap-6 py-6">
@@ -216,3 +215,5 @@ export default function YEPFormsPage() {
     </div>
   );
 }
+
+

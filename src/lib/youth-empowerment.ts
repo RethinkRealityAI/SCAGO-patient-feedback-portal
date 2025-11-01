@@ -48,6 +48,13 @@ export interface YEPParticipant {
   consentFormUrl?: string;
   consentFormFileName?: string;
   consentFormFileType?: string;
+  // Additional documents (user-uploaded random documents)
+  additionalDocuments?: Array<{
+    url: string;
+    fileName: string;
+    fileType: string;
+    uploadedAt: Date | string;
+  }>;
   // Additional legacy fields
   approved?: boolean; // Made optional with default false
   canadianStatusOther?: string; // Made optional

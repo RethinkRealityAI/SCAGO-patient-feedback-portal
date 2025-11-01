@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MessageSquare } from 'lucide-react';
 import { ConversationSummary, MessagingContact } from '@/types/messaging';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 /**
  * Props for the ConversationList component
@@ -41,17 +42,35 @@ export function ConversationList({
           <div className="p-6 text-center text-muted-foreground">
             <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No conversations yet</p>
-            {availableContacts.length > 0 && (
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => {
-                  onNewMessage(availableContacts[0]);
-                }}
-              >
-                Start a conversation
-              </Button>
-            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => {
+                        if (availableContacts.length > 0) {
+                          onNewMessage(availableContacts[0]);
+                        }
+                      }}
+                      disabled={availableContacts.length === 0}
+                    >
+                      Start a conversation
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {availableContacts.length === 0 && (
+                  <TooltipContent>
+                    <p>
+                      {role === 'participant'
+                        ? 'A mentor must be linked to your profile before you can send messages.'
+                        : 'You need assigned participants before you can send messages.'}
+                    </p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         ) : (
           <div className="divide-y">

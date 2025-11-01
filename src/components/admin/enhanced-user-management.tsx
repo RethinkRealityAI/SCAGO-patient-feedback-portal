@@ -4,26 +4,59 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   UserPlus, Trash2, Shield, Eye, Clock, Activity,
-  Search, Mail, Calendar, LogIn, AlertTriangle 
+  Search, Mail, Calendar, LogIn, AlertTriangle, 
+  Info, CheckCircle, XCircle, Loader2, Crown, Users, GraduationCap, User
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getAllUsers, getUserActivityLogs, getUserLoginHistory, markUserAsDeleted, type FirebaseUser, type UserActivity } from '@/lib/firebase-admin-users';
-import { getAdminEmails, addAdminEmail, removeAdminEmail } from '@/lib/admin-actions';
+import { getUserActivityLogs, getUserLoginHistory, type UserActivity } from '@/lib/firebase-admin-users';
+import { addAdminEmail } from '@/lib/admin-actions';
+import { getPagePermissions } from '@/lib/page-permissions-actions';
+import {
+  listPlatformUsers,
+  createPlatformUser,
+  setUserRole,
+  setUserDisabled,
+  deleteUserById,
+  updateUserPassword,
+  setUserPagePermissions,
+  type PlatformUser,
+  type AppRole,
+} from '@/app/admin/user-actions';
+
+const ROUTE_KEYS = [
+  { key: 'yep-portal', label: 'YEP Portal' },
+  { key: 'editor', label: 'Editor' },
+  { key: 'dashboard', label: 'Dashboard' },
+];
 
 export function EnhancedUserManagement() {
-  const [users, setUsers] = useState<FirebaseUser[]>([]);
+  const [users, setUsers] = useState<PlatformUser[]>([]);
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState<FirebaseUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<PlatformUser | null>(null);
   const [userLogins, setUserLogins] = useState<Date[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createDisplayName, setCreateDisplayName] = useState('');
+  const [createRole, setCreateRole] = useState<AppRole>('user');
+  const [createRoutes, setCreateRoutes] = useState<string[]>([]);
+  const [savingAction, setSavingAction] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong'>('weak');
+  const [editRole, setEditRole] = useState<AppRole | null>(null);
+  const [editRoutes, setEditRoutes] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -33,11 +66,9 @@ export function EnhancedUserManagement() {
   const loadData = async () => {
     setLoading(true);
     
-    // Load users
-    const usersResult = await getAllUsers();
-    if (usersResult.users) {
-      setUsers(usersResult.users);
-    }
+    // Load users from Admin SDK
+    const usersResult = await listPlatformUsers();
+    setUsers(usersResult.users || []);
 
     // Load activity logs
     const activityResult = await getUserActivityLogs(50);
@@ -48,8 +79,16 @@ export function EnhancedUserManagement() {
     setLoading(false);
   };
 
-  const handleViewUser = async (user: FirebaseUser) => {
+  const handleViewUser = async (user: PlatformUser) => {
     setSelectedUser(user);
+    setEditRole(user.role);
+    // Load page permissions for editing
+    try {
+      const res = await getPagePermissions();
+      setEditRoutes(res.routesByEmail[user.email] || []);
+    } catch {
+      setEditRoutes([]);
+    }
     
     // Load user's login history
     const result = await getUserLoginHistory(user.email);
@@ -58,14 +97,15 @@ export function EnhancedUserManagement() {
     }
   };
 
-  const handleDeleteUser = async (user: FirebaseUser) => {
-    if (!confirm(`Are you sure you want to delete ${user.email}? This will remove their admin access.`)) {
+  const handleDeleteUser = async (user: PlatformUser) => {
+    if (!confirm(`Delete ${user.email}? This permanently removes their account.`)) {
       return;
     }
 
-    const result = await markUserAsDeleted(user.email);
-    
-    if (result.success) {
+    setSavingAction(true);
+    const result = await deleteUserById(user.uid);
+    setSavingAction(false);
+    if ((result as any).success) {
       toast({
         title: 'User Deleted',
         description: `${user.email} has been removed`,
@@ -74,7 +114,7 @@ export function EnhancedUserManagement() {
     } else {
       toast({
         title: 'Error',
-        description: result.error || 'Failed to delete user',
+        description: (result as any).error || 'Failed to delete user',
         variant: 'destructive',
       });
     }
@@ -120,6 +160,59 @@ export function EnhancedUserManagement() {
     activity.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     activity.action.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Role descriptions for better UX
+  const roleDescriptions: Record<AppRole, { label: string; description: string; icon: React.ReactNode }> = {
+    'admin': {
+      label: 'Administrator',
+      description: 'Full system access - can manage users, surveys, and all platform features',
+      icon: <Crown className="h-4 w-4" />
+    },
+    'yep-manager': {
+      label: 'YEP Manager',
+      description: 'Can manage Youth Empowerment Program participants, mentors, and forms',
+      icon: <GraduationCap className="h-4 w-4" />
+    },
+    'mentor': {
+      label: 'Mentor',
+      description: 'Youth Empowerment Program mentor - can view assigned participants',
+      icon: <Users className="h-4 w-4" />
+    },
+    'participant': {
+      label: 'Participant',
+      description: 'Youth Empowerment Program participant - has access to profile and forms',
+      icon: <User className="h-4 w-4" />
+    },
+    'user': {
+      label: 'Regular User',
+      description: 'Basic platform access - limited features',
+      icon: <User className="h-4 w-4" />
+    }
+  };
+
+  // Calculate password strength
+  useEffect(() => {
+    if (!createPassword) {
+      setPasswordStrength('weak');
+      return;
+    }
+    const length = createPassword.length;
+    const hasUpper = /[A-Z]/.test(createPassword);
+    const hasLower = /[a-z]/.test(createPassword);
+    const hasNumber = /[0-9]/.test(createPassword);
+    const hasSpecial = /[^A-Za-z0-9]/.test(createPassword);
+    
+    const score = [length >= 8, hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
+    
+    if (score >= 4) setPasswordStrength('strong');
+    else if (score >= 2) setPasswordStrength('medium');
+    else setPasswordStrength('weak');
+  }, [createPassword]);
+
+  // Validate email format
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   return (
     <Tabs defaultValue="users" className="space-y-4">
@@ -181,7 +274,7 @@ export function EnhancedUserManagement() {
                   >
                     <div className="flex items-center gap-3 flex-1">
                       <div className="p-2 bg-primary/10 rounded-full">
-                        {user.isAdmin ? (
+                        {user.role === 'admin' ? (
                           <Shield className="h-4 w-4 text-primary" />
                         ) : (
                           <Mail className="h-4 w-4 text-muted-foreground" />
@@ -190,18 +283,20 @@ export function EnhancedUserManagement() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-medium">{user.email}</p>
-                          {user.isAdmin && <Badge>Admin</Badge>}
+                          <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                            {user.role}
+                          </Badge>
                           {user.disabled && <Badge variant="destructive">Disabled</Badge>}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            Created: {user.createdAt.toLocaleDateString()}
+                            Created: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
                           </span>
                           {user.lastLoginAt && (
                             <span className="flex items-center gap-1">
                               <LogIn className="h-3 w-3" />
-                              Last login: {user.lastLoginAt.toLocaleDateString()}
+                              Last login: {new Date(user.lastLoginAt).toLocaleDateString()}
                             </span>
                           )}
                         </div>
@@ -256,13 +351,13 @@ export function EnhancedUserManagement() {
                   <div>
                     <p className="text-sm font-medium">Created</p>
                     <p className="text-sm text-muted-foreground">
-                      {selectedUser.createdAt.toLocaleString()}
+                      {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : '—'}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">Last Login</p>
                     <p className="text-sm text-muted-foreground">
-                      {selectedUser.lastLoginAt?.toLocaleString() || 'Never'}
+                      {selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : 'Never'}
                     </p>
                   </div>
                   <div>
@@ -271,31 +366,190 @@ export function EnhancedUserManagement() {
                       {selectedUser.disabled ? 'Disabled' : 'Active'}
                     </Badge>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">Role</p>
-                    <Badge>{selectedUser.isAdmin ? 'Admin' : 'User'}</Badge>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={editRole || selectedUser.role}
+                        onValueChange={(value) => setEditRole(value as AppRole)}
+                      >
+                        <SelectTrigger className="w-[220px] h-10">
+                          <SelectValue placeholder="Select a role">
+                            {(editRole || selectedUser.role) && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-primary">{roleDescriptions[editRole || selectedUser.role].icon}</span>
+                                <span className="font-medium">{roleDescriptions[editRole || selectedUser.role].label}</span>
+                              </div>
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[280px]">
+                          {(['admin', 'yep-manager', 'mentor', 'participant', 'user'] as AppRole[]).map((role) => {
+                            const desc = roleDescriptions[role];
+                            return (
+                              <SelectItem 
+                                key={role} 
+                                value={role}
+                                className="py-3 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-3 w-full">
+                                  <span className="text-primary">{desc.icon}</span>
+                                  <div className="flex-1">
+                                    <div className="font-medium">{desc.label}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">{desc.description}</div>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          if (!editRole) return;
+                          setSavingAction(true);
+                          const res = await setUserRole(selectedUser.uid, editRole);
+                          setSavingAction(false);
+                          if ((res as any).success) {
+                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole].label}` });
+                            setSelectedUser({ ...selectedUser, role: editRole });
+                            // refresh list
+                            loadData();
+                          } else {
+                            toast({ title: 'Error', description: (res as any).error || 'Failed to update role', variant: 'destructive' });
+                          }
+                        }}
+                        disabled={savingAction || editRole === selectedUser.role}
+                      >
+                        {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                        Save
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {roleDescriptions[editRole || selectedUser.role].description}
+                    </p>
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-sm font-medium mb-2">Permissions</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Shield className="h-4 w-4 text-green-500" />
-                      Dashboard Access
+                <div className="space-y-3">
+                  <Label>Page Permissions</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {ROUTE_KEYS.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          editRoutes.includes(key)
+                            ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                            : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                        } ${
+                          (selectedUser.role === 'admin' || selectedUser.role === 'yep-manager')
+                            ? 'opacity-60 cursor-not-allowed'
+                            : ''
+                        }`}
+                      >
+                        <Checkbox
+                          checked={editRoutes.includes(key)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setEditRoutes((prev) => [...prev, key]);
+                            } else {
+                              setEditRoutes((prev) => prev.filter(k => k !== key));
+                            }
+                          }}
+                          disabled={selectedUser.role === 'admin' || selectedUser.role === 'yep-manager'}
+                          className="h-5 w-5"
+                        />
+                        <span className="text-sm font-medium flex-1">{label}</span>
+                        {(selectedUser.role === 'admin' || selectedUser.role === 'yep-manager') && (
+                          <Badge variant="secondary" className="text-xs">
+                            Auto
+                          </Badge>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  {(selectedUser.role === 'admin' || selectedUser.role === 'yep-manager') && (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        {selectedUser.role === 'admin' 
+                          ? 'Administrators have access to all pages automatically.'
+                          : 'YEP Managers have access to the YEP Portal automatically.'}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      setSavingAction(true);
+                      const res = await setUserPagePermissions(selectedUser.email, editRoutes);
+                      setSavingAction(false);
+                      if ((res as any).success) {
+                        toast({ title: 'Permissions saved', description: `Updated routes for ${selectedUser.email}` });
+                      } else {
+                        toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
+                      }
+                    }}
+                    disabled={savingAction || selectedUser.role === 'admin' || selectedUser.role === 'yep-manager'}
+                    className="w-full md:w-auto"
+                  >
+                    {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Save Permissions
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Reset Password</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        placeholder="New password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (!newPassword) return;
+                          setSavingAction(true);
+                          const res = await updateUserPassword(selectedUser.uid, newPassword);
+                          setSavingAction(false);
+                          if ((res as any).success) {
+                            setNewPassword('');
+                            toast({ title: 'Password updated', description: 'User password has been changed' });
+                          } else {
+                            toast({ title: 'Error', description: (res as any).error || 'Failed to update password', variant: 'destructive' });
+                          }
+                        }}
+                        disabled={savingAction || !newPassword}
+                      >
+                        Update
+                      </Button>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Shield className="h-4 w-4 text-green-500" />
-                      Editor Access
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Shield className="h-4 w-4 text-green-500" />
-                      Admin Panel
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Shield className="h-4 w-4 text-green-500" />
-                      View Reports
-                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Status</p>
+                    <Button
+                      variant={selectedUser.disabled ? 'default' : 'outline'}
+                      onClick={async () => {
+                        setSavingAction(true);
+                        const res = await setUserDisabled(selectedUser.uid, !selectedUser.disabled);
+                        setSavingAction(false);
+                        if ((res as any).success) {
+                          const updated = { ...selectedUser, disabled: !selectedUser.disabled } as PlatformUser;
+                          setSelectedUser(updated);
+                          setUsers((prev) => prev.map(u => u.uid === updated.uid ? updated : u));
+                        } else {
+                          toast({ title: 'Error', description: (res as any).error || 'Failed to update status', variant: 'destructive' });
+                        }
+                      }}
+                      disabled={savingAction}
+                    >
+                      {selectedUser.disabled ? 'Enable User' : 'Disable User'}
+                    </Button>
                   </div>
                 </div>
 
@@ -381,71 +635,310 @@ export function EnhancedUserManagement() {
       <TabsContent value="create" className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>Create New User</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Create New User
+            </CardTitle>
             <CardDescription>
-              Add a new user to the platform
+              Create a new user account with role and permissions. The user will receive an email to verify their account.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-6">
-              <div className="flex gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">
-                    Important: Use Firebase Console
-                  </p>
-                  <p className="text-amber-800 dark:text-amber-200">
-                    To create user accounts, you must use the Firebase Console. This ensures proper authentication setup and security.
-                  </p>
+            <div className="space-y-6">
+              {/* Error Alert */}
+              {createError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{createError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="create-email">
+                      Email Address <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="create-email"
+                      type="email"
+                      placeholder="user@example.com"
+                      value={createEmail}
+                      onChange={(e) => {
+                        setCreateEmail(e.target.value);
+                        setCreateError(null);
+                      }}
+                      className={createEmail && !isValidEmail(createEmail) ? 'border-destructive' : ''}
+                    />
+                    {createEmail && !isValidEmail(createEmail) && (
+                      <p className="text-xs text-destructive flex items-center gap-1">
+                        <XCircle className="h-3 w-3" />
+                        Please enter a valid email address
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="create-password">
+                      Password <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="create-password"
+                      type="password"
+                      placeholder="Minimum 6 characters"
+                      value={createPassword}
+                      onChange={(e) => {
+                        setCreatePassword(e.target.value);
+                        setCreateError(null);
+                      }}
+                      className={createPassword && createPassword.length < 6 ? 'border-destructive' : ''}
+                    />
+                    {createPassword && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${
+                                passwordStrength === 'strong' ? 'bg-green-500 w-full' :
+                                passwordStrength === 'medium' ? 'bg-yellow-500 w-2/3' :
+                                'bg-red-500 w-1/3'
+                              }`}
+                            />
+                          </div>
+                          <span className={`text-xs ${
+                            passwordStrength === 'strong' ? 'text-green-600' :
+                            passwordStrength === 'medium' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {passwordStrength === 'strong' ? 'Strong' :
+                             passwordStrength === 'medium' ? 'Medium' : 'Weak'}
+                          </span>
+                        </div>
+                        {createPassword.length < 6 && (
+                          <p className="text-xs text-destructive flex items-center gap-1">
+                            <XCircle className="h-3 w-3" />
+                            Password must be at least 6 characters
+                          </p>
+                        )}
+                        {createPassword.length >= 6 && passwordStrength !== 'strong' && (
+                          <p className="text-xs text-muted-foreground">
+                            Tip: Use uppercase, lowercase, numbers, and special characters for a stronger password
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="create-display-name">
+                      Display Name <span className="text-muted-foreground text-xs">(Optional)</span>
+                    </Label>
+                    <Input
+                      id="create-display-name"
+                      placeholder="John Doe"
+                      value={createDisplayName}
+                      onChange={(e) => setCreateDisplayName(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The user's display name for the platform
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="create-role">
+                      User Role <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={createRole}
+                      onValueChange={(value) => {
+                        setCreateRole(value as AppRole);
+                        setCreateError(null);
+                      }}
+                    >
+                      <SelectTrigger id="create-role" className="h-11">
+                        <SelectValue placeholder="Select a role">
+                          {createRole && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-primary">{roleDescriptions[createRole].icon}</span>
+                              <span className="font-medium">{roleDescriptions[createRole].label}</span>
+                            </div>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[280px]">
+                        {(['admin', 'yep-manager', 'mentor', 'participant', 'user'] as AppRole[]).map((role) => {
+                          const desc = roleDescriptions[role];
+                          return (
+                            <SelectItem 
+                              key={role} 
+                              value={role} 
+                              className="py-3 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <span className="text-primary">{desc.icon}</span>
+                                <div className="flex-1">
+                                  <div className="font-medium">{desc.label}</div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">{desc.description}</div>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-md text-sm">
+                      <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-muted-foreground">
+                        {roleDescriptions[createRole].description}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="bg-muted/50 p-6 rounded-lg space-y-4">
-                <h3 className="font-semibold">How to Create a User Account:</h3>
-                <ol className="space-y-3 text-sm">
-                  <li className="flex gap-3">
-                    <span className="font-bold text-primary">1.</span>
-                    <span>Go to <a href="https://console.firebase.google.com/project/scago-feedback/authentication/users" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Firebase Console → Authentication → Users</a></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold text-primary">2.</span>
-                    <span>Click the <strong>"Add user"</strong> button</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold text-primary">3.</span>
-                    <span>Enter the user's email address and a secure password</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold text-primary">4.</span>
-                    <span>Click <strong>"Add user"</strong> to create the account</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold text-primary">5.</span>
-                    <span>Return here to grant admin access if needed (below)</span>
-                  </li>
-                </ol>
+              {/* Page Permissions */}
+              <div className="space-y-4 border-t pt-4">
+                <div className="space-y-2">
+                  <Label>Initial Page Permissions</Label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Grant access to specific pages. Admins and YEP Managers have full access by default.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {ROUTE_KEYS.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          createRoutes.includes(key)
+                            ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                            : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                        } ${
+                          (createRole === 'admin' || createRole === 'yep-manager')
+                            ? 'opacity-60 cursor-not-allowed'
+                            : ''
+                        }`}
+                      >
+                        <Checkbox
+                          checked={createRoutes.includes(key)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setCreateRoutes((prev) => [...prev, key]);
+                            } else {
+                              setCreateRoutes((prev) => prev.filter(k => k !== key));
+                            }
+                          }}
+                          disabled={createRole === 'admin' || createRole === 'yep-manager'}
+                          className="h-5 w-5"
+                        />
+                        <span className="text-sm font-medium flex-1">{label}</span>
+                        {(createRole === 'admin' || createRole === 'yep-manager') && (
+                          <Badge variant="secondary" className="text-xs">
+                            Auto
+                          </Badge>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  {(createRole === 'admin' || createRole === 'yep-manager') && (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        {createRole === 'admin' 
+                          ? 'Administrators have access to all pages automatically.'
+                          : 'YEP Managers have access to the YEP Portal automatically.'}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               </div>
 
-              <div className="border-t pt-6">
-                <h3 className="font-semibold mb-4">Grant Admin Access</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  After creating a user in Firebase Console, you can grant them admin access here:
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()}
-                  />
-                  <Button onClick={handleAddAdmin} disabled={!newEmail}>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Add Admin
-                  </Button>
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Info className="h-3 w-3" />
+                  <span>Role and permissions take effect on the user's next login</span>
                 </div>
+                <Button
+                  onClick={async () => {
+                    // Validate inputs
+                    if (!createEmail || !isValidEmail(createEmail)) {
+                      setCreateError('Please enter a valid email address');
+                      return;
+                    }
+                    if (!createPassword || createPassword.length < 6) {
+                      setCreateError('Password must be at least 6 characters');
+                      return;
+                    }
+
+                    setCreateError(null);
+                    setSavingAction(true);
+                    
+                    try {
+                      const res = await createPlatformUser({
+                        email: createEmail,
+                        password: createPassword,
+                        displayName: createDisplayName || undefined,
+                        role: createRole,
+                        pagePermissions: createRoutes,
+                      });
+                      
+                      if ((res as any).success) {
+                        toast({
+                          title: 'User Created Successfully',
+                          description: `${createEmail} has been created with ${roleDescriptions[createRole].label} role`,
+                        });
+                        // Reset form
+                        setCreateEmail('');
+                        setCreatePassword('');
+                        setCreateDisplayName('');
+                        setCreateRole('user');
+                        setCreateRoutes([]);
+                        setCreateError(null);
+                        // Reload user list
+                        loadData();
+                      } else {
+                        const errorMsg = (res as any).error || 'Failed to create user';
+                        setCreateError(errorMsg);
+                        toast({
+                          title: 'Error Creating User',
+                          description: errorMsg,
+                          variant: 'destructive',
+                        });
+                      }
+                    } catch (error: any) {
+                      const errorMsg = error?.message || 'An unexpected error occurred';
+                      setCreateError(errorMsg);
+                      toast({
+                        title: 'Error',
+                        description: errorMsg,
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setSavingAction(false);
+                    }
+                  }}
+                  disabled={
+                    savingAction ||
+                    !createEmail ||
+                    !createPassword ||
+                    createPassword.length < 6 ||
+                    !isValidEmail(createEmail)
+                  }
+                  className="min-w-[140px]"
+                >
+                  {savingAction ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Create User
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </CardContent>

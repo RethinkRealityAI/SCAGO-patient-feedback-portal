@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Shield, Lock, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { PagePermissionsManager } from '@/components/admin/page-permissions-manager';
 
 export function SecuritySettings() {
   const securityChecks = [
@@ -173,6 +174,8 @@ export function SecuritySettings() {
           </div>
         </CardContent>
       </Card>
+
+      <PagePermissionsManager />
     </div>
   );
 }

@@ -5,7 +5,7 @@
  */
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, geminiModel } from '@/ai/genkit';
 import { z } from 'zod';
 import type { FeedbackSubmission } from '@/app/dashboard/types';
 
@@ -23,6 +23,7 @@ const GenerateReportOutputSchema = z.object({
 
 const generateReportPrompt = ai.definePrompt({
   name: 'generateReportPrompt',
+  model: geminiModel,
   input: { schema: GenerateReportInputSchema },
   output: { schema: GenerateReportOutputSchema },
   prompt: `You are an expert healthcare data analyst. Your task is to generate a comprehensive summary report based on the provided patient feedback data for Sickle Cell Disease (SCD) care.

@@ -51,22 +51,107 @@ export default function LoginForm() {
         setError(result.error);
         setPassword('');
       } else if (result.user) {
-        // Check user role and route accordingly
-        const role = await getUserRole(result.user.email);
-        setLoading(false);
+        const userEmail = result.user.email;
+        if (!userEmail) {
+          setLoading(false);
+          setError('No email found for user');
+          return;
+        }
+
+        // Create server session cookie immediately to avoid race conditions
+        try {
+          // Force refresh the ID token to ensure latest claims
+          const idToken = await result.user.getIdToken(true);
+          const sessionResponse = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken }),
+          });
+          
+          // Ensure session cookie is set before proceeding
+          if (!sessionResponse.ok) {
+            console.error('Failed to create session cookie');
+          }
+          
+          // Wait longer to ensure cookie is fully set and available for next request
+          // The cookie needs to be in the response headers before navigation
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (error) {
+          console.error('Error creating session:', error);
+        }
+
+        // Check user role - use direct email check since auth.currentUser might not be ready
+        let role: 'admin' | 'yep-manager' | 'user' | null = null;
+        try {
+          // First try with getUserRole (checks custom claims + Firestore)
+          role = await getUserRole(userEmail);
+          console.log('[Login] Initial getUserRole result:', role);
+          
+          // If role is still null or 'user', double-check by directly querying Firestore
+          if (!role || role === 'user') {
+            const { isUserAdmin, isUserYEPManager } = await import('@/lib/firebase-auth');
+            const [isAdmin, isYEPManager] = await Promise.all([
+              isUserAdmin(userEmail),
+              isUserYEPManager(userEmail)
+            ]);
+            
+            console.log('[Login] Direct Firestore check - isAdmin:', isAdmin, 'isYEPManager:', isYEPManager);
+            
+            if (isAdmin) {
+              role = 'admin';
+            } else if (isYEPManager) {
+              role = 'yep-manager';
+            } else {
+              role = 'user';
+            }
+          }
+          
+          // Verify with server-side check if possible
+          try {
+            const debugResponse = await fetch(`/api/auth/debug-role?email=${encodeURIComponent(userEmail)}`);
+            const debugData = await debugResponse.json();
+            console.log('[Login] Server-side role check:', debugData);
+            
+            // If server says admin but client says user, trust server
+            if (debugData.firestoreCheck?.isInAdminList && role !== 'admin') {
+              console.warn('[Login] Server confirms admin but client detected user - using admin');
+              role = 'admin';
+            }
+          } catch (debugError) {
+            console.warn('[Login] Could not verify with server:', debugError);
+          }
+          
+          console.log('[Login] Final role decision:', role, 'for email:', userEmail);
+        } catch (error) {
+          console.error('[Login] Error detecting user role:', error);
+          // Default to user role on error
+          role = 'user';
+        }
 
         if (redirectUrl) {
-          // If there's a redirect URL, use it
           const destination = decodeURIComponent(redirectUrl);
-          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/dashboard';
-          router.push(safeDestination);
-        } else if (role === 'admin' || role === 'yep-manager') {
-          // Admins and YEP managers go to dashboard
-          router.push('/dashboard');
-        } else {
-          // Regular users (participants/mentors) go to their profile
-          router.push('/profile');
+          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/admin';
+          console.log('Redirecting to:', safeDestination, 'from redirect parameter');
+          router.replace(safeDestination);
+          return;
         }
+
+        if (role === 'admin') {
+          console.log('Admin detected, redirecting to /admin');
+          // Use window.location for full page reload to ensure cookies are sent
+          window.location.href = '/admin';
+          return;
+        }
+
+        if (role === 'yep-manager') {
+          console.log('YEP Manager detected, redirecting to /youth-empowerment');
+          window.location.href = '/youth-empowerment';
+          return;
+        }
+
+        console.log('Regular user detected, redirecting to /profile');
+        router.replace('/profile');
+        return;
       } else {
         setLoading(false);
       }

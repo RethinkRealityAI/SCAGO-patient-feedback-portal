@@ -136,7 +136,7 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
             // Create a document-specific filename
             const doc = requiredDocs.find(d => d.id === docId);
             const timestamp = Date.now();
-            const fileName = `${docId}_${timestamp}_${file.name}`;
+            const fileName = docId === 'additional' ? `${timestamp}_${file.name}` : `${docId}_${timestamp}_${file.name}`;
             
             const result = await uploadProfileDocument({
               recordId: profile.id,
@@ -144,13 +144,15 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
               fileData: base64Data,
               fileName,
               fileType: file.type,
-              documentType: docId, // Pass document type for proper field mapping
+              documentType: docId, // Pass document type for proper field mapping ('additional' for random docs)
             });
 
             if (result.success) {
               toast({
                 title: 'Upload Successful',
-                description: `${doc?.name || 'Document'} has been uploaded`,
+                description: docId === 'additional' 
+                  ? 'Document has been uploaded'
+                  : `${doc?.name || 'Document'} has been uploaded`,
               });
               onUpdate(); // Refresh profile data
               resolve(null);
@@ -184,7 +186,9 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
   const handleFileDelete = async (docId: string, fileUrl: string) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
-    setDeletingDoc(docId);
+    // For additional documents, use a unique identifier
+    const deleteKey = docId === 'additional' ? `additional-${fileUrl}` : docId;
+    setDeletingDoc(deleteKey);
 
     try {
       const result = await deleteProfileDocument({
@@ -261,17 +265,18 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Required Documents
-        </CardTitle>
-        <CardDescription>
-          Upload and manage your program documents
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Required Documents
+          </CardTitle>
+          <CardDescription>
+            Upload and manage your program documents
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -426,6 +431,106 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
         </div>
       </CardContent>
     </Card>
+
+    {/* Additional Documents Section - Participants Only */}
+    {role === 'participant' && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Additional Documents
+          </CardTitle>
+          <CardDescription>
+            Upload any additional documents you'd like to share (optional)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              You can upload any documents here that you'd like admins to see. This is completely optional.
+            </AlertDescription>
+          </Alert>
+
+          {/* List of Additional Documents */}
+          {profile.additionalDocuments && profile.additionalDocuments.length > 0 && (
+            <div className="space-y-3">
+              {profile.additionalDocuments.map((doc, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 border rounded-lg bg-muted/50"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="font-medium">{doc.fileName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(doc.url, '_blank')}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      View
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleFileDelete('additional', doc.url)}
+                      disabled={deletingDoc === `additional-${doc.url}`}
+                      className="gap-2"
+                    >
+                      {deletingDoc === `additional-${doc.url}` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Upload New Additional Document */}
+          <div className="pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById('additional-file-upload')?.click()}
+              disabled={uploadingDoc === 'additional'}
+              className="w-full gap-2"
+            >
+              {uploadingDoc === 'additional' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload Additional Document
+                </>
+              )}
+            </Button>
+            <input
+              id="additional-file-upload"
+              type="file"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => handleFileUpload('additional', e)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    )}
+  </div>
   );
 }
 

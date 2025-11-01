@@ -1,7 +1,7 @@
 'use server';
 
-import { db } from './firebase';
-import { collection, getDocs, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import { enforceAdminInAction } from '@/lib/server-auth';
 
 export interface BackupMetadata {
   id: string;
@@ -16,18 +16,20 @@ export interface BackupMetadata {
  */
 export async function createFullBackup(): Promise<{ success: boolean; error?: string; metadata?: BackupMetadata }> {
   try {
+    await enforceAdminInAction();
     const timestamp = new Date();
     const backupId = `backup-${timestamp.getTime()}`;
 
     // Backup surveys
-    const surveysSnapshot = await getDocs(collection(db, 'surveys'));
+    const firestore = getAdminFirestore();
+    const surveysSnapshot = await firestore.collection('surveys').get();
     const surveys = surveysSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     }));
 
     // Backup submissions
-    const submissionsSnapshot = await getDocs(collection(db, 'feedback'));
+    const submissionsSnapshot = await firestore.collection('feedback').get();
     const submissions = submissionsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
@@ -38,14 +40,14 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
       submissions,
       metadata: {
         backupId,
-        timestamp: Timestamp.fromDate(timestamp),
+        timestamp,
         surveyCount: surveys.length,
         submissionCount: submissions.length,
       },
     };
 
     // Store backup in Firestore
-    await setDoc(doc(db, 'backups', backupId), backupData);
+    await firestore.collection('backups').doc(backupId).set(backupData);
 
     const metadata: BackupMetadata = {
       id: backupId,
@@ -70,15 +72,17 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
  */
 export async function exportDataAsJSON(): Promise<{ success: boolean; data?: string; error?: string }> {
   try {
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
     // Get all surveys
-    const surveysSnapshot = await getDocs(collection(db, 'surveys'));
+    const surveysSnapshot = await firestore.collection('surveys').get();
     const surveys = surveysSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     }));
 
     // Get all submissions
-    const submissionsSnapshot = await getDocs(collection(db, 'feedback'));
+    const submissionsSnapshot = await firestore.collection('feedback').get();
     const submissions = submissionsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
@@ -109,14 +113,16 @@ export async function exportDataAsJSON(): Promise<{ success: boolean; data?: str
  */
 export async function listBackups(): Promise<{ success: boolean; backups?: BackupMetadata[]; error?: string }> {
   try {
-    const backupsSnapshot = await getDocs(collection(db, 'backups'));
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    const backupsSnapshot = await firestore.collection('backups').get();
     const backups: BackupMetadata[] = backupsSnapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
-        timestamp: data.metadata.timestamp.toDate(),
+        timestamp: (data as any).metadata?.timestamp?.toDate ? (data as any).metadata.timestamp.toDate() : new Date((data as any).metadata?.timestamp),
         type: 'full',
-        count: data.metadata.surveyCount + data.metadata.submissionCount,
+        count: (data as any).metadata?.surveyCount + (data as any).metadata?.submissionCount,
         size: new Blob([JSON.stringify(data)]).size,
       };
     });
@@ -136,6 +142,7 @@ export async function listBackups(): Promise<{ success: boolean; backups?: Backu
  */
 export async function restoreFromBackup(backupId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await enforceAdminInAction();
     // This is a dangerous operation and should require admin authentication
     // For now, just return a message
     console.warn('Restore operation requested for backup:', backupId);

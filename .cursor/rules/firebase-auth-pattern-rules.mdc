@@ -326,3 +326,61 @@ catch (error) {
 - Writes that need auth → Client Actions (`@/lib/client-actions`)
 - Reads that don't need auth → Server Actions (`@/app/*/actions`)
 - When in doubt → Use Client Actions
+
+## 🔒 Server-Side Sessions & RBAC
+
+```markdown
+- Use a secure HTTPOnly session cookie (`__session`) created via POST /api/auth/session from the client after sign-in.
+- On the server, verify the cookie with Firebase Admin Auth and resolve role via custom claims, then fall back to Firestore membership (config/admins, config/yep_managers, yep_participants, yep_mentors).
+- In Next.js 15+, the cookies API is async: always `const cookieStore = await cookies(); cookieStore.get('__session')`.
+- Gate admin pages with server layouts that call an RBAC helper (e.g., `enforceAdminOrRedirect`).
+```
+
+```typescript
+// Server RBAC helper (pattern)
+export async function getServerSession(): Promise<ServerSession|null> {
+  const cookieStore = await cookies();
+  const cookie = cookieStore.get('__session');
+  if (!cookie?.value) return null;
+  const decoded = await getAdminAuth().verifySessionCookie(cookie.value, true);
+  // resolve role from custom claims → Firestore fallbacks
+}
+```
+
+## 🧭 Route Protection
+
+```markdown
+- Protect admin-only areas via server layouts: `/admin`, `/dashboard`, `/editor`, `/youth-empowerment`.
+- Participants/Mentors should be redirected to `/profile` if they hit protected routes.
+- Keep public/participant routes (e.g., `/yep-forms/submit/[formId]`) accessible to authenticated users.
+```
+
+## 🧰 Composite Index Safe Fallbacks
+
+```markdown
+- When combining `where` + `orderBy` in Admin SDK queries, always wrap with a try/catch and provide a fallback path:
+  1) Try the indexed query
+  2) If `FAILED_PRECONDITION` (index required), fetch without orderBy and sort/filter in-memory.
+- Prefer in-memory sort for small datasets to avoid index creation during development.
+```
+
+```typescript
+// Pattern for fallback
+let items: any[] = [];
+try {
+  const snap = await col.where('isActive','==',true).orderBy('updatedAt','desc').get();
+  items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+} catch (e) {
+  const snap = await col.get();
+  items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .filter(x => x.isActive === true)
+    .sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+```
+
+## 🚫 Remove Insecure Defaults
+
+```markdown
+- Do NOT ship placeholder SMTP credentials or admin fallbacks (e.g., `admin@scago.com`).
+- Require `SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD` and throw explicit errors if missing.
+```

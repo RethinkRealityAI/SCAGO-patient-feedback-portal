@@ -15,12 +15,18 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { backfillAuthFields, generateInviteCodes } from '@/app/youth-empowerment/backfill-auth-fields';
+import { validateMentorParticipantRelationship } from '@/app/youth-empowerment/relationship-actions';
+import { migrateMentorAssignmentsToIds } from '@/app/youth-empowerment/migrate-mentor-assignments';
 
 export function YEPBackfill() {
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [isGeneratingCodes, setIsGeneratingCodes] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isMigratingIds, setIsMigratingIds] = useState(false);
   const [backfillResults, setBackfillResults] = useState<any>(null);
   const [codeResults, setCodeResults] = useState<any>(null);
+  const [validationResults, setValidationResults] = useState<any>(null);
+  const [idMigrationResults, setIdMigrationResults] = useState<any>(null);
   const { toast } = useToast();
 
   const handleBackfill = async () => {
@@ -92,6 +98,48 @@ export function YEPBackfill() {
       });
     } finally {
       setIsGeneratingCodes(false);
+    }
+  };
+
+  const handleValidateRelationships = async () => {
+    setIsValidating(true);
+    setValidationResults(null);
+    try {
+      const results = await validateMentorParticipantRelationship();
+      setValidationResults(results);
+      if (results.success) {
+        toast({ title: 'Validation Complete', description: `${(results.issues || []).length} issues found` });
+      } else {
+        toast({ title: 'Error', description: results.error || 'Validation failed', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Error validating relationships:', error);
+      toast({ title: 'Error', description: 'Failed to validate relationships', variant: 'destructive' });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleMigrateIds = async () => {
+    if (!confirm('Standardize mentor assignments to IDs? This will update participants and mentors.')) return;
+    setIsMigratingIds(true);
+    setIdMigrationResults(null);
+    try {
+      const results = await migrateMentorAssignmentsToIds();
+      setIdMigrationResults(results);
+      if (results.success) {
+        toast({
+          title: 'Mentor Link Migration Complete',
+          description: `Participants updated: ${results.updatedParticipants} | Mentors updated: ${results.updatedMentors} | Skipped: ${results.skipped}`,
+        });
+      } else {
+        toast({ title: 'Error', description: results.errors?.[0]?.error || 'Migration failed', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Error migrating mentor ids:', error);
+      toast({ title: 'Error', description: 'Failed to migrate mentor assignments', variant: 'destructive' });
+    } finally {
+      setIsMigratingIds(false);
     }
   };
 
@@ -212,11 +260,102 @@ export function YEPBackfill() {
               </Alert>
             )}
           </div>
+
+          {/* Relationship Validator */}
+          <div className="space-y-3 pt-4 border-t">
+            <div>
+              <h4 className="font-medium mb-2">Relationship Validator</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Scan mentor↔participant assignments for inconsistencies and missing links.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleValidateRelationships}
+              disabled={isValidating}
+              variant="outline"
+              className="w-full"
+            >
+              {isValidating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Validating...
+                </>
+              ) : (
+                'Validate Relationships'
+              )}
+            </Button>
+
+            {validationResults && (
+              <Alert variant={validationResults.success ? 'default' : 'destructive'}>
+                {validationResults.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <p>Issues found: {(validationResults.issues || []).length}</p>
+                    {validationResults.error && (
+                      <p className="text-red-600">{validationResults.error}</p>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          {/* Standardize Mentor Links to IDs */}
+          <div className="space-y-3 pt-4 border-t">
+            <div>
+              <h4 className="font-medium mb-2">Standardize Mentor Links</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Ensure every participant stores a canonical assignedMentorId and mentors have synchronized assignedStudents.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleMigrateIds}
+              disabled={isMigratingIds}
+              variant="outline"
+              className="w-full"
+            >
+              {isMigratingIds ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Standardizing...
+                </>
+              ) : (
+                'Standardize Mentor Links to IDs'
+              )}
+            </Button>
+
+            {idMigrationResults && (
+              <Alert variant={idMigrationResults.success ? 'default' : 'destructive'}>
+                {idMigrationResults.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <p>Participants updated: {idMigrationResults.updatedParticipants}</p>
+                    <p>Mentors updated: {idMigrationResults.updatedMentors}</p>
+                    <p>Skipped: {idMigrationResults.skipped}</p>
+                    {idMigrationResults.errors?.length > 0 && (
+                      <p className="text-red-600">Errors: {idMigrationResults.errors.length}</p>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
 
 
 

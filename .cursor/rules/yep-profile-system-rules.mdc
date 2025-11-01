@@ -568,3 +568,37 @@ if (!foundByEmail && !foundByCode) {
 - Profile auto-claims if email matches
 - Edit contact info and upload documents
 - Request new sign-in link from Security tab
+
+## 🔒 RBAC & Sessions (YEP)
+
+```markdown
+- Participants/Mentors may only access `/profile` and their own profile data.
+- Admin-only areas: `/admin`, `/dashboard`, `/editor`, `/youth-empowerment` guarded by server layouts.
+- Establish a server session cookie (`__session`) after client sign-in for server RBAC checks.
+- Never rely on client-supplied `userId` in server actions; always verify against the session.
+```
+
+## 📅 Meetings Feature Rules
+
+```typescript
+// Server actions MUST verify the session and enforce ownership
+const session = await getServerSession();
+if (!session) return { success: false, error: 'Not authenticated' };
+
+// createMeetingRequest: requester in payload MUST equal session.uid
+const expectedUserId = data.requestedBy === 'participant' ? data.participantUserId : data.mentorUserId;
+if (expectedUserId !== session.uid) return { success: false, error: 'Unauthorized' };
+
+// approve/reject: only mentor matching session.uid can change status
+// cancel: participant or mentor matching session.uid may cancel
+```
+
+## 🧮 Small Dataset Index Strategy
+
+```markdown
+- Prefer in-memory sorting to avoid composite indexes during development for small collections.
+- If queries use `where + orderBy`, wrap with try/catch and fallback to: fetch all → filter → sort in-memory.
+- Example files updated:
+  - `src/app/yep-forms/actions.ts` (templates/submissions)
+  - `src/app/youth-empowerment/meeting-actions.ts` (pending/user meetings)
+```

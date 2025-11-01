@@ -1,20 +1,7 @@
 'use server';
 
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import { enforceAdminInAction, getServerSession } from '@/lib/server-auth';
 import { 
   YEPFormTemplate, 
   YEPFormSubmission, 
@@ -27,6 +14,8 @@ import { nanoid } from 'nanoid';
 // Create a new YEP form template
 export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'version'>) {
   try {
+    await enforceAdminInAction();
+    const session = await getServerSession();
     const validatedData = yepFormTemplateSchema.parse(data);
     
     const formTemplate: YEPFormTemplate = {
@@ -34,11 +23,12 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
       ...validatedData,
       createdAt: new Date(),
       updatedAt: new Date(),
-      createdBy: 'system', // TODO: Get from auth context
+      createdBy: session?.email || 'admin',
       version: 1,
     };
 
-    await setDoc(doc(db, 'yep-form-templates', formTemplate.id), formTemplate);
+    const firestore = getAdminFirestore();
+    await firestore.collection('yep-form-templates').doc(formTemplate.id).set(formTemplate as any);
     
     return { success: true, data: formTemplate };
   } catch (error) {
@@ -53,17 +43,25 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
 // Get all YEP form templates
 export async function getYEPFormTemplates() {
   try {
-    const q = query(
-      collection(db, 'yep-form-templates'),
-      where('isActive', '==', true),
-      orderBy('updatedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    
-    const templates = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as YEPFormTemplate[];
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    let templates: YEPFormTemplate[] = [];
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-templates')
+        .where('isActive', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .get();
+      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+    } catch (e: any) {
+      // Fallback without composite index: fetch and sort in-memory
+      const snapshot = await firestore.collection('yep-form-templates').get();
+      templates = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = templates
+        .filter(t => (t as any).isActive === true)
+        .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
+    }
     
     return { success: true, data: templates };
   } catch (error) {
@@ -78,8 +76,8 @@ export async function getYEPFormTemplates() {
 // Get a single YEP form template by ID
 export async function getYEPFormTemplate(id: string) {
   try {
-    const docRef = doc(db, 'yep-form-templates', id);
-    const docSnap = await getDoc(docRef);
+    const firestore = getAdminFirestore();
+    const docSnap = await firestore.collection('yep-form-templates').doc(id).get();
     
     if (!docSnap.exists()) {
       return { success: false, error: 'Form template not found' };
@@ -99,6 +97,7 @@ export async function getYEPFormTemplate(id: string) {
 // Update a YEP form template
 export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFormTemplate, 'id' | 'createdAt' | 'createdBy'>>) {
   try {
+    await enforceAdminInAction();
     const validatedData = yepFormTemplateSchema.partial().parse(data);
     
     const updateData = {
@@ -107,7 +106,8 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
       version: (data.version || 1) + 1,
     };
 
-    await updateDoc(doc(db, 'yep-form-templates', id), updateData);
+    const firestore = getAdminFirestore();
+    await firestore.collection('yep-form-templates').doc(id).set(updateData as any, { merge: true });
     
     return { success: true };
   } catch (error) {
@@ -122,10 +122,12 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
 // Delete a YEP form template (soft delete)
 export async function deleteYEPFormTemplate(id: string) {
   try {
-    await updateDoc(doc(db, 'yep-form-templates', id), {
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    await firestore.collection('yep-form-templates').doc(id).set({
       isActive: false,
       updatedAt: new Date(),
-    });
+    } as any, { merge: true });
     
     return { success: true };
   } catch (error) {
@@ -140,6 +142,7 @@ export async function deleteYEPFormTemplate(id: string) {
 // Duplicate a YEP form template
 export async function duplicateYEPFormTemplate(id: string, newName: string) {
   try {
+    await enforceAdminInAction();
     const originalResult = await getYEPFormTemplate(id);
     if (!originalResult.success || !originalResult.data) {
       return { success: false, error: 'Original template not found' };
@@ -170,6 +173,14 @@ export async function duplicateYEPFormTemplate(id: string, newName: string) {
 // Submit a YEP form
 export async function submitYEPForm(formTemplateId: string, data: Record<string, any>) {
   try {
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    const allowed = session.role === 'participant' || session.role === 'mentor' || session.role === 'admin';
+    if (!allowed) {
+      return { success: false, error: 'Unauthorized' };
+    }
     const validatedData = yepFormSubmissionSchema.parse({
       formTemplateId,
       data,
@@ -178,13 +189,14 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
     const submission: YEPFormSubmission = {
       id: nanoid(),
       formTemplateId: validatedData.formTemplateId,
-      submittedBy: 'system', // TODO: Get from auth context
+      submittedBy: session.email,
       submittedAt: new Date(),
       data: validatedData.data,
       processingStatus: 'pending',
     };
 
-    await setDoc(doc(db, 'yep-form-submissions', submission.id), submission);
+    const firestore = getAdminFirestore();
+    await firestore.collection('yep-form-submissions').doc(submission.id).set(submission as any);
     
     return { success: true, data: submission };
   } catch (error) {
@@ -199,17 +211,24 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
 // Get form submissions for a template
 export async function getYEPFormSubmissions(formTemplateId: string) {
   try {
-    const q = query(
-      collection(db, 'yep-form-submissions'),
-      where('formTemplateId', '==', formTemplateId),
-      orderBy('submittedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    
-    const submissions = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as YEPFormSubmission[];
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    let submissions: YEPFormSubmission[] = [];
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-submissions')
+        .where('formTemplateId', '==', formTemplateId)
+        .orderBy('submittedAt', 'desc')
+        .get();
+      submissions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+    } catch (e: any) {
+      const snapshot = await firestore.collection('yep-form-submissions').get();
+      submissions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+      submissions = submissions
+        .filter((s: any) => s.formTemplateId === formTemplateId)
+        .sort((a: any, b: any) => new Date(b.submittedAt as any).getTime() - new Date(a.submittedAt as any).getTime());
+    }
     
     return { success: true, data: submissions };
   } catch (error) {
@@ -224,18 +243,25 @@ export async function getYEPFormSubmissions(formTemplateId: string) {
 // Get form templates by category
 export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
   try {
-    const q = query(
-      collection(db, 'yep-form-templates'),
-      where('category', '==', category),
-      where('isActive', '==', true),
-      orderBy('updatedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    
-    const templates = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as YEPFormTemplate[];
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    let templates: YEPFormTemplate[] = [];
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-templates')
+        .where('category', '==', category)
+        .where('isActive', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .get();
+      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+    } catch (e: any) {
+      const snapshot = await firestore.collection('yep-form-templates').get();
+      templates = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = templates
+        .filter((t: any) => t.category === category && t.isActive === true)
+        .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
+    }
     
     return { success: true, data: templates };
   } catch (error) {
@@ -250,18 +276,25 @@ export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
 // Get form templates by target entity
 export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
   try {
-    const q = query(
-      collection(db, 'yep-form-templates'),
-      where('targetEntity', '==', targetEntity),
-      where('isActive', '==', true),
-      orderBy('updatedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    
-    const templates = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as YEPFormTemplate[];
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
+    let templates: YEPFormTemplate[] = [];
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-templates')
+        .where('targetEntity', '==', targetEntity)
+        .where('isActive', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .get();
+      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+    } catch (e: any) {
+      const snapshot = await firestore.collection('yep-form-templates').get();
+      templates = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = templates
+        .filter((t: any) => t.targetEntity === targetEntity && t.isActive === true)
+        .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
+    }
     
     return { success: true, data: templates };
   } catch (error) {

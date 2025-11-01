@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Shield, 
@@ -10,12 +12,13 @@ import {
   LogOut, 
   Key,
   Clock,
-  Info
+  Info,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { signOut } from '@/lib/firebase-auth';
-import { resendYEPInvite } from '@/app/youth-empowerment/invite-actions';
+import { signOut, updatePassword } from '@/lib/firebase-auth';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 
 interface ProfileSecurityProps {
@@ -27,39 +30,79 @@ interface ProfileSecurityProps {
 }
 
 export function ProfileSecurity({ user, profile }: ProfileSecurityProps) {
-  const [isResending, setIsResending] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const { toast } = useToast();
   const router = useRouter();
 
-  const handleResendLink = async () => {
-    if (!user.email) return;
+  const handleChangePassword = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast({
+        title: 'Missing Fields',
+        description: 'Please fill in all password fields',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    setIsResending(true);
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: 'Password Mismatch',
+        description: 'New password and confirmation do not match',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast({
+        title: 'Weak Password',
+        description: 'Password must be at least 6 characters long',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
     try {
-      const result = await resendYEPInvite(user.email);
+      const result = await updatePassword(passwordData.currentPassword, passwordData.newPassword);
 
-      if (result.success) {
+      if (result.error) {
         toast({
-          title: 'Email Sent',
-          description: 'A new sign-in link has been sent to your email',
+          title: 'Error',
+          description: result.error || 'Failed to update password',
+          variant: 'destructive',
         });
       } else {
         toast({
-          title: 'Error',
-          description: result.error || 'Failed to send email',
-          variant: 'destructive',
+          title: 'Password Updated',
+          description: 'Your password has been successfully updated',
+        });
+        setShowPasswordForm(false);
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
         });
       }
     } catch (error) {
-      console.error('Error resending link:', error);
+      console.error('Error changing password:', error);
       toast({
         title: 'Error',
         description: 'An unexpected error occurred',
         variant: 'destructive',
       });
     } finally {
-      setIsResending(false);
+      setIsChangingPassword(false);
     }
   };
 
@@ -118,37 +161,144 @@ export function ProfileSecurity({ user, profile }: ProfileSecurityProps) {
             </div>
           </div>
 
-          {/* Password/Sign-in Management */}
+          {/* Password Management */}
           <div className="space-y-4">
-            <h4 className="font-medium">Sign-In Method</h4>
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Your account uses passwordless sign-in. You receive a secure link via email to access your account.
-              </AlertDescription>
-            </Alert>
+            <h4 className="font-medium">Password Management</h4>
+            
+            {/* Change Password Form */}
+            {showPasswordForm ? (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="currentPassword"
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                      placeholder="Enter your current password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    >
+                      {showCurrentPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
 
-            <Button
-              onClick={handleResendLink}
-              disabled={isResending}
-              variant="outline"
-              className="w-full"
-            >
-              {isResending ? (
-                <>
-                  <Mail className="mr-2 h-4 w-4 animate-pulse" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Request New Sign-In Link
-                </>
-              )}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              A secure link will be sent to {user.email}
-            </p>
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                      placeholder="Enter your new password (min 6 characters)"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                      placeholder="Confirm your new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={isChangingPassword}
+                    className="flex-1"
+                  >
+                    {isChangingPassword ? (
+                      <>
+                        <Key className="mr-2 h-4 w-4 animate-pulse" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <Key className="mr-2 h-4 w-4" />
+                        Update Password
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowPasswordForm(false);
+                      setPasswordData({
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: '',
+                      });
+                    }}
+                    variant="outline"
+                    disabled={isChangingPassword}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Change your password by entering your current password and choosing a new one.
+                  </AlertDescription>
+                </Alert>
+
+                <Button
+                  onClick={() => setShowPasswordForm(true)}
+                  variant="default"
+                  className="w-full"
+                >
+                  <Key className="mr-2 h-4 w-4" />
+                  Change Password
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Sign Out */}
@@ -179,7 +329,14 @@ export function ProfileSecurity({ user, profile }: ProfileSecurityProps) {
             <h4 className="font-medium">Need Help?</h4>
             <p className="text-sm text-muted-foreground">
               If you're having trouble accessing your account or need to update your email address,
-              please contact your program administrator.
+              please contact{' '}
+              <a 
+                href="mailto:tech@sicklecellanemia.ca" 
+                className="text-primary hover:underline"
+              >
+                tech@sicklecellanemia.ca
+              </a>
+              .
             </p>
           </div>
         </CardContent>

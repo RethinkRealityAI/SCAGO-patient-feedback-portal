@@ -18,16 +18,18 @@ import {
   LogOut,
   MessageSquare,
   Calendar,
+  BookOpen,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { signOut } from '@/lib/firebase-auth';
-import { claimYEPProfile, getYEPProfileByUserId } from '@/app/youth-empowerment/profile-actions';
+import { claimYEPProfile, getYEPProfileByUserId, updateYEPLastLogin } from '@/app/youth-empowerment/profile-actions';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 import { ProfileDetailsNew } from '@/components/profile/profile-details-new';
 import { ProfileDocumentsNew } from '@/components/profile/profile-documents-new';
 import { ProfileSecurity } from '@/components/profile/profile-security';
 import { ProfileMessages } from '@/components/profile/profile-messages';
 import { ProfileMeetings } from '@/components/profile/profile-meetings';
+import { ProfileWorkshops } from '@/components/profile/profile-workshops';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Badge } from '@/components/ui/badge';
 
@@ -74,6 +76,8 @@ export default function ProfilePage() {
         setProfile(result.profile);
         setRole(result.role!);
         setNeedsClaiming(false);
+        // Update last login timestamp for admin activity tracking
+        try { await updateYEPLastLogin(user.uid); } catch {}
       } else {
         // Profile not yet claimed
         setNeedsClaiming(true);
@@ -273,6 +277,18 @@ export default function ProfilePage() {
   }
 
   // Profile loaded - show dashboard
+  // Type guard: ensure profile and role are not null
+  if (!profile || !role) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
       <div className="container mx-auto py-8 px-4 max-w-6xl">
@@ -285,13 +301,15 @@ export default function ProfilePage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold">
-                  {role === 'participant' ? profile.youthParticipant : profile.name}
+                  {role === 'participant' 
+                    ? (profile as YEPParticipant).youthParticipant 
+                    : (profile as YEPMentor).name}
                 </h1>
                 <p className="text-muted-foreground capitalize">{role} Profile</p>
               </div>
             </div>
             <Button
-              variant="outline"
+              variant="default"
               onClick={handleSignOut}
               disabled={isSigningOut}
               className="gap-2"
@@ -323,16 +341,16 @@ export default function ProfilePage() {
 
         {/* Profile Tabs */}
         <Tabs defaultValue={defaultTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 h-auto">
-            <TabsTrigger value="details" className="gap-2 py-3">
+          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-6' : 'grid-cols-5'} h-auto`}>
+            <TabsTrigger value="details" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Details</span>
             </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2 py-3">
+            <TabsTrigger value="documents" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
-            <TabsTrigger value="messages" className="gap-2 py-3 relative">
+            <TabsTrigger value="messages" className="gap-2 py-3 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <MessageSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Messages</span>
               {notifications.unreadMessages > 0 && (
@@ -341,7 +359,7 @@ export default function ProfilePage() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="meetings" className="gap-2 py-3 relative">
+            <TabsTrigger value="meetings" className="gap-2 py-3 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Meetings</span>
               {notifications.pendingMeetings > 0 && (
@@ -350,7 +368,13 @@ export default function ProfilePage() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2 py-3">
+            {role === 'participant' && (
+              <TabsTrigger value="workshops" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">Workshops</span>
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="security" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Security</span>
             </TabsTrigger>
@@ -359,7 +383,7 @@ export default function ProfilePage() {
           <TabsContent value="details" className="space-y-6">
             <ProfileDetailsNew
               profile={profile}
-              role={role!}
+              role={role}
               onUpdate={loadProfile}
             />
           </TabsContent>
@@ -367,7 +391,7 @@ export default function ProfilePage() {
           <TabsContent value="documents" className="space-y-6">
             <ProfileDocumentsNew
               profile={profile}
-              role={role!}
+              role={role}
               onUpdate={loadProfile}
             />
           </TabsContent>
@@ -375,16 +399,24 @@ export default function ProfilePage() {
           <TabsContent value="messages" className="space-y-6">
             <ProfileMessages
               profile={profile}
-              role={role!}
+              role={role}
             />
           </TabsContent>
 
           <TabsContent value="meetings" className="space-y-6">
             <ProfileMeetings
               profile={profile}
-              role={role!}
+              role={role}
             />
           </TabsContent>
+
+          {role === 'participant' && (
+            <TabsContent value="workshops" className="space-y-6">
+              <ProfileWorkshops
+                profile={profile as YEPParticipant}
+              />
+            </TabsContent>
+          )}
 
           <TabsContent value="security" className="space-y-6">
             <ProfileSecurity user={user} profile={profile} />

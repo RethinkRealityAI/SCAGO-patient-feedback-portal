@@ -93,6 +93,16 @@ export function ProfileViewerModal({
     if (profile.fileUrl) {
       documents.push({ name: 'Additional File', url: profile.fileUrl, filename: profile.fileName || 'document' });
     }
+    // Add additional documents uploaded by participant
+    if (profile.additionalDocuments && Array.isArray(profile.additionalDocuments)) {
+      profile.additionalDocuments.forEach((doc) => {
+        documents.push({ 
+          name: 'Additional Document', 
+          url: doc.url, 
+          filename: doc.fileName || 'document' 
+        });
+      });
+    }
   } else {
     if (profile.policeCheckUrl) {
       documents.push({ name: 'Police Check', url: profile.policeCheckUrl, filename: profile.policeCheckFileName || 'police-check' });

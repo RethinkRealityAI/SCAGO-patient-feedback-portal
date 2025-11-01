@@ -6,10 +6,14 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  updatePassword as firebaseUpdatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User,
   AuthError,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { getIdTokenResult } from 'firebase/auth';
 import { auth, db } from './firebase';
 
 export type { User } from 'firebase/auth';
@@ -139,17 +143,21 @@ export async function isUserAdmin(email: string | null): Promise<boolean> {
   if (!email) return false;
 
   try {
-    // Check Firestore for admin list
-    const adminDoc = await getDoc(doc(db, 'config', 'admins'));
-    
-    if (adminDoc.exists()) {
-      const adminEmails = adminDoc.data().emails || [];
-      return adminEmails.includes(email);
+    // Prefer custom claims when available (immediate, avoids Firestore consistency/casing)
+    if (auth.currentUser) {
+      try {
+        const token = await getIdTokenResult(auth.currentUser, true);
+        if ((token.claims as any)?.role === 'admin') return true;
+      } catch {}
     }
 
-    // Fallback: If no config exists, allow specific email
-    // TODO: Remove this in production and ensure config/admins exists
-    return email === 'admin@scago.com';
+    // Fallback to Firestore config/admins (case-insensitive)
+    const adminDoc = await getDoc(doc(db, 'config', 'admins'));
+    if (adminDoc.exists()) {
+      const adminEmails: string[] = (adminDoc.data().emails || []).map((e: string) => (e || '').toLowerCase());
+      return adminEmails.includes(email.toLowerCase());
+    }
+    return false;
   } catch (error) {
     console.error('Error checking admin status:', error);
     return false;
@@ -163,17 +171,21 @@ export async function isUserYEPManager(email: string | null): Promise<boolean> {
   if (!email) return false;
 
   try {
-    // Check Firestore for YEP Manager list
-    const yepManagerDoc = await getDoc(doc(db, 'config', 'yep_managers'));
-    
-    if (yepManagerDoc.exists()) {
-      const yepManagerEmails = yepManagerDoc.data().emails || [];
-      return yepManagerEmails.includes(email);
+    // Prefer custom claims when available
+    if (auth.currentUser) {
+      try {
+        const token = await getIdTokenResult(auth.currentUser, true);
+        if ((token.claims as any)?.role === 'yep-manager') return true;
+      } catch {}
     }
 
-    // Fallback: If no config exists, allow specific email
-    // TODO: Remove this in production and ensure config/yep_managers exists
-    return email === 'yep-manager@scago.com';
+    // Fallback to Firestore config/yep_managers (case-insensitive)
+    const yepManagerDoc = await getDoc(doc(db, 'config', 'yep_managers'));
+    if (yepManagerDoc.exists()) {
+      const emails: string[] = (yepManagerDoc.data().emails || []).map((e: string) => (e || '').toLowerCase());
+      return emails.includes(email.toLowerCase());
+    }
+    return false;
   } catch (error) {
     console.error('Error checking YEP Manager status:', error);
     return false;
@@ -187,13 +199,23 @@ export async function getUserRole(email: string | null): Promise<'admin' | 'yep-
   if (!email) return null;
 
   try {
-    const [isAdmin, isYEPManager] = await Promise.all([
+    // Claims first
+    if (auth.currentUser) {
+      try {
+        const token = await getIdTokenResult(auth.currentUser, true);
+        const role = (token.claims as any)?.role as string | undefined;
+        if (role === 'admin') return 'admin';
+        if (role === 'yep-manager') return 'yep-manager';
+      } catch {}
+    }
+
+    // Fallback to Firestore config
+    const [admin, manager] = await Promise.all([
       isUserAdmin(email),
       isUserYEPManager(email)
     ]);
-
-    if (isAdmin) return 'admin';
-    if (isYEPManager) return 'yep-manager';
+    if (admin) return 'admin';
+    if (manager) return 'yep-manager';
     return 'user';
   } catch (error) {
     console.error('Error getting user role:', error);
@@ -213,5 +235,48 @@ export function onAuthChange(callback: (user: User | null) => void) {
  */
 export function getCurrentUser(): User | null {
   return auth.currentUser;
+}
+
+/**
+ * Update password for current user (requires reauthentication)
+ */
+export async function updatePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ error?: string }> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    return { error: 'No user is currently signed in' };
+  }
+
+  try {
+    // Reauthenticate user before password change
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+
+    // Update password
+    await firebaseUpdatePassword(user, newPassword);
+    return {};
+  } catch (error) {
+    const authError = error as AuthError;
+    let errorMessage = 'Failed to update password';
+
+    switch (authError.code) {
+      case 'auth/wrong-password':
+        errorMessage = 'Current password is incorrect';
+        break;
+      case 'auth/weak-password':
+        errorMessage = 'New password is too weak. Please use at least 6 characters';
+        break;
+      case 'auth/requires-recent-login':
+        errorMessage = 'Please sign out and sign back in before changing your password';
+        break;
+      default:
+        errorMessage = authError.message;
+    }
+
+    console.error('Password update error:', authError);
+    return { error: errorMessage };
+  }
 }
 

@@ -1,7 +1,8 @@
 'use server';
 
-import { db } from '@/lib/firebase';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import { enforceAdminInAction } from '@/lib/server-auth';
+import { nanoid } from 'nanoid';
 
 interface BackfillResult {
   success: boolean;
@@ -15,6 +16,7 @@ interface BackfillResult {
  * This should be run once after deploying the new auth system
  */
 export async function backfillAuthFields(): Promise<BackfillResult> {
+  await enforceAdminInAction();
   const result: BackfillResult = {
     success: true,
     participantsUpdated: 0,
@@ -23,8 +25,9 @@ export async function backfillAuthFields(): Promise<BackfillResult> {
   };
 
   try {
+    const firestore = getAdminFirestore();
     // Backfill participants
-    const participantsSnapshot = await getDocs(collection(db, 'yep_participants'));
+    const participantsSnapshot = await firestore.collection('yep_participants').get();
     
     for (const participantDoc of participantsSnapshot.docs) {
       try {
@@ -44,7 +47,7 @@ export async function backfillAuthFields(): Promise<BackfillResult> {
         // Only update if there are changes
         if (Object.keys(updates).length > 0) {
           updates.updatedAt = new Date();
-          await updateDoc(doc(db, 'yep_participants', participantDoc.id), updates);
+          await firestore.collection('yep_participants').doc(participantDoc.id).update(updates);
           result.participantsUpdated++;
         }
       } catch (error) {
@@ -57,7 +60,7 @@ export async function backfillAuthFields(): Promise<BackfillResult> {
     }
 
     // Backfill mentors
-    const mentorsSnapshot = await getDocs(collection(db, 'yep_mentors'));
+    const mentorsSnapshot = await firestore.collection('yep_mentors').get();
     
     for (const mentorDoc of mentorsSnapshot.docs) {
       try {
@@ -77,7 +80,7 @@ export async function backfillAuthFields(): Promise<BackfillResult> {
         // Only update if there are changes
         if (Object.keys(updates).length > 0) {
           updates.updatedAt = new Date();
-          await updateDoc(doc(db, 'yep_mentors', mentorDoc.id), updates);
+          await firestore.collection('yep_mentors').doc(mentorDoc.id).update(updates);
           result.mentorsUpdated++;
         }
       } catch (error) {
@@ -114,17 +117,18 @@ export async function generateInviteCodes(): Promise<{
   error?: string;
 }> {
   try {
-    const { nanoid } = await import('nanoid');
+    await enforceAdminInAction();
+    const firestore = getAdminFirestore();
     let participantsUpdated = 0;
     let mentorsUpdated = 0;
 
     // Generate codes for participants without them
-    const participantsSnapshot = await getDocs(collection(db, 'yep_participants'));
+    const participantsSnapshot = await firestore.collection('yep_participants').get();
     
     for (const participantDoc of participantsSnapshot.docs) {
       const data = participantDoc.data();
       if (!data.inviteCode && !data.userId) {
-        await updateDoc(doc(db, 'yep_participants', participantDoc.id), {
+        await firestore.collection('yep_participants').doc(participantDoc.id).update({
           inviteCode: nanoid(10),
           updatedAt: new Date(),
         });
@@ -133,12 +137,12 @@ export async function generateInviteCodes(): Promise<{
     }
 
     // Generate codes for mentors without them
-    const mentorsSnapshot = await getDocs(collection(db, 'yep_mentors'));
+    const mentorsSnapshot = await firestore.collection('yep_mentors').get();
     
     for (const mentorDoc of mentorsSnapshot.docs) {
       const data = mentorDoc.data();
       if (!data.inviteCode && !data.userId) {
-        await updateDoc(doc(db, 'yep_mentors', mentorDoc.id), {
+        await firestore.collection('yep_mentors').doc(mentorDoc.id).update({
           inviteCode: nanoid(10),
           updatedAt: new Date(),
         });

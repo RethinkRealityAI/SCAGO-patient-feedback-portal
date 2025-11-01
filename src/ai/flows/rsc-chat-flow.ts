@@ -1,6 +1,6 @@
 // 'use server'
 // Implement a simple chat flow using Genkit gemini15Flash
-import { ai } from '@/ai/genkit';
+import { ai, geminiModel } from '@/ai/genkit';
 import { z } from 'zod';
 
 const RscChatInputSchema = z.object({
@@ -13,6 +13,7 @@ const RscChatOutputSchema = z.object({
 
 const rscChatPrompt = ai.definePrompt({
   name: 'rscChatPrompt',
+  model: geminiModel,
   input: { schema: RscChatInputSchema },
   output: { schema: RscChatOutputSchema },
   prompt: `You are a concise, helpful assistant for the SCAGO Patient Feedback Portal.

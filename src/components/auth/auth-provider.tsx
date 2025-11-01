@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthChange, isUserAdmin, isUserYEPManager, getUserRole } from '@/lib/firebase-auth';
 import { getDoc, doc } from 'firebase/firestore';
@@ -27,10 +27,8 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Routes that REQUIRE authentication and admin access
-const PROTECTED_ROUTES = ['/admin', '/dashboard', '/editor'];
-
-// Routes that require YEP Manager or Admin access
+// Routes that REQUIRE authentication
+const ADMIN_ONLY_ROUTES = ['/admin', '/dashboard', '/editor'];
 const YEP_ROUTES = ['/youth-empowerment'];
 
 // Public routes - anyone can access without login
@@ -51,6 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userRole, setUserRole] = useState<'admin' | 'yep-manager' | 'user' | null>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const sessionPostedRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (authUser) => {
@@ -58,6 +57,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(authUser);
         
         if (authUser) {
+          // Ensure server-side session cookie is set (deduped)
+          try {
+            const hasRoleCookie = typeof document !== 'undefined' && document.cookie.includes('app_role=');
+            if (!sessionPostedRef.current && !hasRoleCookie) {
+              const idToken = await authUser.getIdToken(true);
+              await fetch('/api/auth/session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken }),
+              });
+              sessionPostedRef.current = true;
+            }
+          } catch (e) {
+            // Best-effort; will retry on next auth change if needed
+          }
           // Check user roles
           const [adminStatus, yepManagerStatus, userRole] = await Promise.all([
             isUserAdmin(authUser.email),
@@ -104,34 +118,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         }
           
-          // Check route access permissions
-          const isProtectedRoute = PROTECTED_ROUTES.some(route => pathname?.startsWith(route));
-          const isYEPRoute = YEP_ROUTES.some(route => pathname?.startsWith(route));
-          
-          // Admin routes require admin access
-          if (isProtectedRoute && !adminStatus) {
-            // Check if this is the first time setup
-            const adminDoc = await getDoc(doc(db, 'config', 'admins'));
-            if (!adminDoc.exists()) {
-              router.push('/setup-admin');
-            } else {
-              router.push('/unauthorized');
-            }
-          }
-          
-          // YEP routes require YEP Manager or Admin access
-          if (isYEPRoute && !yepManagerStatus && !adminStatus) {
-            router.push('/unauthorized');
-          }
+          // Route access is enforced on the server via layouts. Avoid client-side false negatives.
         } else {
           setIsAdmin(false);
           setIsYEPManager(false);
           setUserRole(null);
           
+          // Clear server session cookie
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+          } catch (e) {
+            // ignore
+          }
+
           // Only redirect to login if trying to access a protected route
-          const isProtectedRoute = PROTECTED_ROUTES.some(route => pathname?.startsWith(route));
+          const isAdminOnlyRoute = ADMIN_ONLY_ROUTES.some(route => pathname?.startsWith(route));
           const isYEPRoute = YEP_ROUTES.some(route => pathname?.startsWith(route));
-          if (isProtectedRoute || isYEPRoute) {
+          if (isAdminOnlyRoute || isYEPRoute) {
             // Include the current path as a redirect parameter
             const redirectUrl = encodeURIComponent(pathname || '/');
             router.push(`/login?redirect=${redirectUrl}`);

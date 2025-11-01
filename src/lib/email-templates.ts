@@ -6,13 +6,18 @@ import nodemailer from 'nodemailer';
  * Get configured email transporter
  */
 function getTransporter() {
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASSWORD;
+  if (!smtpUser || !smtpPass) {
+    throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASSWORD.');
+  }
   return nodemailer.createTransport({
-    host: 'smtp.ionos.com',
-    port: 587,
+    host: process.env.SMTP_HOST || 'smtp.ionos.com',
+    port: Number(process.env.SMTP_PORT || 587),
     secure: false,
     auth: {
-      user: process.env.SMTP_USER || 'tech@sicklecellanemia.ca',
-      pass: process.env.SMTP_PASSWORD || 'scago2024!',
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 }
@@ -125,7 +130,7 @@ This email was sent by SCAGO Youth Empowerment Program
     `;
 
     await transporter.sendMail({
-      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER || 'tech@sicklecellanemia.ca'}>`,
+      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER}>`,
       to: data.to,
       subject: `New Message from ${data.senderName} - SCAGO YEP`,
       text: textContent,
@@ -204,7 +209,7 @@ This email was sent by SCAGO Youth Empowerment Program
     `;
 
     await transporter.sendMail({
-      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER || 'tech@sicklecellanemia.ca'}>`,
+      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER}>`,
       to: data.to,
       subject: `Meeting Request from ${data.requesterName} - SCAGO YEP`,
       text: textContent,
@@ -280,7 +285,7 @@ This email was sent by SCAGO Youth Empowerment Program
     `;
 
     await transporter.sendMail({
-      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER || 'tech@sicklecellanemia.ca'}>`,
+      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER}>`,
       to: data.to,
       subject: `Meeting Approved: ${data.meetingTitle} - SCAGO YEP`,
       text: textContent,
@@ -360,7 +365,7 @@ This email was sent by SCAGO Youth Empowerment Program
     `;
 
     await transporter.sendMail({
-      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER || 'tech@sicklecellanemia.ca'}>`,
+      from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER}>`,
       to: data.to,
       subject: `Meeting Request Rejected: ${data.meetingTitle} - SCAGO YEP`,
       text: textContent,

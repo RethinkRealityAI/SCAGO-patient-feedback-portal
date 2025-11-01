@@ -1,7 +1,7 @@
 'use server';
 
-import { db } from '@/lib/firebase';
-import { collection, addDoc, doc, setDoc, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import { enforceAdminInAction } from '@/lib/server-auth';
 import { 
   ImportResult, 
   ImportError, 
@@ -31,6 +31,7 @@ export async function importParticipants(
   options: ImportOptions,
   mapping: ImportMapping
 ): Promise<ImportResult> {
+  await enforceAdminInAction();
   const result: ImportResult = {
     success: false,
     imported: 0,
@@ -84,6 +85,7 @@ export async function importParticipants(
       batches.push(convertedData.slice(i, i + batchSize));
     }
 
+    const firestore = getAdminFirestore();
     for (const batch of batches) {
       const batchPromises = batch.map(async (participantData) => {
         try {
@@ -135,6 +137,7 @@ export async function importMentors(
   options: ImportOptions,
   mapping: ImportMapping
 ): Promise<ImportResult> {
+  await enforceAdminInAction();
   const result: ImportResult = {
     success: false,
     imported: 0,
@@ -145,6 +148,7 @@ export async function importMentors(
   };
 
   try {
+    const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
       const mapped: any = {};
@@ -181,16 +185,15 @@ export async function importMentors(
       const batchPromises = batch.map(async (mentorData) => {
         try {
           // Check if mentor exists
-          const existingQuery = query(
-            collection(db, 'yep_mentors'),
-            where('email', '==', mentorData.email)
-          );
-          const existingSnapshot = await getDocs(existingQuery);
+          const existingSnapshot = await firestore
+            .collection('yep_mentors')
+            .where('email', '==', mentorData.email)
+            .get();
           
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing mentor
             const existingDoc = existingSnapshot.docs[0];
-            await setDoc(doc(db, 'yep_mentors', existingDoc.id), {
+            await existingDoc.ref.set({
               name: mentorData.name || '',
               email: mentorData.email || '',
               phone: mentorData.phone || '',
@@ -203,12 +206,12 @@ export async function importMentors(
                     ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
                     : []),
               file: mentorData.file || '',
-              updatedAt: serverTimestamp()
-            }, { merge: true });
+              updatedAt: new Date()
+            }, { merge: true } as any);
             result.updated++;
           } else if (existingSnapshot.empty) {
             // Create new mentor
-            await addDoc(collection(db, 'yep_mentors'), {
+            await firestore.collection('yep_mentors').add({
               name: mentorData.name || '',
               email: mentorData.email || '',
               phone: mentorData.phone || '',
@@ -221,8 +224,8 @@ export async function importMentors(
                     ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
                     : []),
               file: mentorData.file || '',
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
+              createdAt: new Date(),
+              updatedAt: new Date()
             });
             result.imported++;
           } else {
@@ -260,6 +263,7 @@ export async function importWorkshops(
   options: ImportOptions,
   mapping: ImportMapping
 ): Promise<ImportResult> {
+  await enforceAdminInAction();
   const result: ImportResult = {
     success: false,
     imported: 0,
@@ -270,6 +274,7 @@ export async function importWorkshops(
   };
 
   try {
+    const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
       const mapped: any = {};
@@ -306,24 +311,23 @@ export async function importWorkshops(
       const batchPromises = batch.map(async (workshopData) => {
         try {
           // Check if workshop exists
-          const existingQuery = query(
-            collection(db, 'yep_workshops'),
-            where('title', '==', workshopData.title),
-            where('date', '==', workshopData.date)
-          );
-          const existingSnapshot = await getDocs(existingQuery);
+          const existingSnapshot = await firestore
+            .collection('yep_workshops')
+            .where('title', '==', workshopData.title)
+            .where('date', '==', workshopData.date)
+            .get();
           
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing workshop
             const existingDoc = existingSnapshot.docs[0];
-            await setDoc(doc(db, 'yep_workshops', existingDoc.id), {
+            await existingDoc.ref.set({
               ...workshopData,
               updatedAt: new Date()
-            });
+            }, { merge: true } as any);
             result.updated++;
           } else if (existingSnapshot.empty) {
             // Create new workshop
-            await addDoc(collection(db, 'yep_workshops'), {
+            await firestore.collection('yep_workshops').add({
               ...workshopData,
               createdAt: new Date(),
               updatedAt: new Date()
@@ -364,6 +368,7 @@ export async function importAttendance(
   options: ImportOptions,
   mapping: ImportMapping
 ): Promise<ImportResult> {
+  await enforceAdminInAction();
   const result: ImportResult = {
     success: false,
     imported: 0,
@@ -374,6 +379,7 @@ export async function importAttendance(
   };
 
   try {
+    const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
       const mapped: any = {};
@@ -410,24 +416,23 @@ export async function importAttendance(
       const batchPromises = batch.map(async (attendanceData) => {
         try {
           // Check if attendance record exists
-          const existingQuery = query(
-            collection(db, 'yep_workshop_attendance'),
-            where('participantId', '==', attendanceData.participantId),
-            where('workshopId', '==', attendanceData.workshopId)
-          );
-          const existingSnapshot = await getDocs(existingQuery);
+          const existingSnapshot = await firestore
+            .collection('yep_workshop_attendance')
+            .where('participantId', '==', attendanceData.participantId)
+            .where('workshopId', '==', attendanceData.workshopId)
+            .get();
           
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing attendance
             const existingDoc = existingSnapshot.docs[0];
-            await setDoc(doc(db, 'yep_workshop_attendance', existingDoc.id), {
+            await existingDoc.ref.set({
               ...attendanceData,
               updatedAt: new Date()
-            });
+            }, { merge: true } as any);
             result.updated++;
           } else if (existingSnapshot.empty) {
             // Create new attendance record
-            await addDoc(collection(db, 'yep_workshop_attendance'), {
+            await firestore.collection('yep_workshop_attendance').add({
               ...attendanceData,
               createdAt: new Date(),
               updatedAt: new Date()
@@ -468,6 +473,7 @@ export async function importMeetings(
   options: ImportOptions,
   mapping: ImportMapping
 ): Promise<ImportResult> {
+  await enforceAdminInAction();
   const result: ImportResult = {
     success: false,
     imported: 0,
@@ -478,6 +484,7 @@ export async function importMeetings(
   };
 
   try {
+    const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
       const mapped: any = {};
@@ -514,25 +521,24 @@ export async function importMeetings(
       const batchPromises = batch.map(async (meetingData) => {
         try {
           // Check if meeting exists
-          const existingQuery = query(
-            collection(db, 'yep_advisor_meetings'),
-            where('participantId', '==', meetingData.participantId),
-            where('mentorId', '==', meetingData.mentorId),
-            where('meetingDate', '==', meetingData.meetingDate)
-          );
-          const existingSnapshot = await getDocs(existingQuery);
+          const existingSnapshot = await firestore
+            .collection('yep_advisor_meetings')
+            .where('participantId', '==', meetingData.participantId)
+            .where('mentorId', '==', meetingData.mentorId)
+            .where('meetingDate', '==', meetingData.meetingDate)
+            .get();
           
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing meeting
             const existingDoc = existingSnapshot.docs[0];
-            await setDoc(doc(db, 'yep_advisor_meetings', existingDoc.id), {
+            await existingDoc.ref.set({
               ...meetingData,
               updatedAt: new Date()
-            });
+            }, { merge: true } as any);
             result.updated++;
           } else if (existingSnapshot.empty) {
             // Create new meeting
-            await addDoc(collection(db, 'yep_advisor_meetings'), {
+            await firestore.collection('yep_advisor_meetings').add({
               ...meetingData,
               createdAt: new Date(),
               updatedAt: new Date()

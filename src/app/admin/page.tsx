@@ -11,7 +11,8 @@ import { EnhancedUserManagement } from '@/components/admin/enhanced-user-managem
 import { SystemHealth } from '@/components/admin/system-health';
 import { DataManagement } from '@/components/admin/data-management';
 import { SecuritySettings } from '@/components/admin/security-settings';
-import { ActivityLog } from '@/components/admin/activity-log';
+// ActivityLog deprecated in favor of unified AdminActivityFeed
+import { AdminActivityFeed } from '@/components/admin/admin-activity-feed';
 import { PlatformStats } from '@/components/admin/platform-stats';
 import { CurrentParticipantsImporter } from '@/components/youth-empowerment/current-participants-importer';
 import { ImportDialog } from '@/components/youth-empowerment/import-dialog';
@@ -30,11 +31,7 @@ export default function AdminPage() {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!loading && !isAdmin) {
-      router.push('/unauthorized');
-    }
-  }, [loading, isAdmin, router]);
+  // Server layout already enforces admin. Avoid client-side false negatives causing redirects.
 
   // Add timeout to detect stuck loading state
   useEffect(() => {
@@ -71,9 +68,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  // At this point, server allowed access; render regardless of client-side role computation.
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -170,7 +165,7 @@ export default function AdminPage() {
 
         {/* Activity Log Tab */}
         <TabsContent value="activity" className="space-y-4">
-          <ActivityLog />
+          <AdminActivityFeed />
         </TabsContent>
 
         {/* Youth Empowerment Program Tab */}

@@ -88,19 +88,36 @@ export async function getConversation(
     const firestore = getAdminFirestore();
 
     // Get messages where user1 is sender and user2 is recipient, or vice versa
-    const messages1 = await firestore
-      .collection('yep_messages')
-      .where('senderId', '==', userId1)
-      .where('recipientId', '==', userId2)
-      .orderBy('createdAt', 'desc')
-      .get();
+    let messages1, messages2;
+    try {
+      messages1 = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId1)
+        .where('recipientId', '==', userId2)
+        .orderBy('createdAt', 'desc')
+        .get();
+    } catch {
+      messages1 = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId1)
+        .where('recipientId', '==', userId2)
+        .get();
+    }
 
-    const messages2 = await firestore
-      .collection('yep_messages')
-      .where('senderId', '==', userId2)
-      .where('recipientId', '==', userId1)
-      .orderBy('createdAt', 'desc')
-      .get();
+    try {
+      messages2 = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId2)
+        .where('recipientId', '==', userId1)
+        .orderBy('createdAt', 'desc')
+        .get();
+    } catch {
+      messages2 = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId2)
+        .where('recipientId', '==', userId1)
+        .get();
+    }
 
     const allMessages = [...messages1.docs, ...messages2.docs]
       .map((doc) => {
@@ -146,17 +163,33 @@ export async function getInbox(userId: string): Promise<{
     const firestore = getAdminFirestore();
 
     // Get messages where user is sender or recipient
-    const sentMessages = await firestore
-      .collection('yep_messages')
-      .where('senderId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    let sentMessages;
+    try {
+      sentMessages = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+    } catch {
+      sentMessages = await firestore
+        .collection('yep_messages')
+        .where('senderId', '==', userId)
+        .get();
+    }
 
-    const receivedMessages = await firestore
-      .collection('yep_messages')
-      .where('recipientId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    let receivedMessages;
+    try {
+      receivedMessages = await firestore
+        .collection('yep_messages')
+        .where('recipientId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+    } catch {
+      receivedMessages = await firestore
+        .collection('yep_messages')
+        .where('recipientId', '==', userId)
+        .get();
+    }
 
     const conversationMap = new Map<string, {
       otherUserId: string;
@@ -365,20 +398,33 @@ export async function getMessagingContacts(
         return { success: false, error: 'Participant not found' };
       }
 
-      const participantData = participantDoc.data()!;
-      const assignedMentor = participantData.assignedMentor;
+      const participantData = participantDoc.data() as any;
+      const mentorId: string | undefined = participantData.assignedMentorId || participantData.mentorId;
+      const mentorName: string | undefined = participantData.assignedMentor;
 
-      if (assignedMentor) {
-        // Get mentor by name or ID
+      if (mentorId) {
+        const mentorDoc = await firestore.collection('yep_mentors').doc(mentorId).get();
+        if (mentorDoc.exists) {
+          const mentorData = mentorDoc.data() as any;
+          contacts.push({
+            id: mentorDoc.id,
+            userId: mentorData.userId,
+            name: mentorData.name,
+            email: mentorData.email || mentorData.authEmail,
+            role: 'mentor' as const,
+          });
+        }
+      } else if (mentorName) {
+        // Fallback by name (handles legacy data)
         const mentorQuery = await firestore
           .collection('yep_mentors')
-          .where('name', '==', assignedMentor)
+          .where('name', '==', mentorName)
           .limit(1)
           .get();
 
         if (!mentorQuery.empty) {
           const mentorDoc = mentorQuery.docs[0];
-          const mentorData = mentorDoc.data();
+          const mentorData = mentorDoc.data() as any;
           contacts.push({
             id: mentorDoc.id,
             userId: mentorData.userId,

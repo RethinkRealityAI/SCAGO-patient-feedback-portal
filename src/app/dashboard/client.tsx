@@ -228,17 +228,31 @@ export default function Dashboard() {
       const now = new Date()
       const daysAgo = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
       const cutoff = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000))
-      result = result.filter(s => new Date(s.submittedAt) >= cutoff)
+      result = result.filter(s => {
+        if (!s.submittedAt) return false
+        const date = new Date(s.submittedAt)
+        if (isNaN(date.getTime())) return false
+        return date >= cutoff
+      })
     }
 
     // Filter by rating (only for non-consent surveys)
     if (!isConsent && ratingFilter !== 'all') {
       if (ratingFilter === 'excellent') {
-        result = result.filter(s => s.rating >= 8)
+        result = result.filter(s => {
+          const rating = Number(s.rating)
+          return !isNaN(rating) && rating >= 8
+        })
       } else if (ratingFilter === 'good') {
-        result = result.filter(s => s.rating >= 5 && s.rating < 8)
+        result = result.filter(s => {
+          const rating = Number(s.rating)
+          return !isNaN(rating) && rating >= 5 && rating < 8
+        })
       } else if (ratingFilter === 'poor') {
-        result = result.filter(s => s.rating < 5)
+        result = result.filter(s => {
+          const rating = Number(s.rating)
+          return !isNaN(rating) && rating < 5
+        })
       }
     }
 
@@ -253,7 +267,14 @@ export default function Dashboard() {
     return result
   }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isConsent])
 
-  const totalPages = Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE))
+
+  // Reset to page 1 if current page is out of bounds
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1)
+    }
+  }, [totalPages, currentPage])
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -269,11 +290,15 @@ export default function Dashboard() {
   const ratingOverTime = useMemo(() => {
     const byDate = new Map<string, { date: string; avg: number; count: number }>()
     for (const s of filtered) {
-      const d = new Date(s.submittedAt)
+      // Validate submittedAt date
+      const d = s.submittedAt ? new Date(s.submittedAt) : null
+      if (!d || isNaN(d.getTime())) continue // Skip invalid dates
+      
       const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10)
       const current = byDate.get(key) || { date: key, avg: 0, count: 0 }
       const nextCount = current.count + 1
-      const nextAvg = (current.avg * current.count + Number(s.rating || 0)) / nextCount
+      const ratingValue = Number(s.rating)
+      const nextAvg = (current.avg * current.count + (isNaN(ratingValue) ? 0 : ratingValue)) / nextCount
       byDate.set(key, { date: key, avg: nextAvg, count: nextCount })
     }
     return Array.from(byDate.values()).sort((a,b) => a.date.localeCompare(b.date))
@@ -282,7 +307,8 @@ export default function Dashboard() {
   const metrics = useMemo(() => {
     const total = filtered.length
     // Count unique surveys from all submissions (including those without matching survey docs)
-    const surveysCount = new Set(submissions.map(s => s.surveyId)).size
+    // Filter out undefined/null surveyIds to avoid counting them
+    const surveysCount = new Set(submissions.map(s => s.surveyId).filter(id => id != null)).size
     
     // Overview mode: High-level metrics across all surveys
     if (isAllSurveysMode) {
@@ -1429,13 +1455,17 @@ export default function Dashboard() {
                           <p className="text-sm font-medium line-clamp-1 flex-1">
                             {isConsent 
                               ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'Unnamed'
-                              : submission.hospitalInteraction}
+                              : submission.hospitalInteraction || 'N/A'}
                           </p>
-                          {!isConsent && (
-                            <Badge variant="outline" className="text-xs flex-shrink-0">
-                              {submission.rating}/10
-                            </Badge>
-                          )}
+                          {!isConsent && (() => {
+                            const rating = Number(submission.rating)
+                            const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10
+                            return isValidRating ? (
+                              <Badge variant="outline" className="text-xs flex-shrink-0">
+                                {rating}/10
+                              </Badge>
+                            ) : null
+                          })()}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -1446,7 +1476,11 @@ export default function Dashboard() {
                             ? `${(submission as any)?.city?.selection || 'Unknown City'}`
                             : `${(submission as any)?.hospital || 'Unknown'}`}
                           <span>•</span>
-                          {new Date(submission.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {(() => {
+                            const date = submission.submittedAt ? new Date(submission.submittedAt) : null
+                            if (!date || isNaN(date.getTime())) return 'Invalid Date'
+                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -2021,17 +2055,21 @@ export default function Dashboard() {
                   paginatedSubmissions.map(submission => (
                     <TableRow key={submission.id}>
                       <TableCell className="whitespace-nowrap">
-                        {new Date(submission.submittedAt).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {(() => {
+                          const date = submission.submittedAt ? new Date(submission.submittedAt) : null
+                          if (!date || isNaN(date.getTime())) return 'Invalid Date'
+                          return date.toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-normal">
-                          {surveyTitleMap.get(submission.surveyId) || submission.surveyId.substring(0, 8) + '...'}
+                          {surveyTitleMap.get(submission.surveyId) || (submission.surveyId ? submission.surveyId.substring(0, 8) + '...' : 'Unknown Survey')}
                         </Badge>
                       </TableCell>
                       {isConsent ? (
@@ -2046,15 +2084,23 @@ export default function Dashboard() {
                         <>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <div className={`h-2 w-2 rounded-full ${
-                                submission.rating >= 8 ? 'bg-green-500' :
-                                submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`} />
-                              <span>{isNaN(Number(submission.rating)) ? 'N/A' : `${submission.rating}/10`}</span>
+                              {(() => {
+                                const rating = Number(submission.rating)
+                                const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10
+                                return (
+                                  <>
+                                    <div className={`h-2 w-2 rounded-full ${
+                                      isValidRating && rating >= 8 ? 'bg-green-500' :
+                                      isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                                    }`} />
+                                    <span>{isValidRating ? `${rating}/10` : 'N/A'}</span>
+                                  </>
+                                )
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell>{(submission as any)?.hospital || (submission as any)?.['hospital-on']?.selection || 'N/A'}</TableCell>
-                          <TableCell className="max-w-xs truncate">{submission.hospitalInteraction}</TableCell>
+                          <TableCell className="max-w-xs truncate">{submission.hospitalInteraction || 'N/A'}</TableCell>
                         </>
                       )}
                       <TableCell className="text-right">

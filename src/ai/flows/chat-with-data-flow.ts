@@ -5,7 +5,7 @@
  */
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, geminiModel } from '@/ai/genkit';
 import { z } from 'zod';
 import type { FeedbackSubmission } from '@/app/dashboard/types';
 
@@ -24,6 +24,7 @@ const ChatWithDataOutputSchema = z.object({
 
 const chatWithDataPrompt = ai.definePrompt({
   name: 'chatWithDataPrompt',
+  model: geminiModel,
   input: { schema: ChatWithDataInputSchema },
   output: { schema: ChatWithDataOutputSchema },
   prompt: `You are a helpful assistant for analyzing patient feedback data for Sickle Cell Disease (SCD) care.

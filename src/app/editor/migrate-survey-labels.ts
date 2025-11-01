@@ -1,7 +1,6 @@
 'use server';
 
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 import { nanoid } from 'nanoid';
 
 /**
@@ -10,13 +9,9 @@ import { nanoid } from 'nanoid';
  */
 export async function migrateSurveyLabels(surveyId: string) {
   try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      return { error: 'You must be logged in to migrate surveys' };
-    }
-
-    const surveyRef = doc(db, 'surveys', surveyId);
-    const surveySnap = await getDoc(surveyRef);
+    const firestore = getAdminFirestore();
+    const surveyRef = firestore.collection('surveys').doc(surveyId);
+    const surveySnap = await surveyRef.get();
     
     if (!surveySnap.exists()) {
       return { error: 'Survey not found' };
@@ -31,7 +26,7 @@ export async function migrateSurveyLabels(surveyId: string) {
     survey.saveProgressEnabled = false;
     
     // Save back to database
-    await updateDoc(surveyRef, survey);
+    await surveyRef.set(survey as any, { merge: true });
     
     return { success: true, message: 'Survey labels migrated successfully' };
   } catch (error) {

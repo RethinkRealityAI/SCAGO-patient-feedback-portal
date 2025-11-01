@@ -3,6 +3,7 @@
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { z } from 'zod';
 import { YEPMeeting } from '@/lib/youth-empowerment';
+import { getServerSession } from '@/lib/server-auth';
 import {
   sendMeetingRequestEmail,
   sendMeetingApprovedEmail,
@@ -60,6 +61,10 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
     const validated = createMeetingRequestSchema.parse(data);
     const firestore = getAdminFirestore();
 
@@ -73,6 +78,12 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
         success: false,
         error: 'Meeting must be scheduled for a future date and time',
       };
+    }
+
+    // Verify requester matches session
+    const expectedUserId = validated.requestedBy === 'participant' ? validated.participantUserId : validated.mentorUserId;
+    if (expectedUserId !== session.uid) {
+      return { success: false, error: 'Unauthorized' };
     }
 
     // Check for meeting conflicts (optional - can be enhanced later)
@@ -153,12 +164,14 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
  */
 export async function approveMeeting(
   meetingId: string,
-  userId: string
+  _userId: string
 ): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -172,7 +185,7 @@ export async function approveMeeting(
     const meetingData = meetingDoc.data()!;
     
     // Verify user is the mentor
-    if (meetingData.mentorUserId !== userId) {
+    if (meetingData.mentorUserId !== session.uid) {
       return {
         success: false,
         error: 'Unauthorized - only mentors can approve meetings',
@@ -233,13 +246,15 @@ export async function approveMeeting(
  */
 export async function rejectMeeting(
   meetingId: string,
-  userId: string,
+  _userId: string,
   rejectionReason?: string
 ): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -253,7 +268,7 @@ export async function rejectMeeting(
     const meetingData = meetingDoc.data()!;
     
     // Verify user is the mentor
-    if (meetingData.mentorUserId !== userId) {
+    if (meetingData.mentorUserId !== session.uid) {
       return {
         success: false,
         error: 'Unauthorized - only mentors can reject meetings',
@@ -315,12 +330,14 @@ export async function rejectMeeting(
  */
 export async function cancelMeeting(
   meetingId: string,
-  userId: string
+  _userId: string
 ): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -334,7 +351,7 @@ export async function cancelMeeting(
     const meetingData = meetingDoc.data()!;
     
     // Verify user is either participant or mentor
-    if (meetingData.participantUserId !== userId && meetingData.mentorUserId !== userId) {
+    if (meetingData.participantUserId !== session.uid && meetingData.mentorUserId !== session.uid) {
       return {
         success: false,
         error: 'Unauthorized',
@@ -348,7 +365,7 @@ export async function cancelMeeting(
       };
     }
 
-    const cancelledByName = meetingData.participantUserId === userId
+    const cancelledByName = meetingData.participantUserId === session.uid
       ? meetingData.participantName
       : meetingData.mentorName;
 
@@ -361,7 +378,7 @@ export async function cancelMeeting(
     let recipientEmail = '';
     let recipientName = '';
     
-    if (meetingData.participantUserId === userId) {
+    if (meetingData.participantUserId === session.uid) {
       // Participant cancelled - notify mentor
       const mentorDoc = await firestore.collection('yep_mentors').doc(meetingData.mentorId).get();
       const mentorData = mentorDoc.exists ? mentorDoc.data() : null;
@@ -415,19 +432,20 @@ export async function getUserMeetings(userId: string): Promise<{
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
+    const effectiveUserId = session.role === 'admin' ? userId : session.uid;
     const firestore = getAdminFirestore();
 
     // Get meetings where user is participant or mentor
     const participantMeetings = await firestore
       .collection('yep_meetings')
-      .where('participantUserId', '==', userId)
-      .orderBy('proposedDate', 'desc')
+      .where('participantUserId', '==', effectiveUserId)
       .get();
 
     const mentorMeetings = await firestore
       .collection('yep_meetings')
-      .where('mentorUserId', '==', userId)
-      .orderBy('proposedDate', 'desc')
+      .where('mentorUserId', '==', effectiveUserId)
       .get();
 
     const allMeetings = [...participantMeetings.docs, ...mentorMeetings.docs]
@@ -467,13 +485,17 @@ export async function getPendingMeetingRequests(mentorUserId: string): Promise<{
   error?: string;
 }> {
   try {
+    const session = await getServerSession();
+    if (!session) return { success: false, error: 'Not authenticated' };
+    if (session.role !== 'admin' && session.uid !== mentorUserId) {
+      return { success: false, error: 'Unauthorized' };
+    }
     const firestore = getAdminFirestore();
 
     const pendingMeetings = await firestore
       .collection('yep_meetings')
       .where('mentorUserId', '==', mentorUserId)
       .where('status', '==', 'pending')
-      .orderBy('proposedDate', 'asc')
       .get();
 
     const meetings = pendingMeetings.docs.map((doc) => {
@@ -485,7 +507,7 @@ export async function getPendingMeetingRequests(mentorUserId: string): Promise<{
         createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
         updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt),
       } as YEPMeeting;
-    });
+    }).sort((a, b) => a.proposedDate.getTime() - b.proposedDate.getTime());
 
     return {
       success: true,

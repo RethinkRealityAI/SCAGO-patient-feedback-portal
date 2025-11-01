@@ -1,6 +1,7 @@
 'use server';
 
 import { getAdminAuth, getAdminFirestore, createOrGetUser, checkUserExists } from '@/lib/firebase-admin';
+import { enforceAdminInAction } from '@/lib/server-auth';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import nodemailer from 'nodemailer';
@@ -27,6 +28,7 @@ interface InviteResult {
  */
 export async function sendYEPInvite(data: InviteData): Promise<InviteResult> {
   try {
+    await enforceAdminInAction();
     const validated = inviteSchema.parse(data);
     const auth = getAdminAuth();
     const firestore = getAdminFirestore();
@@ -51,6 +53,16 @@ export async function sendYEPInvite(data: InviteData): Promise<InviteResult> {
         disabled: false,
       });
       userId = userRecord.uid;
+    }
+
+    // Ensure custom claims reflect the intended role for RBAC
+    try {
+      const existingClaims = (await auth.getUser(userId)).customClaims || {};
+      if (existingClaims.role !== validated.role) {
+        await auth.setCustomUserClaims(userId, { ...existingClaims, role: validated.role });
+      }
+    } catch (e) {
+      console.warn('Failed to set custom user claims for role');
     }
 
     // Create or update record in appropriate collection
@@ -140,6 +152,7 @@ export async function sendBulkYEPInvites(invites: InviteData[]): Promise<{
   error?: string;
 }> {
   try {
+    await enforceAdminInAction();
     const results = await Promise.all(
       invites.map(async (invite) => {
         const result = await sendYEPInvite(invite);
@@ -175,13 +188,18 @@ async function sendInviteEmail(data: {
   inviteCode: string;
 }): Promise<void> {
   // Create transporter - IONOS SMTP
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASSWORD;
+  if (!smtpUser || !smtpPass) {
+    throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASSWORD.');
+  }
   const transporter = nodemailer.createTransport({
-    host: 'smtp.ionos.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    host: process.env.SMTP_HOST || 'smtp.ionos.com',
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: false,
     auth: {
-      user: process.env.SMTP_USER || 'tech@sicklecellanemia.ca',
-      pass: process.env.SMTP_PASSWORD || 'scago2024!',
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 
@@ -290,7 +308,7 @@ If you didn't request this invitation, you can safely ignore this email.
   `;
 
   await transporter.sendMail({
-    from: `"SCAGO Youth Empowerment Program" <${process.env.SMTP_USER || 'tech@sicklecellanemia.ca'}>`,
+    from: `"SCAGO Youth Empowerment Program" <${smtpUser}>`,
     to: data.to,
     subject: `Welcome to SCAGO Youth Empowerment Program - ${roleText} Invitation`,
     text: textContent,
@@ -339,6 +357,7 @@ export async function enableYEPUser(userId: string): Promise<{ success: boolean;
  */
 export async function resendYEPInvite(email: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await enforceAdminInAction();
     const auth = getAdminAuth();
     const firestore = getAdminFirestore();
     
@@ -397,6 +416,7 @@ export async function resendYEPInvite(email: string): Promise<{ success: boolean
  */
 export async function deleteYEPUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await enforceAdminInAction();
     const auth = getAdminAuth();
     await auth.deleteUser(userId);
 
@@ -418,6 +438,7 @@ export async function generateInviteCode(data: {
   collection: 'yep_participants' | 'yep_mentors';
 }): Promise<{ success: boolean; inviteCode?: string; error?: string }> {
   try {
+    await enforceAdminInAction();
     const firestore = getAdminFirestore();
     const inviteCode = nanoid(10);
 
@@ -446,6 +467,7 @@ export async function bulkGenerateInviteCodes(): Promise<{
   error?: string;
 }> {
   try {
+    await enforceAdminInAction();
     const firestore = getAdminFirestore();
     let count = 0;
 

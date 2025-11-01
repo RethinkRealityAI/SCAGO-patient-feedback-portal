@@ -55,7 +55,21 @@ export async function uploadProfileDocument(data: {
       updatedAt: new Date(),
     };
 
-    if (data.documentType) {
+    if (data.documentType === 'additional') {
+      // Handle additional documents - add to array
+      const doc = await firestore.collection(data.collection).doc(data.recordId).get();
+      const docData = doc.data();
+      const existingDocuments = docData?.additionalDocuments || [];
+      
+      const newDocument = {
+        url: fileUrl,
+        fileName: data.fileName,
+        fileType: data.fileType,
+        uploadedAt: new Date(),
+      };
+      
+      updateData.additionalDocuments = [...existingDocuments, newDocument];
+    } else if (data.documentType) {
       // Map to specific fields based on document type
       updateData[`${data.documentType}Url`] = fileUrl;
       updateData[`${data.documentType}FileName`] = data.fileName;
@@ -134,7 +148,16 @@ export async function deleteProfileDocument(data: {
       updatedAt: new Date(),
     };
 
-    if (data.documentType) {
+    if (data.documentType === 'additional') {
+      // Remove document from additionalDocuments array
+      const doc = await firestore.collection(data.collection).doc(data.recordId).get();
+      const docData = doc.data();
+      const existingDocuments = docData?.additionalDocuments || [];
+      
+      updateData.additionalDocuments = existingDocuments.filter(
+        (doc: { url: string }) => doc.url !== data.fileUrl
+      );
+    } else if (data.documentType) {
       // Clear specific document type fields
       updateData[`${data.documentType}Url`] = null;
       updateData[`${data.documentType}FileName`] = null;
