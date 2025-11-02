@@ -12,7 +12,7 @@ export interface ServerSession {
 
 /**
  * Verify the Firebase session cookie and resolve the application role.
- * Custom claims are the source of truth. Falls back to Firestore checks
+ * Custom claims are the single source of truth. Falls back to Firestore checks
  * for participant/mentor only if no custom claim is present (legacy support).
  */
 export async function getServerSession(): Promise<ServerSession | null> {
@@ -36,16 +36,16 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     console.log('[ServerAuth] Session verified for email:', email);
 
-    // Read custom claim role first; this is our source of truth when present
+    // Read custom claim role; this is our single source of truth
     const claimRole = (decoded as any).role as AppRole | undefined;
     console.log('[ServerAuth] Custom claim role found:', claimRole);
 
+    // If custom claim exists and is valid, use it
     if (claimRole === 'admin' || claimRole === 'yep-manager' || claimRole === 'mentor' || claimRole === 'participant' || claimRole === 'user') {
       return { uid: decoded.uid, email, role: claimRole };
     }
 
     // Participant / Mentor membership by email (fallback for legacy users without claims)
-    // Check these AFTER admin/manager to avoid conflicts
     const participantQ = await firestore
       .collection('yep_participants')
       .where('email', '==', email)

@@ -14,8 +14,8 @@ import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
  * 🔐 AUTHENTICATION FLOW:
  * 1. Functions run in browser with authenticated user
  * 2. Firebase Auth automatically includes user's token in requests
- * 3. Firestore security rules check request.auth.token.email
- * 4. If email is in config/admins document, operation succeeds
+ * 3. Firestore security rules check request.auth.token custom claims
+ * 4. If user has 'admin' role in custom claims, operation succeeds
  * 
  * ⚠️ DO NOT MOVE THESE TO SERVER ACTIONS!
  * Server actions have NO auth context and will get PERMISSION_DENIED errors.
@@ -40,7 +40,7 @@ import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
  * - Open browser console to see authentication logs
  * - Look for: "[functionName] Authenticated as: user@email.com"
  * - If "NOT AUTHENTICATED" appears, user needs to login
- * - If permission denied, check config/admins in Firestore
+ * - If permission denied, check user's role in Firebase Auth custom claims
  */
 
 // Remove all undefined properties recursively. Firestore rejects `undefined` anywhere in the payload.
@@ -88,7 +88,7 @@ export async function updateSurvey(surveyId: string, data: any) {
     console.error('Client updateSurvey failed:', err);
     console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
     if (msg?.toLowerCase().includes('permission') || err?.code === 'permission-denied') {
-      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must be listed in Firestore config/admins document. Please contact your administrator.` };
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims. Please contact your administrator.` };
     }
     return { error: msg || 'Failed to update survey' };
   }
@@ -142,7 +142,7 @@ export async function createBlankSurvey() {
     console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
     const err = error as any;
     if (err?.code === 'permission-denied') {
-      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must be listed in Firestore config/admins document.` };
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create blank survey' };
   }
@@ -167,7 +167,7 @@ export async function createSurvey() {
     console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
     const err = error as any;
     if (err?.code === 'permission-denied') {
-      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must be listed in Firestore config/admins document.` };
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create survey' };
   }
@@ -192,7 +192,7 @@ export async function createSurveyV2() {
     console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
     const err = error as any;
     if (err?.code === 'permission-denied') {
-      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must be listed in Firestore config/admins document.` };
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create survey (V2)' };
   }
@@ -216,7 +216,7 @@ export async function createConsentSurvey() {
     console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
     const err = error as any;
     if (err?.code === 'permission-denied') {
-      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must be listed in Firestore config/admins document.` };
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create consent survey' };
   }

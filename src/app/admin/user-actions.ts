@@ -21,7 +21,6 @@ export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }>
   await enforceAdminInAction();
   const auth = getAdminAuth();
 
-  // Fetch up to 1000 users (sufficient for current scale); can paginate later
   const result = await auth.listUsers(1000);
   const users: PlatformUser[] = result.users.map((u) => {
     const claims = (u.customClaims || {}) as Record<string, any>;
@@ -78,15 +77,12 @@ export async function createPlatformUser(input: {
       disabled: false,
     });
 
-    // Set role claim if provided
     const role: AppRole | undefined = input.role;
     if (role) {
-      // Preserve other custom claims (should be empty for new user, but safe)
       const existing = (await auth.getUser(user.uid)).customClaims || {};
       await auth.setCustomUserClaims(user.uid, { ...existing, role });
     }
 
-    // Apply initial page permissions if provided
     if (input.pagePermissions && input.pagePermissions.length > 0) {
       const permsRef = firestore.collection('config').doc('page_permissions');
       const snap = await permsRef.get();
