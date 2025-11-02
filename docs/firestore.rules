@@ -11,15 +11,13 @@ service cloud.firestore {
     // Helper function to check if user is admin
     function isAdmin() {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/config/admins) &&
-             (request.auth.token.email in get(/databases/$(database)/documents/config/admins).data.emails);
+             request.auth.token.role == 'admin';
     }
     
     // Helper function to check if user is YEP Manager
     function isYEPManager() {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/config/yep_managers) &&
-             (request.auth.token.email in get(/databases/$(database)/documents/config/yep_managers).data.emails);
+             request.auth.token.role == 'yep-manager';
     }
     
     // Helper function to check if user is admin or YEP Manager
