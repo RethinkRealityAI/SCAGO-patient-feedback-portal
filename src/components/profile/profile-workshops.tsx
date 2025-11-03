@@ -17,3 +17,8 @@ export function ProfileWorkshops({ profile }: ProfileWorkshopsProps) {
 }
 
 
+
+
+
+
+

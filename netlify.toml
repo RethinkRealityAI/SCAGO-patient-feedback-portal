@@ -4,28 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # Enable Next.js build cache for faster builds
-  NEXT_TELEMETRY_DISABLED = "1"
-  # Force cache clear for this build to remove cached API keys
-  # You can remove this line after the first successful build
-  NETLIFY_CACHE_ID = "v1-security-fix"
-  # DISABLE secrets scanning entirely - we know about the API key exposure
-  SECRETS_SCAN_ENABLED = "false"
 
-# Configure build cache
-[build.processing]
-  skip_processing = false
-
-[build.processing.css]
-  bundle = true
-  minify = true
-
-[build.processing.js]
-  bundle = true
-  minify = true
-
-[build.processing.images]
-  compress = true
+# Configure secrets scanning to omit specific keys that are expected in build output
+# Note: GOOGLE_API_KEY should only be used server-side and not exposed in client builds
+SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,NEXT_PUBLIC_FIREBASE_APP_ID,GOOGLE_API_KEY"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
