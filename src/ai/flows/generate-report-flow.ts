@@ -49,10 +49,6 @@ const generateReportPrompt = ai.definePrompt({
   input: { schema: GenerateReportInputSchema },
   output: { schema: GenerateReportOutputSchema },
   config: {
-    systemInstruction: `You are an expert healthcare data analyst specializing in patient feedback analysis for Sickle Cell Disease (SCD) care.
-Generate comprehensive, accurate reports based on the provided data.
-Use only information present in the data - do not invent statistics or trends.
-Format reports in clear, professional Markdown.`,
     ...modelConfigs.report,
   },
   prompt: `You are an expert healthcare data analyst. Your task is to generate a comprehensive summary report based on the provided patient feedback data for Sickle Cell Disease (SCD) care.

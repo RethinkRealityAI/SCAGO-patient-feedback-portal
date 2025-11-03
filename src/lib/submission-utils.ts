@@ -1,11 +1,16 @@
 /**
  * Utility functions for fetching submissions from Firestore
  * Handles both new organized structure and legacy collection for backward compatibility
+ * 
+ * ⚠️ SERVER-ONLY MODULE - Uses Firebase Admin SDK
+ * 
+ * NOTE: This file does NOT use 'use server' because it exports utility functions,
+ * not Server Actions. Server Actions must be async functions called from client.
  */
 
 import { collection, collectionGroup, getDocs, query, orderBy, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// NOTE: firebase-admin is loaded dynamically to prevent client bundling issues
 import type { FeedbackSubmission } from '@/app/dashboard/types';
 
 /**
@@ -75,6 +80,8 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
  * Returns submissions with document IDs properly set
  */
 export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> {
+  // Dynamic import to prevent client bundling
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
 
@@ -134,6 +141,8 @@ export async function fetchSubmissionsForSurvey(surveyId: string): Promise<Feedb
  * Fetch submissions for a specific survey using Admin SDK
  */
 export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<FeedbackSubmission[]> {
+  // Dynamic import to prevent client bundling
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
 

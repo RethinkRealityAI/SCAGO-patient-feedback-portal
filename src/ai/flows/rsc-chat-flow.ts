@@ -36,10 +36,6 @@ const rscChatPrompt = ai.definePrompt({
   input: { schema: RscChatInputSchema },
   output: { schema: RscChatOutputSchema },
   config: {
-    systemInstruction: `You are a concise, helpful assistant for the SCAGO Patient Feedback Portal.
-Provide clear, helpful responses to user questions.
-Keep responses concise and relevant.
-If asked about features you don't know about, politely say so.`,
     ...modelConfigs.chat,
   },
   prompt: `You are a concise, helpful assistant for the SCAGO Patient Feedback Portal.

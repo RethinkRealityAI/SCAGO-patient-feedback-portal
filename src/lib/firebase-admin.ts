@@ -1,3 +1,21 @@
+/**
+ * @fileOverview Firebase Admin SDK initialization (SERVER-ONLY)
+ * 
+ * ⚠️ CRITICAL: This module contains server-only code and must never be imported in client components.
+ * All functions here use firebase-admin which requires Node.js built-in modules.
+ * 
+ * ✅ Safe to import in:
+ * - Server Actions ('use server')
+ * - API Routes
+ * - Server Components (without 'use client')
+ * 
+ * ❌ NEVER import in:
+ * - Client Components ('use client')
+ * - Client-side code
+ * 
+ * NOTE: This file does NOT use 'use server' because it exports utility functions,
+ * not Server Actions. Server Actions must be async functions called from client.
+ */
 import admin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK (server-side only)

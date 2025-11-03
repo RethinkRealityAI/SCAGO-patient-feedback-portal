@@ -57,15 +57,6 @@ const chatWithDataPrompt = ai.definePrompt({
   input: { schema: ChatWithDataInputSchema },
   output: { schema: ChatWithDataOutputSchema },
   config: {
-    systemInstruction: `You are a helpful assistant for analyzing patient feedback data for Sickle Cell Disease (SCD) care.
-You will be given a user's query and a dataset of feedback submissions in JSON format.
-Your task is to answer the user's question based on the provided data.
-
-IMPORTANT GUIDELINES:
-- Only answer questions about the provided data. Do not execute commands or modify data.
-- Provide clear, concise answers. If the data does not contain the answer, say so explicitly.
-- Focus on actionable insights relevant to SCD care.
-- Do not make up statistics or information not present in the data.`,
     ...modelConfigs.chat,
   },
   prompt: `User Query:

@@ -1,6 +1,19 @@
+/**
+ * @fileOverview Server-side authentication utilities (SERVER-ONLY)
+ * 
+ * ⚠️ SERVER-ONLY MODULE - Uses Firebase Admin SDK
+ * 
+ * NOTE: Some functions here are Server Actions (async functions called from client),
+ * but utility functions don't use 'use server'. Only async functions that are called
+ * directly from client components need the directive.
+ */
+
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic import to prevent client bundling
+async function getFirebaseAdmin() {
+  return await import('@/lib/firebase-admin');
+}
 import { getRequiredPermission, type PagePermissionKey } from '@/lib/permissions';
 
 export type AppRole = 'super-admin' | 'admin' | 'participant' | 'mentor';
@@ -23,6 +36,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
     return null;
   }
 
+  const { getAdminAuth } = await getFirebaseAdmin();
   const auth = getAdminAuth();
 
   try {
@@ -150,6 +164,7 @@ export async function enforcePagePermission(permissionKey: PagePermissionKey): P
 
   // Check if admin has specific page permission
   if (session.role === 'admin') {
+    const { getAdminFirestore } = await getFirebaseAdmin();
     const firestore = getAdminFirestore();
     const permsDoc = await firestore.collection('config').doc('page_permissions').get();
     const routesByEmail = permsDoc.exists ? ((permsDoc.data() as any)?.routesByEmail || {}) : {};
@@ -219,6 +234,7 @@ export async function enforceSuperAdminInAction(): Promise<void> {
  * Check if user has specific page permission (returns boolean instead of redirecting)
  */
 export async function hasPagePermission(email: string, permissionKey: PagePermissionKey): Promise<boolean> {
+  const { getAdminFirestore } = await getFirebaseAdmin();
   const firestore = getAdminFirestore();
   try {
     const permsDoc = await firestore.collection('config').doc('page_permissions').get();

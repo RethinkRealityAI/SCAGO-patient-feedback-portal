@@ -1,11 +1,9 @@
 /**
  * @fileOverview Genkit configuration and model setup
  * 
- * ⚠️ SERVER-ONLY MODULE
- * This module configures Google Genkit and must only be used in server-side code.
- * It imports server-only dependencies that cannot be bundled for the client.
+ * This module is intended for server-side use only but does not export Server Actions.
+ * Do not import this from client components. Server actions should dynamically import flows.
  */
-'use server';
 
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
@@ -28,10 +26,9 @@ export const ai = genkit({
   plugins: [googleAIPlugin],
 });
 
-// Base model - Using gemini-flash-latest which is the latest and cheapest Flash model
-// This model is always up-to-date and cost-efficient, replacing the deprecated gemini-1.5-flash
-// Model configuration (temperature, etc.) is applied at the prompt level via definePrompt config
-export const geminiModel = (googleAIPlugin as any).model('gemini-flash-latest');
+// Base model identifier to use in prompts
+// Configuration (temperature, topP, etc.) is applied per-prompt via the config object
+export const GEMINI_FLASH_LATEST_MODEL_ID = 'googleai/gemini-2.5-flash-lite';
 
 // Export model configurations for use in prompt config
 // These are passed to definePrompt's config parameter
@@ -60,6 +57,6 @@ export const modelConfigs = {
 } as const;
 
 // Export model instances for convenience (same model, different configs used at prompt level)
-export const analysisModel = geminiModel;
-export const chatModel = geminiModel;
-export const reportModel = geminiModel;
+export const analysisModel = GEMINI_FLASH_LATEST_MODEL_ID;
+export const chatModel = GEMINI_FLASH_LATEST_MODEL_ID;
+export const reportModel = GEMINI_FLASH_LATEST_MODEL_ID;

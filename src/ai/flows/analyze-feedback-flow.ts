@@ -36,10 +36,6 @@ const analyzeFeedbackPrompt = ai.definePrompt({
   input: { schema: FeedbackAnalysisInputSchema },
   output: { schema: FeedbackAnalysisOutputSchema },
   config: {
-    systemInstruction: `You are an expert healthcare analyst specializing in patient feedback for Sickle Cell Disease (SCD) care.
-Always provide accurate, objective analysis based solely on the provided feedback.
-Do not make up information not present in the feedback.
-Focus on actionable insights relevant to SCD care improvements.`,
     ...modelConfigs.analysis,
   },
   prompt: `You are an expert healthcare analyst specializing in patient feedback for Sickle Cell Disease (SCD) care. Your task is to analyze the following patient feedback and provide a structured analysis.

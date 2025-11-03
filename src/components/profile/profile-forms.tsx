@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { Loader2, FileText, CheckCircle, AlertCircle, History, Clock } from 'luc
 import { useToast } from '@/hooks/use-toast';
 import { getYEPFormTemplatesForParticipantProfile, getYEPFormSubmissionsForParticipant } from '@/app/yep-forms/actions';
 import { YEPFormTemplate, YEPFormSubmission } from '@/lib/yep-forms-types';
-import YEPFormSubmission from '@/components/yep-forms/yep-form-submission';
+import YEPFormSubmissionComponent from '@/components/yep-forms/yep-form-submission';
 import { format } from 'date-fns';
 
 interface ProfileFormsProps {
@@ -27,14 +27,7 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
   const [activeTab, setActiveTab] = useState('available');
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadForms();
-    if (role === 'participant' && profile?.id) {
-      loadCompletedForms();
-    }
-  }, [profile?.id, role]);
-
-  const loadForms = async () => {
+  const loadForms = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getYEPFormTemplatesForParticipantProfile();
@@ -57,9 +50,9 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const loadCompletedForms = async () => {
+  const loadCompletedForms = useCallback(async () => {
     if (!profile?.id) return;
     setLoadingHistory(true);
     try {
@@ -72,8 +65,14 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [profile?.id]);
 
+  useEffect(() => {
+    loadForms();
+    if (role === 'participant' && profile?.id) {
+      loadCompletedForms();
+    }
+  }, [profile?.id, role, loadForms, loadCompletedForms]);
 
   if (loading) {
     return (
@@ -97,10 +96,11 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
         >
           ← Back to Forms List
         </Button>
-        <YEPFormSubmission 
+        <YEPFormSubmissionComponent 
           formTemplate={selectedForm} 
           onSubmissionSuccess={() => {
             loadCompletedForms();
+            setSelectedForm(null); // Navigate back to forms list
             setActiveTab('completed'); // Switch to completed tab to show the new submission
           }}
         />

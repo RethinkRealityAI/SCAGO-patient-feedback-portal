@@ -158,23 +158,34 @@ service cloud.firestore {
          resource.data.mentorUserId == request.auth.uid);
     }
     
-    // YEP Form Templates - Admin or YEP Manager
+    // YEP Form Templates - Admin or YEP Manager can write, authenticated users can read templates marked for participant profile
     match /yep-form-templates/{templateId} {
+      // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
+      
+      // Authenticated users can read templates marked for participant profile
+      allow read: if isAuthenticated() && 
+                     resource.data.showInParticipantProfile == true;
     }
     
-    // YEP Form Submissions - Admin, YEP Manager, or submitter
+    // YEP Form Submissions - Admin/YEP Manager full access, participants can read their own
     match /yep-form-submissions/{submissionId} {
       // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
       
-      // Participants can read their own submissions (by userId or email match)
+      // Participants can read their own submissions (by participantId and userId)
       allow read: if isAuthenticated() && 
-                     (resource.data.submittedByUserId == request.auth.uid ||
-                      resource.data.submittedBy == request.auth.token.email);
+                     resource.data.participantId != null &&
+                     resource.data.submittedByUserId == request.auth.uid;
       
-      // Authenticated users can create submissions
-      allow create: if isAuthenticated();
+      // Mentors can read their own submissions
+      allow read: if isAuthenticated() && 
+                     resource.data.mentorId != null &&
+                     resource.data.submittedByUserId == request.auth.uid;
+      
+      // Authenticated users can create submissions (must match their own userId)
+      allow create: if isAuthenticated() && 
+                       request.resource.data.submittedByUserId == request.auth.uid;
     }
   }
 }

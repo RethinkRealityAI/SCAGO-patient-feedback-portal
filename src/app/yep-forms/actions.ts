@@ -11,6 +11,25 @@ import {
 } from '@/lib/yep-forms-types';
 import { nanoid } from 'nanoid';
 
+/**
+ * Helper function to convert Firestore timestamp to Date
+ * Handles both admin SDK Timestamp objects and regular Date objects
+ */
+function parseFirestoreTimestamp(timestamp: any): Date {
+  if (!timestamp) return new Date();
+  if (timestamp instanceof Date) return timestamp;
+  if (timestamp && typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+  if (timestamp && typeof timestamp === 'object' && '_seconds' in timestamp) {
+    return new Date((timestamp as any)._seconds * 1000);
+  }
+  if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    return new Date(timestamp);
+  }
+  return new Date();
+}
+
 // Create a new YEP form template
 export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'version'>) {
   try {
@@ -79,11 +98,11 @@ export async function getYEPFormTemplate(id: string) {
     const firestore = getAdminFirestore();
     const docSnap = await firestore.collection('yep-form-templates').doc(id).get();
     
-    if (!docSnap.exists()) {
+    if (!docSnap.exists) {
       return { success: false, error: 'Form template not found' };
     }
     
-    const template = { id: docSnap.id, ...docSnap.data() } as YEPFormTemplate;
+    const template = { id: docSnap.id, ...docSnap.data() } as unknown as YEPFormTemplate;
     return { success: true, data: template };
   } catch (error) {
     console.error('Error fetching YEP form template:', error);
@@ -157,6 +176,7 @@ export async function duplicateYEPFormTemplate(id: string, newName: string) {
       sections: original.sections,
       isTemplate: original.isTemplate,
       isActive: true,
+      showInParticipantProfile: original.showInParticipantProfile || false,
     };
     
     const result = await createYEPFormTemplate(duplicatedData);
@@ -256,7 +276,8 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
 
     await firestore.collection('yep-form-submissions').doc(submission.id).set(submission as any);
     
-    return { success: true, data: submission };
+    const safeSubmission = { ...submission, submittedAt: submission.submittedAt.toISOString() };
+    return { success: true, data: safeSubmission };
   } catch (error) {
     console.error('Error submitting YEP form:', error);
     return { 
@@ -278,14 +299,33 @@ export async function getYEPFormSubmissions(formTemplateId: string) {
         .where('formTemplateId', '==', formTemplateId)
         .orderBy('submittedAt', 'desc')
         .get();
-      submissions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+      submissions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+          processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+        } as unknown as YEPFormSubmission;
+      });
     } catch (e: any) {
       const snapshot = await firestore.collection('yep-form-submissions').get();
       submissions = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
-      submissions = submissions
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+            processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+          } as unknown as YEPFormSubmission;
+        })
         .filter((s: any) => s.formTemplateId === formTemplateId)
-        .sort((a: any, b: any) => new Date(b.submittedAt as any).getTime() - new Date(a.submittedAt as any).getTime());
+        .sort((a: any, b: any) => {
+          const aDate = a.submittedAt instanceof Date ? a.submittedAt : new Date(a.submittedAt);
+          const bDate = b.submittedAt instanceof Date ? b.submittedAt : new Date(b.submittedAt);
+          return bDate.getTime() - aDate.getTime();
+        });
     }
     
     return { success: true, data: submissions };
@@ -396,15 +436,34 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
         .where('participantId', '==', participantId)
         .orderBy('submittedAt', 'desc')
         .get();
-      submissions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+      submissions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+          processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+        } as unknown as YEPFormSubmission;
+      });
     } catch (e: any) {
       // Fallback without composite index: fetch and filter in-memory
       const snapshot = await firestore.collection('yep-form-submissions').get();
       submissions = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
-      submissions = submissions
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+            processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+          } as unknown as YEPFormSubmission;
+        })
         .filter((s: any) => s.participantId === participantId)
-        .sort((a: any, b: any) => new Date(b.submittedAt as any).getTime() - new Date(a.submittedAt as any).getTime());
+        .sort((a: any, b: any) => {
+          const aDate = a.submittedAt instanceof Date ? a.submittedAt : new Date(a.submittedAt);
+          const bDate = b.submittedAt instanceof Date ? b.submittedAt : new Date(b.submittedAt);
+          return bDate.getTime() - aDate.getTime();
+        });
     }
     
     return { success: true, data: submissions };
@@ -426,8 +485,8 @@ export async function getYEPFormTemplatesForParticipantProfile() {
     }
     
     // Only allow participants and admins to access forms for participant profile
-    if (session.role !== 'participant' && session.role !== 'admin') {
-      return { success: false, error: 'Unauthorized - only participants can access profile forms' };
+    if (session.role !== 'participant' && session.role !== 'admin' && session.role !== 'super-admin') {
+      return { success: false, error: 'Unauthorized - only participants and admins can access profile forms' };
     }
     
     const firestore = getAdminFirestore();
@@ -440,15 +499,34 @@ export async function getYEPFormTemplatesForParticipantProfile() {
         .where('isActive', '==', true)
         .orderBy('updatedAt', 'desc')
         .get();
-      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+          updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+        } as unknown as YEPFormTemplate;
+      });
     } catch (e: any) {
       // Fallback without composite index: fetch and filter in-memory
       const snapshot = await firestore.collection('yep-form-templates').get();
       templates = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
-      templates = templates
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+            updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+          } as unknown as YEPFormTemplate;
+        })
         .filter((t: any) => t.showInParticipantProfile === true && t.isActive === true)
-        .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
+        .sort((a: any, b: any) => {
+          const aDate = a.updatedAt instanceof Date ? a.updatedAt : new Date(a.updatedAt);
+          const bDate = b.updatedAt instanceof Date ? b.updatedAt : new Date(b.updatedAt);
+          return bDate.getTime() - aDate.getTime();
+        });
     }
     
     return { success: true, data: templates };
@@ -460,3 +538,6 @@ export async function getYEPFormTemplatesForParticipantProfile() {
     };
   }
 }
+
+
+

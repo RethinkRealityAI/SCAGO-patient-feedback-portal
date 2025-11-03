@@ -5,9 +5,16 @@ import type { FeedbackSubmission } from './types';
 import { unstable_noStore as noStore } from 'next/cache';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
-import { getAdminFirestore } from '@/lib/firebase-admin';
-import { enforcePagePermission } from '@/lib/server-auth';
-import { fetchAllSubmissionsAdmin, fetchSubmissionsForSurveyAdmin, parseFirestoreDate } from '@/lib/submission-utils';
+// NOTE: firebase-admin imports are loaded dynamically to prevent client bundling
+// DO NOT use static imports of firebase-admin or related modules
+// Dynamic import to prevent client bundling of server-only modules
+async function getServerAuth() {
+  return await import('@/lib/server-auth');
+}
+
+async function getSubmissionUtils() {
+  return await import('@/lib/submission-utils');
+}
 
 // Type definition for AI analysis results
 interface AIAnalysisResult {
@@ -40,9 +47,11 @@ async function getAIAnalysis() {
 export async function analyzeFeedback() {
   try {
     // Verify user has dashboard access (server-side auth check)
+    const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
     
     // Fetch all submissions using utility function (handles both new and legacy structures)
+    const { fetchAllSubmissionsAdmin } = await getSubmissionUtils();
     const feedbackList = await fetchAllSubmissionsAdmin();
 
     if (feedbackList.length === 0) {
@@ -115,6 +124,7 @@ export async function analyzeFeedback() {
 export async function analyzeFeedbackForSurvey(surveyId: string) {
   try {
     // Verify user has dashboard access (server-side auth check)
+    const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
     
     // Validate surveyId
@@ -123,6 +133,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     }
     
     // Fetch submissions for this survey using utility function
+    const { fetchSubmissionsForSurveyAdmin } = await getSubmissionUtils();
     const allSubmissions = await fetchSubmissionsForSurveyAdmin(surveyId);
     
     // Get survey-specific context
@@ -290,6 +301,7 @@ export async function generateAnalysisPdf(params: {
 }): Promise<{ error?: string; pdfBase64?: string }> {
   try {
     // Verify user has dashboard access (server-side auth check)
+    const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
     const doc = await PDFDocument.create();
     let currentPage = doc.addPage([612, 792]); // US Letter portrait
@@ -365,6 +377,7 @@ export async function generateAnalysisPdf(params: {
       cursorY -= 30;
 
       // Fetch submissions for the survey using utility function
+      const { fetchAllSubmissionsAdmin, fetchSubmissionsForSurveyAdmin } = await getSubmissionUtils();
       let submissions: FeedbackSubmission[] = [];
       if (params.surveyId === 'all') {
         submissions = await fetchAllSubmissionsAdmin();
@@ -466,9 +479,11 @@ export async function analyzeSingleFeedback(input: { rating: number; hospitalInt
 export async function chatWithFeedbackData(query: string, surveyId?: string): Promise<{ error?: string; response?: string }> {
   try {
     // Verify user has dashboard access (server-side auth check)
+    const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
     
     // Fetch submissions using utility function (handles both new and legacy structures)
+    const { fetchAllSubmissionsAdmin } = await getSubmissionUtils();
     const allSubmissions = await fetchAllSubmissionsAdmin();
     const surveyContext = getSurveyContextFromId(surveyId || 'all', allSubmissions);
     

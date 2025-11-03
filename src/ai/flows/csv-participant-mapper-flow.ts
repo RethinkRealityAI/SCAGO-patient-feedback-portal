@@ -55,9 +55,6 @@ const csvMappingPrompt = ai.definePrompt({
   input: { schema: CsvMappingInputSchema },
   output: { schema: CsvMappingOutputSchema },
   config: {
-    systemInstruction: `You are assisting in mapping CSV columns to Youth Empowerment Program participant fields.
-Only map columns when you are confident about the match. Do not guess or hallucinate mappings.
-If you are unsure about a column, do not include it in the mapping.`,
     ...modelConfigs.analysis,
   },
   prompt: `You are assisting in mapping a CSV of Youth Empowerment Program participants to the application's fields.
