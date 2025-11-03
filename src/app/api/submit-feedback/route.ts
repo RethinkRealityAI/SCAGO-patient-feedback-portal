@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { surveyId, formData } = body;
+    const { surveyId, formData, sessionId } = body;
 
     if (!surveyId || !formData) {
       return NextResponse.json(
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Submit feedback
-    const result = await submitFeedback(surveyId, formData);
+    // Submit feedback (sessionId is optional - will be generated if not provided)
+    const result = await submitFeedback(surveyId, formData, sessionId);
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });

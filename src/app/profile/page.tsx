@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Calendar,
   BookOpen,
+  ClipboardList,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { signOut } from '@/lib/firebase-auth';
@@ -30,6 +31,7 @@ import { ProfileSecurity } from '@/components/profile/profile-security';
 import { ProfileMessages } from '@/components/profile/profile-messages';
 import { ProfileMeetings } from '@/components/profile/profile-meetings';
 import { ProfileWorkshops } from '@/components/profile/profile-workshops';
+import { ProfileForms } from '@/components/profile/profile-forms';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Badge } from '@/components/ui/badge';
 
@@ -308,24 +310,6 @@ export default function ProfilePage() {
                 <p className="text-muted-foreground capitalize">{role} Profile</p>
               </div>
             </div>
-            <Button
-              variant="default"
-              onClick={handleSignOut}
-              disabled={isSigningOut}
-              className="gap-2"
-            >
-              {isSigningOut ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing out...
-                </>
-              ) : (
-                <>
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </>
-              )}
-            </Button>
           </div>
         </div>
 
@@ -341,7 +325,7 @@ export default function ProfilePage() {
 
         {/* Profile Tabs */}
         <Tabs defaultValue={defaultTab} className="space-y-6">
-          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-6' : 'grid-cols-5'} h-auto`}>
+          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-7' : 'grid-cols-6'} h-auto`}>
             <TabsTrigger value="details" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Details</span>
@@ -372,6 +356,12 @@ export default function ProfilePage() {
               <TabsTrigger value="workshops" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <BookOpen className="h-4 w-4" />
                 <span className="hidden sm:inline">Workshops</span>
+              </TabsTrigger>
+            )}
+            {role === 'participant' && (
+              <TabsTrigger value="forms" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline">Forms</span>
               </TabsTrigger>
             )}
             <TabsTrigger value="security" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -414,6 +404,15 @@ export default function ProfilePage() {
             <TabsContent value="workshops" className="space-y-6">
               <ProfileWorkshops
                 profile={profile as YEPParticipant}
+              />
+            </TabsContent>
+          )}
+
+          {role === 'participant' && (
+            <TabsContent value="forms" className="space-y-6">
+              <ProfileForms
+                profile={profile}
+                role={role}
               />
             </TabsContent>
           )}

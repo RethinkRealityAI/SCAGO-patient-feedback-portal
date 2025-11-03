@@ -54,9 +54,11 @@ import { useNotificationCenter, useAnalyticsNotifications } from '@/hooks/use-no
 import { NotificationSystem } from '@/components/notification-system'
 import FloatingChatButton from '@/components/floating-chat-button'
 import AnalysisDisplay from '@/components/analysis-display'
-import { collection, getDocs, orderBy, query } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+// Firestore imports removed - now using utility functions from @/lib/submission-utils
 import { getSurveys } from '../actions'
+import { useAuth } from '@/hooks/use-auth'
+import { signOut } from '@/lib/firebase-auth'
+import { LogOut } from 'lucide-react'
 
 const SUBMISSIONS_PER_PAGE = 10
 
@@ -69,6 +71,7 @@ function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string }>>([])
   const [initialLoading, setInitialLoading] = useState(true)
@@ -123,22 +126,23 @@ export default function Dashboard() {
         setInitialLoading(true)
         setFetchError(null)
 
-        // Fetch submissions directly from Firestore (client-side with auth context)
-        const feedbackCol = collection(db, 'feedback')
-        const q = query(feedbackCol, orderBy('submittedAt', 'desc'))
-        const feedbackSnapshot = await getDocs(q)
-        const feedbackList = feedbackSnapshot.docs.map(doc => {
-          const data = doc.data()
-          const raw = data.submittedAt as any
-          const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
-          return {
-            id: doc.id,
-            ...data,
-            rating: Number(data.rating),
-            submittedAt: date,
-          } as FeedbackSubmission
-        })
-        setSubmissions(feedbackList)
+        // Ensure user is authenticated and token is fresh (force refresh to get latest custom claims)
+        if (!user) {
+          setFetchError('You must be logged in to view this dashboard.')
+          setInitialLoading(false)
+          return
+        }
+
+        // Force refresh ID token to ensure we have latest custom claims
+        // This is important if roles were recently updated
+        if (user) {
+          await user.getIdToken(true) // Force refresh to get latest custom claims
+        }
+
+        // Fetch submissions using utility function (handles both new and legacy structures)
+        const { fetchAllSubmissions } = await import('@/lib/submission-utils')
+        const uniqueSubmissions = await fetchAllSubmissions()
+        setSubmissions(uniqueSubmissions)
 
         // Fetch surveys
         const surveysData = await getSurveys()
@@ -203,7 +207,11 @@ export default function Dashboard() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       result = result.filter(s => {
-        if (isConsent) {
+        // Helper to check if this specific submission is a consent type
+        const isConsentSubmission = isConsentSurvey([s])
+        
+        // Search all relevant fields based on submission type
+        if (isConsentSubmission) {
           // Search consent-specific fields
           return (
             ((s as any).firstName || '').toLowerCase().includes(query) ||
@@ -217,7 +225,9 @@ export default function Dashboard() {
           return (
             (s.hospitalInteraction || '').toLowerCase().includes(query) ||
             ((s as any).hospital || '').toLowerCase().includes(query) ||
-            (s.surveyId || '').toLowerCase().includes(query)
+            (s.surveyId || '').toLowerCase().includes(query) ||
+            // Also check rating if it's a number
+            (s.rating && String(s.rating).includes(query))
           )
         }
       })
@@ -236,36 +246,37 @@ export default function Dashboard() {
       })
     }
 
-    // Filter by rating (only for non-consent surveys)
-    if (!isConsent && ratingFilter !== 'all') {
-      if (ratingFilter === 'excellent') {
-        result = result.filter(s => {
-          const rating = Number(s.rating)
-          return !isNaN(rating) && rating >= 8
-        })
-      } else if (ratingFilter === 'good') {
-        result = result.filter(s => {
-          const rating = Number(s.rating)
-          return !isNaN(rating) && rating >= 5 && rating < 8
-        })
-      } else if (ratingFilter === 'poor') {
-        result = result.filter(s => {
-          const rating = Number(s.rating)
-          return !isNaN(rating) && rating < 5
-        })
-      }
+    // Filter by rating (only for submissions that have ratings - skip consent surveys)
+    if (ratingFilter !== 'all') {
+      result = result.filter(s => {
+        const rating = Number(s.rating)
+        // Skip submissions without valid ratings (consent surveys typically don't have ratings)
+        if (isNaN(rating) || rating === 0) return false
+        
+        if (ratingFilter === 'excellent') {
+          return rating >= 8
+        } else if (ratingFilter === 'good') {
+          return rating >= 5 && rating < 8
+        } else if (ratingFilter === 'poor') {
+          return rating < 5
+        }
+        return true
+      })
     }
 
-    // Filter by hospital
+    // Filter by hospital (works for both consent and feedback surveys)
     if (hospitalFilter !== 'all') {
       result = result.filter(s => {
-        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || (s as any).primaryHospital?.selection || 'Unknown Hospital'
+        const hospital = (s as any).hospital || 
+                        (s as any)['hospital-on']?.selection || 
+                        (s as any).primaryHospital?.selection || 
+                        'Unknown Hospital'
         return hospital === hospitalFilter
       })
     }
 
     return result
-  }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isConsent])
+  }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE))
 
@@ -673,21 +684,9 @@ export default function Dashboard() {
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      // Refetch submissions from Firestore
-      const feedbackCol = collection(db, 'feedback')
-      const q = query(feedbackCol, orderBy('submittedAt', 'desc'))
-      const feedbackSnapshot = await getDocs(q)
-      const feedbackList = feedbackSnapshot.docs.map(doc => {
-        const data = doc.data()
-        const raw = data.submittedAt as any
-        const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
-        return {
-          id: doc.id,
-          ...data,
-          rating: Number(data.rating),
-          submittedAt: date,
-        } as FeedbackSubmission
-      })
+      // Refetch submissions using utility function (handles both new and legacy structures)
+      const { fetchAllSubmissions } = await import('@/lib/submission-utils')
+      const feedbackList = await fetchAllSubmissions()
       setSubmissions(feedbackList)
 
       // Refetch surveys
@@ -949,7 +948,30 @@ export default function Dashboard() {
                 {isAllSurveysMode ? 'High-level insights across all survey submissions' : isConsent ? 'SCAGO Digital Consent & Information Collection' : 'Comprehensive hospital experience analytics'}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {user?.email && (
+                <p className="text-sm text-muted-foreground hidden sm:inline">
+                  Signed in as <span className="font-medium">{user.email}</span>
+                </p>
+              )}
+              {user && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={async () => {
+                    const { error } = await signOut();
+                    if (error) {
+                      // Handle error if needed
+                    } else {
+                      window.location.href = '/login';
+                    }
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                  <span className="sm:hidden">Out</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

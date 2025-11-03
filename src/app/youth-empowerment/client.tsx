@@ -161,7 +161,7 @@ export default function YouthEmpowermentClient() {
               </p>
             )}
             <Button 
-              variant="destructive"
+              variant="default"
               size="sm"
               onClick={async () => {
                 const { error } = await signOut();

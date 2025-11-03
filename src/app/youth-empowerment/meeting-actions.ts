@@ -487,7 +487,8 @@ export async function getPendingMeetingRequests(mentorUserId: string): Promise<{
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
-    if (session.role !== 'admin' && session.uid !== mentorUserId) {
+    // Allow admins and super-admins to view any mentor's requests, or mentors to view their own
+    if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== mentorUserId) {
       return { success: false, error: 'Unauthorized' };
     }
     const firestore = getAdminFirestore();

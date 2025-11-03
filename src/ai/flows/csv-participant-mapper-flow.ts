@@ -1,19 +1,99 @@
-import { ai, geminiModel } from '@/ai/genkit';
+/**
+ * @fileOverview CSV participant mapping flow using AI to suggest field mappings.
+ */
+'use server';
+
+import { ai, analysisModel, modelConfigs } from '@/ai/genkit';
 import { z } from 'zod';
+import {
+  AIFlowError,
+  handleAIFlowError,
+  withRetry,
+  trackAIPerformance,
+} from '@/ai/utils';
 
 // Define the schema for mapping suggestions
 export const CsvMappingInputSchema = z.object({
-  headers: z.array(z.string()).describe('CSV column headers'),
-  sampleRows: z.array(z.record(z.string(), z.string())).min(1).max(5).describe('Up to 5 sample rows as objects'),
+  headers: z.array(z.string())
+    .min(1, 'At least one header is required')
+    .max(100, 'Too many headers (max 100)')
+    .describe('CSV column headers'),
+  sampleRows: z.array(z.record(z.string(), z.string()))
+    .min(1, 'At least one sample row is required')
+    .max(5, 'Too many sample rows (max 5)')
+    .describe('Up to 5 sample rows as objects'),
 });
 
 export const CsvMappingOutputSchema = z.object({
-  mapping: z.record(z.string(), z.string()).describe('Map CSV header -> YEP participant field'),
-  notes: z.string().optional(),
+  mapping: z.record(z.string(), z.string())
+    .describe('Map CSV header -> YEP participant field'),
+  notes: z.string()
+    .optional()
+    .describe('Optional notes about the mapping suggestions'),
 });
 
 export type CsvMappingInput = z.infer<typeof CsvMappingInputSchema>;
 export type CsvMappingOutput = z.infer<typeof CsvMappingOutputSchema>;
+
+// Preprocess input to sanitize and validate
+function preprocessCsvInput(input: CsvMappingInput): CsvMappingInput {
+  return {
+    headers: input.headers.map(h => h.trim().slice(0, 200)),
+    sampleRows: input.sampleRows.map(row => {
+      const sanitized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row)) {
+        sanitized[key.trim().slice(0, 500)] = String(value).slice(0, 1000);
+      }
+      return sanitized;
+    }),
+  };
+}
+
+const csvMappingPrompt = ai.definePrompt({
+  name: 'csvMappingPrompt',
+  model: analysisModel,
+  input: { schema: CsvMappingInputSchema },
+  output: { schema: CsvMappingOutputSchema },
+  config: {
+    systemInstruction: `You are assisting in mapping CSV columns to Youth Empowerment Program participant fields.
+Only map columns when you are confident about the match. Do not guess or hallucinate mappings.
+If you are unsure about a column, do not include it in the mapping.`,
+    ...modelConfigs.analysis,
+  },
+  prompt: `You are assisting in mapping a CSV of Youth Empowerment Program participants to the application's fields.
+
+AVAILABLE TARGET FIELDS:
+- youthParticipant (full name)
+- email
+- etransferEmailAddress (E-Transfer email)
+- mailingAddress
+- phoneNumber
+- region
+- approved
+- contractSigned
+- signedSyllabus
+- availability
+- assignedMentor
+- idProvided
+- canadianStatus
+- canadianStatusOther
+- sin (RAW INPUT - will be hashed downstream)
+- youthProposal
+- proofOfAffiliationWithSCD
+- scagoCounterpart
+- dob (date of birth)
+
+MAPPING GUIDELINES:
+- Prefer obvious matches (e.g., "Name"/"Full Name" -> youthParticipant, "DOB"/"Date of Birth" -> dob, "Phone"/"Phone Number" -> phoneNumber, "E-Transfer Email" -> etransferEmailAddress)
+- If a column doesn't clearly match any target field, do not map it
+- Return a JSON object with 'mapping' (CSV header -> target field) and optional 'notes'
+
+CSV Headers:
+{{{headers}}}
+
+Sample Rows:
+{{{sampleRows}}}`,
+});
 
 export const suggestParticipantCsvMapping = ai.defineFlow(
   {
@@ -22,27 +102,43 @@ export const suggestParticipantCsvMapping = ai.defineFlow(
     outputSchema: CsvMappingOutputSchema,
   },
   async (input) => {
-    const system = `You are assisting in mapping a CSV of Youth Empowerment Program participants to the application's fields.
-Return a JSON with keys 'mapping' and optional 'notes'.
-Only use the following target field names: youthParticipant, email, etransferEmailAddress, mailingAddress, phoneNumber, region, approved, contractSigned, signedSyllabus, availability, assignedMentor, idProvided, canadianStatus, canadianStatusOther, sin (RAW INPUT - will be hashed downstream), youthProposal, proofOfAffiliationWithSCD, scagoCounterpart, dob.
-Prefer obvious matches (e.g., "Name"->youthParticipant, "DOB"->dob, "Phone"->phoneNumber, "E-Transfer Email"->etransferEmailAddress).
-If a column is unknown, do not map it. Do not hallucinate.`;
-
-    const prompt = `${system}\n\nCSV Headers: ${JSON.stringify(input.headers)}\nSample Rows: ${JSON.stringify(input.sampleRows).slice(0, 4000)}`;
-
-    const response = await ai.generate({ 
-      model: geminiModel, // Use latest model name to avoid API version issues
-      prompt 
+    return trackAIPerformance('suggestParticipantCsvMapping', async () => {
+      try {
+        // Preprocess and sanitize input
+        const sanitizedInput = preprocessCsvInput(input);
+        
+        const result = await withRetry(
+          async () => {
+            const { output } = await csvMappingPrompt(sanitizedInput);
+            if (!output) {
+              // Return empty mapping rather than throwing for this flow
+              return { mapping: {}, notes: 'Model did not return a valid mapping. Please map manually.' };
+            }
+            return output;
+          },
+          {
+            maxRetries: 2, // Fewer retries for mapping (not critical if it fails)
+            initialDelayMs: 1000,
+            onRetry: (attempt, error) => {
+              console.warn(`[suggestParticipantCsvMapping] Retry attempt ${attempt}:`, error.message);
+            },
+          }
+        );
+        
+        return result;
+      } catch (error) {
+        // For CSV mapping, we return a fallback rather than throwing
+        // This allows the UI to still function and let users map manually
+        console.error('[suggestParticipantCsvMapping] Error:', error);
+        return { 
+          mapping: {}, 
+          notes: 'Failed to generate mapping suggestions. Please map columns manually.' 
+        };
+      }
+    }, {
+      flowName: 'suggestParticipantCsvMapping',
+      inputSize: JSON.stringify(input).length,
     });
-
-    // Basic guard: try to parse JSON; on failure, return empty mapping
-    try {
-      const parsed = JSON.parse(response.text || '{}');
-      const validated = CsvMappingOutputSchema.safeParse(parsed);
-      if (validated.success) return validated.data;
-    } catch (_) {}
-
-    return { mapping: {}, notes: 'Model did not return a valid mapping.' };
   }
 );
 

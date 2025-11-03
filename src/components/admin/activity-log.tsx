@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+// Firestore imports removed - now using utility functions from @/lib/submission-utils
 import { Activity, UserPlus, FileEdit, Trash2 } from 'lucide-react';
 
 interface ActivityItem {
@@ -25,24 +24,22 @@ export function ActivityLog() {
 
   const loadActivities = async () => {
     try {
-      // Get recent feedback submissions
-      const feedbackQuery = query(
-        collection(db, 'feedback'),
-        orderBy('submittedAt', 'desc'),
-        limit(20)
-      );
-      const feedbackSnapshot = await getDocs(feedbackQuery);
+      // Get recent feedback submissions from both new structure and legacy collection
+      const { fetchAllSubmissions } = await import('@/lib/submission-utils');
+      const allSubmissions = await fetchAllSubmissions();
       
-      const activities: ActivityItem[] = feedbackSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: 'submission',
-          description: `New feedback submission${data.surveyId ? ` for survey ${data.surveyId}` : ''}`,
-          timestamp: data.submittedAt?.toDate() || new Date(),
-          user: data.email || 'Anonymous',
-        };
-      });
+      // Sort by submittedAt descending and take first 20
+      const recentSubmissions = allSubmissions
+        .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
+        .slice(0, 20);
+      
+      const activities: ActivityItem[] = recentSubmissions.map(sub => ({
+        id: sub.id,
+        type: 'submission' as const,
+        description: `New feedback submission${sub.surveyId ? ` for survey ${sub.surveyId}` : ''}`,
+        timestamp: sub.submittedAt instanceof Date ? sub.submittedAt : new Date(sub.submittedAt),
+        user: (sub as any).email || 'Anonymous',
+      }));
 
       setActivities(activities);
     } catch (error) {

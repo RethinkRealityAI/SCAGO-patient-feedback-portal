@@ -167,9 +167,9 @@ export function Sidebar() {
         />
       </div>
 
-      <div className="mt-auto space-y-2">
+      <div className="mt-auto space-y-2 border-t pt-2">
         {user && (
-          <div className="border-t pt-2">
+          <div>
             {!shouldShowExpanded ? (
               <TooltipProvider>
                 <Tooltip delayDuration={0}>
@@ -247,6 +247,47 @@ export function Sidebar() {
               </DropdownMenu>
             )}
           </div>
+        )}
+        
+        {/* Logout button below user menu */}
+        {user && (
+          <div>
+            {!shouldShowExpanded ? (
+              <TooltipProvider>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full p-2 h-auto"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <span>Sign Out</span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                <span>Sign Out</span>
+              </Button>
+            )}
+          </div>
+        )}
+        {!user && (
+          <SidebarLink
+            href="/login"
+            icon={<User />}
+            label="Sign In"
+            isCollapsed={!shouldShowExpanded}
+          />
         )}
         
         {shouldShowExpanded && (

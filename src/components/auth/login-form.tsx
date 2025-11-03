@@ -90,7 +90,7 @@ export default function LoginForm() {
           if (!role) {
             console.error('[Login] No role found - user may need role assignment');
             setLoading(false);
-            setError('No role assigned to this account. Please contact your administrator.');
+            setError('No role assigned to this account. Your administrator needs to assign a role (participant, mentor, admin, or super-admin) in the User Management panel. Please contact your administrator.');
             return;
           }
         } catch (error) {

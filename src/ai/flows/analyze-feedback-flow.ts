@@ -6,32 +6,54 @@
  */
 'use server';
 
-import { ai, geminiModel } from '@/ai/genkit';
+import { ai, analysisModel, modelConfigs } from '@/ai/genkit';
 import {
     FeedbackAnalysisInput,
     FeedbackAnalysisInputSchema,
     FeedbackAnalysisOutput,
     FeedbackAnalysisOutputSchema,
 } from './types';
+import {
+  AIFlowError,
+  handleAIFlowError,
+  withRetry,
+  trackAIPerformance,
+} from '@/ai/utils';
+import { sanitizeFeedbackText } from '@/ai/utils/sanitization';
 
+// Preprocess input to sanitize feedback text
+function preprocessInput(input: FeedbackAnalysisInput): FeedbackAnalysisInput {
+  return {
+    ...input,
+    feedbackText: sanitizeFeedbackText(input.feedbackText),
+    location: input.location.trim().slice(0, 200),
+  };
+}
 
 const analyzeFeedbackPrompt = ai.definePrompt({
   name: 'analyzeFeedbackPrompt',
-  model: geminiModel,
+  model: analysisModel,
   input: { schema: FeedbackAnalysisInputSchema },
   output: { schema: FeedbackAnalysisOutputSchema },
+  config: {
+    systemInstruction: `You are an expert healthcare analyst specializing in patient feedback for Sickle Cell Disease (SCD) care.
+Always provide accurate, objective analysis based solely on the provided feedback.
+Do not make up information not present in the feedback.
+Focus on actionable insights relevant to SCD care improvements.`,
+    ...modelConfigs.analysis,
+  },
   prompt: `You are an expert healthcare analyst specializing in patient feedback for Sickle Cell Disease (SCD) care. Your task is to analyze the following patient feedback and provide a structured analysis.
 
-  Patient Feedback:
-  - Hospital: {{{location}}}
-  - Rating: {{{rating}}}/5
-  - Feedback Text: {{{feedbackText}}}
+Patient Feedback:
+- Hospital: {{{location}}}
+- Rating: {{{rating}}}/5
+- Feedback Text: {{{feedbackText}}}
 
-  Based on the feedback, rating, and your knowledge of SCD care challenges, perform the following:
-  1.  Determine the overall sentiment (Positive, Negative, or Neutral).
-  2.  Provide a concise, objective summary of the patient's experience.
-  3.  Identify the key topics or themes (e.g., "Pain Management", "Triage Wait Time", "Staff Empathy", "Medication Timeliness").
-  4.  Suggest 1-3 actionable recommendations for the hospital to improve care based on this specific feedback.`,
+Based on the feedback, rating, and your knowledge of SCD care challenges, perform the following:
+1. Determine the overall sentiment (Positive, Negative, or Neutral).
+2. Provide a concise, objective summary of the patient's experience.
+3. Identify the key topics or themes (e.g., "Pain Management", "Triage Wait Time", "Staff Empathy", "Medication Timeliness").
+4. Suggest 1-3 actionable recommendations for the hospital to improve care based on this specific feedback.`,
 });
 
 const analyzeFeedbackFlow = ai.defineFlow(
@@ -41,11 +63,41 @@ const analyzeFeedbackFlow = ai.defineFlow(
     outputSchema: FeedbackAnalysisOutputSchema,
   },
   async (input) => {
-    const { output } = await analyzeFeedbackPrompt(input);
-    if (!output) {
-      throw new Error('Failed to get a structured response from the model.');
-    }
-    return output;
+    return trackAIPerformance('analyzeFeedbackFlow', async () => {
+      try {
+        // Preprocess and sanitize input
+        const sanitizedInput = preprocessInput(input);
+        
+        const result = await withRetry(
+          async () => {
+            const { output } = await analyzeFeedbackPrompt(sanitizedInput);
+            if (!output) {
+              throw new AIFlowError(
+                'Model returned empty output',
+                'analyzeFeedbackFlow',
+                undefined,
+                sanitizedInput
+              );
+            }
+            return output;
+          },
+          {
+            maxRetries: 3,
+            initialDelayMs: 1000,
+            onRetry: (attempt, error) => {
+              console.warn(`[analyzeFeedbackFlow] Retry attempt ${attempt}:`, error.message);
+            },
+          }
+        );
+        
+        return result;
+      } catch (error) {
+        handleAIFlowError('analyzeFeedbackFlow', error, input);
+      }
+    }, {
+      flowName: 'analyzeFeedbackFlow',
+      inputSize: JSON.stringify(input).length,
+    });
   }
 );
 

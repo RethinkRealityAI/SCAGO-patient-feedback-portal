@@ -8,13 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { YEPFormTemplate, yepFormTemplateSchema } from '@/lib/yep-forms-types';
 import { useToast } from '@/hooks/use-toast';
 import { YEPFormRenderer } from './yep-form-renderer';
+import { submitYEPForm } from '@/app/yep-forms/actions';
 import { processYEPFormSubmission } from '@/lib/yep-forms-processor';
 
 interface YEPFormSubmissionProps {
   formTemplate: YEPFormTemplate;
+  onSubmissionSuccess?: () => void;
 }
 
-export default function YEPFormSubmission({ formTemplate }: YEPFormSubmissionProps) {
+export default function YEPFormSubmission({ formTemplate, onSubmissionSuccess }: YEPFormSubmissionProps) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -36,26 +38,44 @@ export default function YEPFormSubmission({ formTemplate }: YEPFormSubmissionPro
 
   const onSubmit = async (data: any) => {
     startTransition(async () => {
-      const submissionData = {
-        formId: formTemplate.id!,
-        formTitle: formTemplate.name,
-        category: formTemplate.category,
-        submittedAt: new Date().toISOString(),
-        formData: data,
-      };
+      try {
+        // First, create the submission record via server action
+        const submitResult = await submitYEPForm(formTemplate.id!, data);
+        
+        if (!submitResult.success || !submitResult.data) {
+          toast({
+            title: 'Error',
+            description: submitResult.error || 'Failed to submit form.',
+            variant: 'destructive',
+          });
+          return;
+        }
 
-      // Use provided template prop directly
-      const result = await processYEPFormSubmission(submissionData as any, formTemplate as any);
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Form submitted successfully.',
-        });
-        form.reset();
-      } else {
+        // Then process the submission to create/update entities
+        const processResult = await processYEPFormSubmission(submitResult.data, formTemplate);
+        
+        if (processResult.success) {
+          toast({
+            title: 'Success',
+            description: 'Form submitted and processed successfully.',
+          });
+          form.reset();
+          // Call success callback if provided
+          if (onSubmissionSuccess) {
+            onSubmissionSuccess();
+          }
+        } else {
+          toast({
+            title: 'Warning',
+            description: `Form submitted but processing had issues: ${processResult.error || 'Unknown error'}`,
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error submitting form:', error);
         toast({
           title: 'Error',
-          description: result.error || 'Failed to submit form.',
+          description: error instanceof Error ? error.message : 'Failed to submit form.',
           variant: 'destructive',
         });
       }

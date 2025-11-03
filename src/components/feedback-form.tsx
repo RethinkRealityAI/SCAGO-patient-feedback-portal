@@ -746,7 +746,14 @@ export default function FeedbackForm({ survey }: { survey: any }) {
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setSubmitErrors([]);
-        const result = await submitFeedback(survey.id, values);
+        // Get or create session ID for tracking related submissions
+        let sessionId = sessionStorage.getItem(`feedbackSession_${survey.id}`);
+        if (!sessionId) {
+            sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+            sessionStorage.setItem(`feedbackSession_${survey.id}`, sessionId);
+        }
+        
+        const result = await submitFeedback(survey.id, values, sessionId);
         if (result.error) {
             toast({
                 title: "Submission Failed",
@@ -754,6 +761,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 variant: "destructive",
             });
         } else {
+            // Store the session ID if returned from server
+            if (result.sessionId) {
+                sessionStorage.setItem(`feedbackSession_${survey.id}`, result.sessionId);
+            }
             setIsSubmitted(true);
             clearDraft();
         }

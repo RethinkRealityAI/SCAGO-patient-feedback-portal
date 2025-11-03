@@ -8,10 +8,10 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Helper function to check if user is admin
+    // Helper function to check if user is admin (includes super-admin)
     function isAdmin() {
       return isAuthenticated() &&
-             request.auth.token.role == 'admin';
+             (request.auth.token.role == 'admin' || request.auth.token.role == 'super-admin');
     }
     
     // Helper function to check if user is YEP Manager
@@ -29,9 +29,17 @@ service cloud.firestore {
     match /surveys/{surveyId} {
       allow read: if true;  // Anyone can view surveys
       allow create, update, delete: if isAdmin();  // Only admins can modify
+      
+      // Organized feedback submissions structure: surveys/{surveyId}/submissions/{submissionId}
+      match /submissions/{submissionId} {
+        allow create: if true;  // Anyone can submit feedback
+        allow read: if isAdmin();  // Only admins can read feedback
+        allow update, delete: if isAdmin();  // Only admins can modify
+      }
     }
     
-    // Feedback submissions - Create by anyone, Read/Update/Delete by admin only
+    // Legacy feedback submissions - Create by anyone, Read/Update/Delete by admin only
+    // Kept for backward compatibility with existing data
     match /feedback/{feedbackId} {
       allow create: if true;  // Anyone can submit feedback
       allow read: if isAdmin();  // Only admins can read feedback
@@ -155,9 +163,18 @@ service cloud.firestore {
       allow read, write: if isAdminOrYEPManager();
     }
     
-    // YEP Form Submissions - Admin or YEP Manager
+    // YEP Form Submissions - Admin, YEP Manager, or submitter
     match /yep-form-submissions/{submissionId} {
+      // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
+      
+      // Participants can read their own submissions (by userId or email match)
+      allow read: if isAuthenticated() && 
+                     (resource.data.submittedByUserId == request.auth.uid ||
+                      resource.data.submittedBy == request.auth.token.email);
+      
+      // Authenticated users can create submissions
+      allow create: if isAuthenticated();
     }
   }
 }

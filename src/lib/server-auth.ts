@@ -35,17 +35,41 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     console.log('[ServerAuth] Session verified for email:', email);
 
-    // Read custom claim role - this is the ONLY source of truth
+    // Read custom claim role from session cookie
     const claimRole = (decoded as any).role as AppRole | undefined;
-    console.log('[ServerAuth] Custom claim role:', claimRole);
+    console.log('[ServerAuth] Custom claim role in session:', claimRole);
 
-    // Validate role exists and is valid
-    if (!claimRole || !['super-admin', 'admin', 'mentor', 'participant'].includes(claimRole)) {
-      console.log('[ServerAuth] ⚠️ Invalid or missing role claim:', claimRole);
+    // Verify the role in session cookie matches current Firebase Auth custom claims
+    // This ensures stale sessions are invalidated when roles are updated
+    try {
+      const user = await auth.getUser(decoded.uid);
+      const currentRole = (user.customClaims?.role || '') as AppRole;
+      
+      // If there's a mismatch, prefer the current role from Firebase (source of truth)
+      // This allows role updates to take effect immediately without requiring re-login
+      if (currentRole && claimRole !== currentRole) {
+        console.log(`[ServerAuth] ⚠️ Role mismatch detected! Session has "${claimRole}" but Firebase has "${currentRole}". Using current role from Firebase.`);
+      }
+      
+      // Use current role from Firebase (preferred) or fall back to session cookie role
+      const effectiveRole = currentRole || claimRole;
+      
+      // Validate role exists and is valid
+      if (!effectiveRole || !['super-admin', 'admin', 'mentor', 'participant'].includes(effectiveRole)) {
+        console.log('[ServerAuth] ⚠️ Invalid or missing role claim:', effectiveRole);
+        return null;
+      }
+
+      console.log('[ServerAuth] ✅ Role verified:', effectiveRole);
+      return { uid: decoded.uid, email, role: effectiveRole };
+    } catch (userError: any) {
+      console.error('[ServerAuth] Error fetching user from Firebase Auth:', userError.message);
+      // Fallback to session cookie role if we can't verify
+      if (claimRole && ['super-admin', 'admin', 'mentor', 'participant'].includes(claimRole)) {
+        return { uid: decoded.uid, email, role: claimRole };
+      }
       return null;
     }
-
-    return { uid: decoded.uid, email, role: claimRole };
   } catch (err: any) {
     // Invalid or expired cookie
     console.error('[ServerAuth] Error verifying session cookie:', err.message);

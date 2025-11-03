@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle, Loader, RefreshCw, ArrowLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { collection, getDocs, orderBy, query } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+// Firestore imports removed - now using utility functions from @/lib/submission-utils
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
 import Link from 'next/link'
@@ -25,24 +24,9 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         setIsLoading(true)
         setError(null)
 
-        // Fetch submissions directly from Firestore
-        const feedbackCol = collection(db, 'feedback')
-        const q = query(feedbackCol, orderBy('submittedAt', 'desc'))
-        const feedbackSnapshot = await getDocs(q)
-        const allSubmissions = feedbackSnapshot.docs.map(doc => {
-          const data = doc.data()
-          const raw = data.submittedAt as any
-          const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
-          return {
-            id: doc.id,
-            ...data,
-            rating: Number(data.rating),
-            submittedAt: date,
-          } as FeedbackSubmission
-        })
-
-        // Filter for this survey
-        const filteredSubmissions = allSubmissions.filter(s => (s as any).surveyId === surveyId)
+        // Fetch submissions for this survey using utility function
+        const { fetchSubmissionsForSurvey } = await import('@/lib/submission-utils')
+        const filteredSubmissions = await fetchSubmissionsForSurvey(surveyId)
         setSubmissions(filteredSubmissions)
 
         // Run analysis

@@ -1,7 +1,13 @@
 'use server';
 
 // AI imports will be loaded dynamically to avoid build issues
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import type { FeedbackSubmission } from './types';
+import { unstable_noStore as noStore } from 'next/cache';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import { enforcePagePermission } from '@/lib/server-auth';
+import { fetchAllSubmissionsAdmin, fetchSubmissionsForSurveyAdmin, parseFirestoreDate } from '@/lib/submission-utils';
 
 // Type definition for AI analysis results
 interface AIAnalysisResult {
@@ -30,17 +36,14 @@ async function getAIAnalysis() {
     });
   }
 }
-import { db } from '@/lib/firebase';
-import type { FeedbackSubmission } from './types';
-import { unstable_noStore as noStore } from 'next/cache';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
 
 export async function analyzeFeedback() {
   try {
-    const feedbackCol = collection(db, 'feedback');
-    const feedbackSnapshot = await getDocs(feedbackCol);
-    const feedbackList = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
+    // Verify user has dashboard access (server-side auth check)
+    await enforcePagePermission('forms-dashboard');
+    
+    // Fetch all submissions using utility function (handles both new and legacy structures)
+    const feedbackList = await fetchAllSubmissionsAdmin();
 
     if (feedbackList.length === 0) {
       return { summary: 'No feedback submissions yet. Start by sharing the survey link!' };
@@ -111,14 +114,22 @@ export async function analyzeFeedback() {
 
 export async function analyzeFeedbackForSurvey(surveyId: string) {
   try {
-    const feedbackCol = collection(db, 'feedback');
-    const feedbackSnapshot = await getDocs(feedbackCol);
-    const allSubmissions = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
+    // Verify user has dashboard access (server-side auth check)
+    await enforcePagePermission('forms-dashboard');
+    
+    // Validate surveyId
+    if (!surveyId || surveyId.trim() === '') {
+      return { error: 'Survey ID is required for analysis.' };
+    }
+    
+    // Fetch submissions for this survey using utility function
+    const allSubmissions = await fetchSubmissionsForSurveyAdmin(surveyId);
     
     // Get survey-specific context
     const surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
     
-    const feedbackList = allSubmissions.filter(f => (f as any).surveyId === surveyId);
+    // Filter by surveyId (already filtered by fetchSubmissionsForSurveyAdmin, but ensure consistency)
+    const feedbackList = allSubmissions.filter(f => f.surveyId && f.surveyId === surveyId);
 
     if (feedbackList.length === 0) {
       return { summary: `No submissions yet for this ${surveyContext.title.toLowerCase()}.` };
@@ -237,20 +248,9 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
 export async function getSubmissions(): Promise<FeedbackSubmission[] | { error: string }> {
   noStore();
   try {
-    const feedbackCol = collection(db, 'feedback');
-    const q = query(feedbackCol, orderBy('submittedAt', 'desc'));
-    const feedbackSnapshot = await getDocs(q);
-    const feedbackList = feedbackSnapshot.docs.map(doc => {
-      const data = doc.data();
-      const raw = data.submittedAt as any;
-      const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
-      return {
-        id: doc.id,
-        ...data,
-        rating: Number(data.rating),
-        submittedAt: date,
-      } as FeedbackSubmission;
-    });
+    // Use utility function that handles both new and legacy structures
+    const { fetchAllSubmissions } = await import('@/lib/submission-utils');
+    const feedbackList = await fetchAllSubmissions();
     return feedbackList;
   } catch (e) {
     console.error("Error fetching submissions:", e);
@@ -264,22 +264,14 @@ export async function getSubmissions(): Promise<FeedbackSubmission[] | { error: 
 export async function getSubmissionsForSurvey(surveyId: string): Promise<FeedbackSubmission[] | { error: string }> {
   noStore();
   try {
-    const feedbackCol = collection(db, 'feedback');
-    const q = query(feedbackCol, orderBy('submittedAt', 'desc'));
-    const feedbackSnapshot = await getDocs(q);
-    const feedbackList = feedbackSnapshot.docs
-      .map(doc => {
-        const data = doc.data();
-        const raw = data.submittedAt as any;
-        const date = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : new Date()))
-        return {
-          id: doc.id,
-          ...data,
-          rating: Number(data.rating),
-          submittedAt: date,
-        } as FeedbackSubmission;
-      })
-      .filter(item => (item as any).surveyId === surveyId);
+    // Validate surveyId
+    if (!surveyId || surveyId.trim() === '') {
+      return { error: 'Survey ID is required.' };
+    }
+    
+    // Use utility function that handles both new and legacy structures
+    const { fetchSubmissionsForSurvey } = await import('@/lib/submission-utils');
+    const feedbackList = await fetchSubmissionsForSurvey(surveyId);
     return feedbackList;
   } catch (e) {
     console.error("Error fetching submissions for survey:", e);
@@ -297,6 +289,8 @@ export async function generateAnalysisPdf(params: {
   includeSubmissions?: boolean;
 }): Promise<{ error?: string; pdfBase64?: string }> {
   try {
+    // Verify user has dashboard access (server-side auth check)
+    await enforcePagePermission('forms-dashboard');
     const doc = await PDFDocument.create();
     let currentPage = doc.addPage([612, 792]); // US Letter portrait
     const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -370,13 +364,15 @@ export async function generateAnalysisPdf(params: {
       });
       cursorY -= 30;
 
-      // Fetch submissions for the survey
-      const feedbackCol = collection(db, 'feedback');
-      const feedbackSnapshot = await getDocs(feedbackCol);
-      const submissions = feedbackSnapshot.docs
-        .map(doc => doc.data() as FeedbackSubmission)
-        .filter(f => params.surveyId === 'all' || (f as any).surveyId === params.surveyId)
-        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+      // Fetch submissions for the survey using utility function
+      let submissions: FeedbackSubmission[] = [];
+      if (params.surveyId === 'all') {
+        submissions = await fetchAllSubmissionsAdmin();
+      } else {
+        submissions = await fetchSubmissionsForSurveyAdmin(params.surveyId);
+      }
+      // Sort by submittedAt descending
+      submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
 
       // Add submission summary
       currentPage.drawText(`Total Submissions: ${submissions.length}`, { 
@@ -469,17 +465,17 @@ export async function analyzeSingleFeedback(input: { rating: number; hospitalInt
 
 export async function chatWithFeedbackData(query: string, surveyId?: string): Promise<{ error?: string; response?: string }> {
   try {
-    const feedbackCol = collection(db, 'feedback');
-    const feedbackSnapshot = await getDocs(feedbackCol);
-    let feedbackList = feedbackSnapshot.docs.map(doc => doc.data() as FeedbackSubmission);
+    // Verify user has dashboard access (server-side auth check)
+    await enforcePagePermission('forms-dashboard');
     
-    // Get survey context
-    const allSubmissions = [...feedbackList];
+    // Fetch submissions using utility function (handles both new and legacy structures)
+    const allSubmissions = await fetchAllSubmissionsAdmin();
     const surveyContext = getSurveyContextFromId(surveyId || 'all', allSubmissions);
     
     // Filter by survey if surveyId is provided
+    let feedbackList = allSubmissions;
     if (surveyId && surveyId !== 'all') {
-      feedbackList = feedbackList.filter(f => (f as any).surveyId === surveyId);
+      feedbackList = feedbackList.filter(f => f.surveyId && f.surveyId === surveyId);
     }
 
     if (feedbackList.length === 0) {

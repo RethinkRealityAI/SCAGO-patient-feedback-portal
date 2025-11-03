@@ -1,3 +1,11 @@
+/**
+ * @fileOverview Legacy virtual assistant flow
+ * 
+ * ⚠️ SERVER-ONLY MODULE
+ * This is a legacy flow definition. Consider using flows in src/ai/flows/ instead.
+ */
+'use server';
+
 import { ai, geminiModel } from './genkit';
 import { z } from 'zod';
 

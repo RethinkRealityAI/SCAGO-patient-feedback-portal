@@ -185,17 +185,75 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
       formTemplateId,
       data,
     });
+
+    const firestore = getAdminFirestore();
+    
+    // Get form template to include name
+    const templateDoc = await firestore.collection('yep-form-templates').doc(formTemplateId).get();
+    const templateData = templateDoc.exists ? templateDoc.data() : null;
+    const formTemplateName = templateData?.name || 'Unknown Form';
+
+    // Get participant/mentor profile if applicable
+    let participantId: string | undefined;
+    let mentorId: string | undefined;
+    
+    if (session.role === 'participant') {
+      // Find participant record
+      const participantQuery = await firestore
+        .collection('yep_participants')
+        .where('userId', '==', session.uid)
+        .limit(1)
+        .get();
+      
+      if (participantQuery.empty && session.email) {
+        // Try by email
+        const emailQuery = await firestore
+          .collection('yep_participants')
+          .where('email', '==', session.email)
+          .limit(1)
+          .get();
+        if (!emailQuery.empty) {
+          participantId = emailQuery.docs[0].id;
+        }
+      } else if (!participantQuery.empty) {
+        participantId = participantQuery.docs[0].id;
+      }
+    } else if (session.role === 'mentor') {
+      // Find mentor record
+      const mentorQuery = await firestore
+        .collection('yep_mentors')
+        .where('userId', '==', session.uid)
+        .limit(1)
+        .get();
+      
+      if (mentorQuery.empty && session.email) {
+        // Try by email
+        const emailQuery = await firestore
+          .collection('yep_mentors')
+          .where('email', '==', session.email)
+          .limit(1)
+          .get();
+        if (!emailQuery.empty) {
+          mentorId = emailQuery.docs[0].id;
+        }
+      } else if (!mentorQuery.empty) {
+        mentorId = mentorQuery.docs[0].id;
+      }
+    }
     
     const submission: YEPFormSubmission = {
       id: nanoid(),
       formTemplateId: validatedData.formTemplateId,
-      submittedBy: session.email,
+      formTemplateName,
+      submittedBy: session.email || '',
+      submittedByUserId: session.uid,
+      participantId,
+      mentorId,
       submittedAt: new Date(),
       data: validatedData.data,
       processingStatus: 'pending',
     };
 
-    const firestore = getAdminFirestore();
     await firestore.collection('yep-form-submissions').doc(submission.id).set(submission as any);
     
     return { success: true, data: submission };
@@ -299,6 +357,103 @@ export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
     return { success: true, data: templates };
   } catch (error) {
     console.error('Error fetching YEP form templates by target entity:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to fetch form templates' 
+    };
+  }
+}
+
+// Get form submissions for a participant
+export async function getYEPFormSubmissionsForParticipant(participantId: string) {
+  try {
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    // Verify user has access (admin or owns the participant record)
+    const firestore = getAdminFirestore();
+    if (session.role !== 'admin' && session.role !== 'super-admin') {
+      // Verify participant belongs to user
+      const participantDoc = await firestore.collection('yep_participants').doc(participantId).get();
+      if (!participantDoc.exists) {
+        return { success: false, error: 'Participant not found' };
+      }
+      const participantData = participantDoc.data();
+      if (participantData?.userId !== session.uid && 
+          participantData?.email !== session.email && 
+          participantData?.authEmail !== session.email) {
+        return { success: false, error: 'Unauthorized' };
+      }
+    }
+    
+    let submissions: YEPFormSubmission[] = [];
+    
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-submissions')
+        .where('participantId', '==', participantId)
+        .orderBy('submittedAt', 'desc')
+        .get();
+      submissions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+    } catch (e: any) {
+      // Fallback without composite index: fetch and filter in-memory
+      const snapshot = await firestore.collection('yep-form-submissions').get();
+      submissions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormSubmission[];
+      submissions = submissions
+        .filter((s: any) => s.participantId === participantId)
+        .sort((a: any, b: any) => new Date(b.submittedAt as any).getTime() - new Date(a.submittedAt as any).getTime());
+    }
+    
+    return { success: true, data: submissions };
+  } catch (error) {
+    console.error('Error fetching participant form submissions:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to fetch submissions' 
+    };
+  }
+}
+
+// Get form templates available for participant profile
+export async function getYEPFormTemplatesForParticipantProfile() {
+  try {
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    // Only allow participants and admins to access forms for participant profile
+    if (session.role !== 'participant' && session.role !== 'admin') {
+      return { success: false, error: 'Unauthorized - only participants can access profile forms' };
+    }
+    
+    const firestore = getAdminFirestore();
+    let templates: YEPFormTemplate[] = [];
+    
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-templates')
+        .where('showInParticipantProfile', '==', true)
+        .where('isActive', '==', true)
+        .orderBy('updatedAt', 'desc')
+        .get();
+      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+    } catch (e: any) {
+      // Fallback without composite index: fetch and filter in-memory
+      const snapshot = await firestore.collection('yep-form-templates').get();
+      templates = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = templates
+        .filter((t: any) => t.showInParticipantProfile === true && t.isActive === true)
+        .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
+    }
+    
+    return { success: true, data: templates };
+  } catch (error) {
+    console.error('Error fetching YEP form templates for participant profile:', error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to fetch form templates' 

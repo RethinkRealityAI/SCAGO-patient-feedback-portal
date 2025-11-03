@@ -34,24 +34,36 @@ export async function getSurveys() {
 
 export async function submitFeedback(
   surveyId: string,
-  formData: Record<string, any>
-): Promise<{ error?: string }> {
+  formData: Record<string, any>,
+  sessionId?: string
+): Promise<{ error?: string; sessionId?: string }> {
   try {
     if (!surveyId) {
       return { error: 'Survey ID is missing.' };
     }
+    
+    // Generate session ID if not provided (server-side generation)
+    const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    
     const submissionData = {
       ...formData,
       surveyId,
+      sessionId: finalSessionId,
       submittedAt: new Date(),
     };
-    const docRef = await addDoc(collection(clientDb, 'feedback'), submissionData);
+    
+    // Save to organized structure: surveys/{surveyId}/submissions/{submissionId}
+    const docRef = await addDoc(
+      collection(clientDb, 'surveys', surveyId, 'submissions'), 
+      submissionData
+    );
     
     // Send webhook notification (fire and forget)
     import('@/lib/webhook-sender').then(({ sendWebhook }) => {
       sendWebhook({
         submissionId: docRef.id,
         surveyId,
+        sessionId: finalSessionId,
         submittedAt: submissionData.submittedAt,
         fields: formData,
       }).catch((error) => {
@@ -60,7 +72,7 @@ export async function submitFeedback(
       });
     });
     
-    return {};
+    return { sessionId: finalSessionId };
   } catch (e) {
     console.error('Error submitting feedback:', e);
     return {

@@ -28,11 +28,13 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
       ...doc.data(),
     }));
 
-    // Backup submissions
-    const submissionsSnapshot = await firestore.collection('feedback').get();
-    const submissions = submissionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
+    // Backup submissions from both new structure and legacy collection
+    const { fetchAllSubmissionsAdmin } = await import('@/lib/submission-utils');
+    const submissionsArray = await fetchAllSubmissionsAdmin();
+    const submissions = submissionsArray.map(sub => ({
+      id: sub.id,
+      ...sub,
+      submittedAt: sub.submittedAt instanceof Date ? sub.submittedAt.toISOString() : sub.submittedAt,
     }));
 
     const backupData = {
@@ -81,11 +83,13 @@ export async function exportDataAsJSON(): Promise<{ success: boolean; data?: str
       ...doc.data(),
     }));
 
-    // Get all submissions
-    const submissionsSnapshot = await firestore.collection('feedback').get();
-    const submissions = submissionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
+    // Get all submissions from both new structure and legacy collection
+    const { fetchAllSubmissionsAdmin } = await import('@/lib/submission-utils');
+    const submissionsArray = await fetchAllSubmissionsAdmin();
+    const submissions = submissionsArray.map(sub => ({
+      id: sub.id,
+      ...sub,
+      submittedAt: sub.submittedAt instanceof Date ? sub.submittedAt.toISOString() : sub.submittedAt,
     }));
 
     const exportData = {

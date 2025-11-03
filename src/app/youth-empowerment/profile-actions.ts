@@ -245,7 +245,8 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
-    if (session.role !== 'admin' && session.uid !== userId) {
+    // Allow admins and super-admins to access any profile, or users to access their own
+    if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== userId) {
       return { success: false, error: 'Unauthorized' };
     }
     const firestore = getAdminFirestore();
@@ -369,7 +370,8 @@ export async function updateYEPLastLogin(userId: string): Promise<{ success: boo
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
-    if (session.role !== 'admin' && session.uid !== userId) {
+    // Allow admins and super-admins to update any user's last login, or users to update their own
+    if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== userId) {
       return { success: false, error: 'Unauthorized' };
     }
     const firestore = getAdminFirestore();

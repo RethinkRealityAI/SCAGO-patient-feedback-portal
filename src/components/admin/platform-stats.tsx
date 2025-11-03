@@ -25,9 +25,9 @@ export function PlatformStats() {
       const surveysSnapshot = await getDocs(collection(db, 'surveys'));
       const totalSurveys = surveysSnapshot.size;
 
-      // Get all submissions
-      const submissionsSnapshot = await getDocs(collection(db, 'feedback'));
-      const submissions = submissionsSnapshot.docs.map(doc => doc.data());
+      // Get all submissions from both new structure and legacy collection
+      const { fetchAllSubmissions } = await import('@/lib/submission-utils');
+      const submissions = await fetchAllSubmissions();
       const totalSubmissions = submissions.length;
 
       // Get today's submissions
@@ -35,7 +35,7 @@ export function PlatformStats() {
       startOfDay.setHours(0, 0, 0, 0);
       
       const submissionsToday = submissions.filter(sub => {
-        const submittedAt = sub.submittedAt?.toDate ? sub.submittedAt.toDate() : new Date(sub.submittedAt);
+        const submittedAt = sub.submittedAt instanceof Date ? sub.submittedAt : new Date(sub.submittedAt);
         return submittedAt >= startOfDay;
       }).length;
 

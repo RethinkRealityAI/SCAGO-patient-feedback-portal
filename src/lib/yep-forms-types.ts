@@ -92,6 +92,7 @@ export interface YEPFormTemplate {
   sections: YEPFormSection[];
   isTemplate: boolean;
   isActive: boolean;
+  showInParticipantProfile?: boolean; // Show this form in participant profile Forms tab
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -102,7 +103,11 @@ export interface YEPFormTemplate {
 export interface YEPFormSubmission {
   id: string;
   formTemplateId: string;
-  submittedBy: string;
+  formTemplateName?: string; // Store form name for easier querying
+  submittedBy: string; // Email of submitter
+  submittedByUserId?: string; // Firebase Auth UID
+  participantId?: string; // YEP participant record ID (if submitted by participant)
+  mentorId?: string; // YEP mentor record ID (if submitted by mentor)
   submittedAt: Date;
   data: Record<string, any>;
   processedAt?: Date;
@@ -183,6 +188,7 @@ export const yepFormTemplateSchema = z.object({
   sections: z.array(yepFormSectionSchema),
   isTemplate: z.boolean().default(true),
   isActive: z.boolean().default(true),
+  showInParticipantProfile: z.boolean().default(false).optional(),
 });
 
 export const yepFormSubmissionSchema = z.object({

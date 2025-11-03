@@ -32,6 +32,7 @@ import {
   type PlatformUser,
   type AppRole,
 } from '@/app/admin/user-actions';
+import { backfillRoleClaims } from '@/app/admin/backfill-role-claims';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function EnhancedUserManagement() {
@@ -205,6 +206,53 @@ export function EnhancedUserManagement() {
                   View and manage all platform users
                 </CardDescription>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!confirm('This will sync roles from Firestore to Firebase Auth custom claims for all users without roles. Continue?')) {
+                    return;
+                  }
+                  setSavingAction(true);
+                  try {
+                    const result = await backfillRoleClaims();
+                    if (result.success) {
+                      toast({
+                        title: 'Backfill Complete',
+                        description: `Processed ${result.usersProcessed} users, set ${result.rolesSet} roles. Check console for details.`,
+                      });
+                      await loadData(); // Refresh the user list
+                    } else {
+                      toast({
+                        title: 'Backfill Completed with Errors',
+                        description: `Set ${result.rolesSet} roles but encountered ${result.errors.length} errors.`,
+                        variant: 'destructive',
+                      });
+                    }
+                  } catch (error) {
+                    toast({
+                      title: 'Backfill Failed',
+                      description: error instanceof Error ? error.message : 'Unknown error',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                    setSavingAction(false);
+                  }
+                }}
+                disabled={savingAction}
+              >
+                {savingAction ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Activity className="h-4 w-4 mr-2" />
+                    Sync Roles (Backfill)
+                  </>
+                )}
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
