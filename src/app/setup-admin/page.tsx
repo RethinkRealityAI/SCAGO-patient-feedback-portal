@@ -1,104 +1,88 @@
 'use client';
 
-import { useState } from 'react';
-import { addAdminEmail } from '@/lib/admin-actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Info, Terminal } from 'lucide-react';
 
 export default function SetupAdminPage() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ success?: boolean; error?: string }>({});
-
-  const handleAddAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setResult({});
-
-    try {
-      const response = await addAdminEmail(email);
-      setResult(response);
-      
-      if (response.success) {
-        setEmail('');
-      }
-    } catch (error) {
-      setResult({ error: 'Failed to add admin email' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Setup Admin Access</CardTitle>
+      <Card className="w-full max-w-2xl">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold">Setup Super Admin Access</CardTitle>
           <CardDescription>
-            Add your email to the admin list to access the dashboard
+            Run the bootstrap script to set up your first super admin account
           </CardDescription>
         </CardHeader>
-        
-        <CardContent>
-          <form onSubmit={handleAddAdmin} className="space-y-4">
-            {/* Success Alert */}
-            {result.success && (
-              <Alert className="border-green-500 text-green-700 bg-green-50">
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Success! You've been added as an admin. You can now access the dashboard.
-                </AlertDescription>
-              </Alert>
-            )}
 
-            {/* Error Alert */}
-            {result.error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{result.error}</AlertDescription>
-              </Alert>
-            )}
+        <CardContent className="space-y-6">
+          {/* Deprecation Notice */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Note:</strong> This page is for reference only. Admin setup is now done via the bootstrap script.
+            </AlertDescription>
+          </Alert>
 
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Your Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="your-email@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
+          {/* Instructions */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Step 1: Create Your User Account</h3>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                <li>Go to <code className="px-2 py-0.5 bg-muted rounded">/login</code></li>
+                <li>Click "Register here"</li>
+                <li>Create an account with your email</li>
+              </ol>
             </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading || !email}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding Admin...
-                </>
-              ) : (
-                'Add as Admin'
-              )}
-            </Button>
-          </form>
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Step 2: Run Bootstrap Script</h3>
+              <div className="bg-muted p-4 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Terminal className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm mb-2">Run this command in your terminal:</p>
+                    <code className="block bg-background p-3 rounded text-sm font-mono">
+                      node scripts/bootstrap-admin.js
+                    </code>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                This will set the super-admin role for tech@sicklecellanemia.ca (hardcoded in the script)
+              </p>
+            </div>
 
-          {/* Help Text */}
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Step 3: Login</h3>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                <li>Logout if currently logged in</li>
+                <li>Login again at <code className="px-2 py-0.5 bg-muted rounded">/login</code></li>
+                <li>You'll be redirected to <code className="px-2 py-0.5 bg-muted rounded">/admin</code></li>
+                <li>You now have full super admin access!</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Additional Help */}
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Troubleshooting:</strong> If you see "Access Denied", make sure:
+              <ul className="list-disc list-inside mt-2 space-y-1 text-xs">
+                <li>You created a user account first</li>
+                <li>The bootstrap script ran successfully</li>
+                <li>You logged out and back in after running the script</li>
+                <li>Your email matches the one in the script (tech@sicklecellanemia.ca)</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+
+          {/* Documentation Link */}
+          <div className="text-center text-sm text-muted-foreground">
             <p>
-              <strong>Note:</strong> This will add your email to the admin list in Firestore.
-              Make sure you use the same email you logged in with.
+              For complete documentation, see{' '}
+              <code className="px-2 py-0.5 bg-muted rounded">AUTH-SYSTEM-GUIDE.md</code>
             </p>
           </div>
         </CardContent>

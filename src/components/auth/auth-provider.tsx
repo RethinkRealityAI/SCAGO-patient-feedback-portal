@@ -2,7 +2,7 @@
 
 import { createContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User } from 'firebase/auth';
-import { onAuthChange, isUserAdmin, isUserYEPManager, getUserRole } from '@/lib/firebase-auth';
+import { onAuthChange, isUserAdmin, isUserSuperAdmin, getUserRole } from '@/lib/firebase-auth';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
@@ -11,15 +11,15 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
-  isYEPManager: boolean;
-  userRole: 'admin' | 'yep-manager' | 'user' | null;
+  isSuperAdmin: boolean;
+  userRole: 'super-admin' | 'admin' | 'mentor' | 'participant' | null;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isAdmin: false,
-  isYEPManager: false,
+  isSuperAdmin: false,
   userRole: null,
 });
 
@@ -45,8 +45,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isYEPManager, setIsYEPManager] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'yep-manager' | 'user' | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<'super-admin' | 'admin' | 'mentor' | 'participant' | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const sessionPostedRef = useRef(false);
@@ -72,14 +72,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Best-effort; will retry on next auth change if needed
           }
           // Check user roles
-          const [adminStatus, yepManagerStatus, userRole] = await Promise.all([
+          const [adminStatus, superAdminStatus, userRole] = await Promise.all([
             isUserAdmin(authUser.email),
-            isUserYEPManager(authUser.email),
+            isUserSuperAdmin(authUser.email),
             getUserRole(authUser.email)
           ]);
-          
+
           setIsAdmin(adminStatus);
-          setIsYEPManager(yepManagerStatus);
+          setIsSuperAdmin(superAdminStatus);
           setUserRole(userRole);
           
         // Track login (optional - will fail if Firestore rules don't allow)
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // Route access is enforced on the server via layouts. Avoid client-side false negatives.
         } else {
           setIsAdmin(false);
-          setIsYEPManager(false);
+          setIsSuperAdmin(false);
           setUserRole(null);
           
           // Clear server session cookie
@@ -150,7 +150,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [router, pathname]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isYEPManager, userRole }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, userRole }}>
       {children}
     </AuthContext.Provider>
   );
