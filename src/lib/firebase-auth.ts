@@ -144,10 +144,8 @@ export async function isUserAdmin(email: string | null): Promise<boolean> {
 
   try {
     if (auth.currentUser) {
-      try {
-        const token = await getIdTokenResult(auth.currentUser, true);
-        return (token.claims as any)?.role === 'admin';
-      } catch {}
+      const token = await getIdTokenResult(auth.currentUser, true);
+      if ((token.claims as any)?.role === 'admin') return true;
     }
     return false;
   } catch (error) {
@@ -164,10 +162,8 @@ export async function isUserYEPManager(email: string | null): Promise<boolean> {
 
   try {
     if (auth.currentUser) {
-      try {
-        const token = await getIdTokenResult(auth.currentUser, true);
-        return (token.claims as any)?.role === 'yep-manager';
-      } catch {}
+      const token = await getIdTokenResult(auth.currentUser, true);
+      if ((token.claims as any)?.role === 'yep-manager') return true;
     }
     return false;
   } catch (error) {
@@ -183,18 +179,15 @@ export async function getUserRole(email: string | null): Promise<'admin' | 'yep-
   if (!email) return null;
 
   try {
-    // Claims only
     if (auth.currentUser) {
-      try {
-        const token = await getIdTokenResult(auth.currentUser, true);
-        const role = (token.claims as any)?.role as string | undefined;
-        if (role === 'admin') return 'admin';
-        if (role === 'yep-manager') return 'yep-manager';
-        if (role === 'user') return 'user';
-      } catch {}
+      const token = await getIdTokenResult(auth.currentUser, true);
+      const role = (token.claims as any)?.role as string | undefined;
+      if (role === 'admin') return 'admin';
+      if (role === 'yep-manager') return 'yep-manager';
+      if (role === 'mentor') return 'user';
+      if (role === 'participant') return 'user';
+      if (role === 'user') return 'user';
     }
-
-    // Default role when no claim is present
     return 'user';
   } catch (error) {
     console.error('Error getting user role:', error);
