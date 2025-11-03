@@ -3,7 +3,7 @@
 import { getAdminAuth, getAdminFirestore } from '@/lib/firebase-admin';
 import { enforceAdminInAction } from '@/lib/server-auth';
 
-export type AppRole = 'admin' | 'yep-manager' | 'mentor' | 'participant' | 'user';
+export type AppRole = 'super-admin' | 'admin' | 'mentor' | 'participant';
 
 export interface PlatformUser {
   uid: string;
@@ -24,7 +24,8 @@ export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }>
   const result = await auth.listUsers(1000);
   const users: PlatformUser[] = result.users.map((u) => {
     const claims = (u.customClaims || {}) as Record<string, any>;
-    const role: AppRole = (claims.role as AppRole) || 'user';
+    // Default to 'participant' if no role is set (should rarely happen)
+    const role: AppRole = (claims.role as AppRole) || 'participant';
     return {
       uid: u.uid,
       email: u.email || '',
@@ -77,12 +78,12 @@ export async function createPlatformUser(input: {
       disabled: false,
     });
 
-    const role: AppRole | undefined = input.role;
-    if (role) {
-      const existing = (await auth.getUser(user.uid)).customClaims || {};
-      await auth.setCustomUserClaims(user.uid, { ...existing, role });
-    }
+    // Set role (required - default to participant if not provided)
+    const role: AppRole = input.role || 'participant';
+    const existing = (await auth.getUser(user.uid)).customClaims || {};
+    await auth.setCustomUserClaims(user.uid, { ...existing, role });
 
+    // Set page permissions if provided (for admin role)
     if (input.pagePermissions && input.pagePermissions.length > 0) {
       const permsRef = firestore.collection('config').doc('page_permissions');
       const snap = await permsRef.get();
@@ -90,6 +91,9 @@ export async function createPlatformUser(input: {
       const updated = { ...current, [email]: input.pagePermissions };
       await permsRef.set({ routesByEmail: updated }, { merge: true });
     }
+
+    // Log user creation
+    await logUserActivity(user.uid, email, 'user_created', { role, email });
 
     return { success: true, uid: user.uid };
   } catch (err: any) {
@@ -104,8 +108,16 @@ export async function setUserRole(uid: string, role: AppRole): Promise<{ success
   const auth = getAdminAuth();
   try {
     const user = await auth.getUser(uid);
+    const oldRole = (user.customClaims as any)?.role || 'none';
     const existing = user.customClaims || {};
     await auth.setCustomUserClaims(uid, { ...existing, role });
+
+    // Log role change
+    await logUserActivity(uid, user.email || '', 'role_changed', {
+      oldRole,
+      newRole: role
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to set role' };
@@ -153,15 +165,76 @@ export async function setUserPagePermissions(email: string, routes: string[]): P
 {
   await enforceAdminInAction();
   const firestore = getAdminFirestore();
+  const auth = getAdminAuth();
+
   try {
     const permsRef = firestore.collection('config').doc('page_permissions');
     const snap = await permsRef.get();
     const current = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
     const updated = { ...current, [email.toLowerCase()]: routes };
     await permsRef.set({ routesByEmail: updated }, { merge: true });
+
+    // Log permission change
+    try {
+      const user = await auth.getUserByEmail(email);
+      await logUserActivity(user.uid, email, 'permissions_changed', {
+        permissions: routes
+      });
+    } catch (err) {
+      console.error('Failed to log permission change:', err);
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to set permissions' };
+  }
+}
+
+/**
+ * Get page permissions for a user by email
+ */
+export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; error?: string }> {
+  await enforceAdminInAction();
+  const firestore = getAdminFirestore();
+
+  try {
+    const permsRef = firestore.collection('config').doc('page_permissions');
+    const snap = await permsRef.get();
+
+    if (!snap.exists) {
+      return { permissions: [] };
+    }
+
+    const routesByEmail = (snap.data() as any)?.routesByEmail || {};
+    const permissions = routesByEmail[email.toLowerCase()] || [];
+
+    return { permissions };
+  } catch (err: any) {
+    return { error: err?.message || 'Failed to get permissions' };
+  }
+}
+
+/**
+ * Log user activity to Firestore
+ */
+async function logUserActivity(
+  userId: string,
+  userEmail: string,
+  action: string,
+  details: Record<string, any>
+): Promise<void> {
+  try {
+    const firestore = getAdminFirestore();
+    await firestore.collection('user_activity').add({
+      userId,
+      userEmail,
+      action,
+      details,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to log user activity:', err);
+    // Don't throw - logging failure shouldn't break user operations
   }
 }
 

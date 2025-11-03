@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getUserActivityLogs, getUserLoginHistory, type UserActivity } from '@/lib/firebase-admin-users';
-import { addAdminEmail } from '@/lib/admin-actions';
 import { getPagePermissions } from '@/lib/page-permissions-actions';
+import { PAGE_PERMISSIONS, type PagePermission } from '@/lib/permissions';
 import {
   listPlatformUsers,
   createPlatformUser,
@@ -28,15 +28,11 @@ import {
   deleteUserById,
   updateUserPassword,
   setUserPagePermissions,
+  getUserPagePermissions,
   type PlatformUser,
   type AppRole,
 } from '@/app/admin/user-actions';
-
-const ROUTE_KEYS = [
-  { key: 'yep-portal', label: 'YEP Portal' },
-  { key: 'editor', label: 'Editor' },
-  { key: 'dashboard', label: 'Dashboard' },
-];
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function EnhancedUserManagement() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
@@ -50,7 +46,7 @@ export function EnhancedUserManagement() {
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [createDisplayName, setCreateDisplayName] = useState('');
-  const [createRole, setCreateRole] = useState<AppRole>('user');
+  const [createRole, setCreateRole] = useState<AppRole>('participant');
   const [createRoutes, setCreateRoutes] = useState<string[]>([]);
   const [savingAction, setSavingAction] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -82,11 +78,15 @@ export function EnhancedUserManagement() {
   const handleViewUser = async (user: PlatformUser) => {
     setSelectedUser(user);
     setEditRole(user.role);
-    // Load page permissions for editing
-    try {
-      const res = await getPagePermissions();
-      setEditRoutes(res.routesByEmail[user.email] || []);
-    } catch {
+    // Load page permissions for editing (only for admin users)
+    if (user.role === 'admin') {
+      try {
+        const res = await getUserPagePermissions(user.email);
+        setEditRoutes(res.permissions || []);
+      } catch {
+        setEditRoutes([]);
+      }
+    } else {
       setEditRoutes([]);
     }
     
@@ -120,38 +120,6 @@ export function EnhancedUserManagement() {
     }
   };
 
-  const handleAddAdmin = async () => {
-    if (!newEmail || !newEmail.includes('@')) {
-      toast({
-        title: 'Invalid Email',
-        description: 'Please enter a valid email address',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Get current user's email from auth context if available
-    const { auth } = await import('@/lib/firebase');
-    const currentUserEmail = auth.currentUser?.email || 'system';
-
-    const result = await addAdminEmail(newEmail, currentUserEmail);
-    
-    if (result.success) {
-      toast({
-        title: 'Admin Added',
-        description: `${newEmail} now has admin access`,
-      });
-      setNewEmail('');
-      loadData();
-    } else {
-      toast({
-        title: 'Error',
-        description: result.error || 'Failed to add admin',
-        variant: 'destructive',
-      });
-    }
-  };
-
   const filteredUsers = users.filter(user =>
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -163,30 +131,25 @@ export function EnhancedUserManagement() {
 
   // Role descriptions for better UX
   const roleDescriptions: Record<AppRole, { label: string; description: string; icon: React.ReactNode }> = {
+    'super-admin': {
+      label: 'Super Administrator',
+      description: 'Full system access with no restrictions - can manage all users, roles, and platform features',
+      icon: <Crown className="h-4 w-4 text-yellow-500" />
+    },
     'admin': {
       label: 'Administrator',
-      description: 'Full system access - can manage users, surveys, and all platform features',
-      icon: <Crown className="h-4 w-4" />
-    },
-    'yep-manager': {
-      label: 'YEP Manager',
-      description: 'Can manage Youth Empowerment Program participants, mentors, and forms',
-      icon: <GraduationCap className="h-4 w-4" />
+      description: 'Page-level access based on assigned permissions - can manage specific platform areas',
+      icon: <Shield className="h-4 w-4 text-blue-500" />
     },
     'mentor': {
       label: 'Mentor',
-      description: 'Youth Empowerment Program mentor - can view assigned participants',
-      icon: <Users className="h-4 w-4" />
+      description: 'Youth Empowerment Program mentor - profile access only',
+      icon: <Users className="h-4 w-4 text-green-500" />
     },
     'participant': {
       label: 'Participant',
-      description: 'Youth Empowerment Program participant - has access to profile and forms',
-      icon: <User className="h-4 w-4" />
-    },
-    'user': {
-      label: 'Regular User',
-      description: 'Basic platform access - limited features',
-      icon: <User className="h-4 w-4" />
+      description: 'Youth Empowerment Program participant - profile access only',
+      icon: <User className="h-4 w-4 text-purple-500" />
     }
   };
 
@@ -377,14 +340,14 @@ export function EnhancedUserManagement() {
                           <SelectValue placeholder="Select a role">
                             {(editRole || selectedUser.role) && (
                               <div className="flex items-center gap-2">
-                                <span className="text-primary">{roleDescriptions[editRole || selectedUser.role].icon}</span>
-                                <span className="font-medium">{roleDescriptions[editRole || selectedUser.role].label}</span>
+                                <span className="text-primary">{roleDescriptions[(editRole || selectedUser.role) as AppRole].icon}</span>
+                                <span className="font-medium">{roleDescriptions[(editRole || selectedUser.role) as AppRole].label}</span>
                               </div>
                             )}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent className="min-w-[280px]">
-                          {(['admin', 'yep-manager', 'mentor', 'participant', 'user'] as AppRole[]).map((role) => {
+                          {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
                             const desc = roleDescriptions[role];
                             return (
                               <SelectItem 
@@ -412,8 +375,8 @@ export function EnhancedUserManagement() {
                           const res = await setUserRole(selectedUser.uid, editRole);
                           setSavingAction(false);
                           if ((res as any).success) {
-                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole].label}` });
-                            setSelectedUser({ ...selectedUser, role: editRole });
+                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
+                            setSelectedUser({ ...selectedUser, role: editRole as AppRole });
                             // refresh list
                             loadData();
                           } else {
@@ -427,77 +390,87 @@ export function EnhancedUserManagement() {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {roleDescriptions[editRole || selectedUser.role].description}
+                      {roleDescriptions[(editRole || selectedUser.role) as AppRole].description}
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <Label>Page Permissions</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {ROUTE_KEYS.map(({ key, label }) => (
-                      <label
-                        key={key}
-                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          editRoutes.includes(key)
-                            ? 'border-primary bg-primary/5 hover:bg-primary/10'
-                            : 'border-border hover:border-primary/50 hover:bg-accent/30'
-                        } ${
-                          (selectedUser.role === 'admin' || selectedUser.role === 'yep-manager')
-                            ? 'opacity-60 cursor-not-allowed'
-                            : ''
-                        }`}
-                      >
-                        <Checkbox
-                          checked={editRoutes.includes(key)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setEditRoutes((prev) => [...prev, key]);
-                            } else {
-                              setEditRoutes((prev) => prev.filter(k => k !== key));
-                            }
-                          }}
-                          disabled={selectedUser.role === 'admin' || selectedUser.role === 'yep-manager'}
-                          className="h-5 w-5"
-                        />
-                        <span className="text-sm font-medium flex-1">{label}</span>
-                        {(selectedUser.role === 'admin' || selectedUser.role === 'yep-manager') && (
-                          <Badge variant="secondary" className="text-xs">
-                            Auto
-                          </Badge>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                  {(selectedUser.role === 'admin' || selectedUser.role === 'yep-manager') && (
-                    <Alert>
-                      <Info className="h-4 w-4" />
-                      <AlertDescription className="text-xs">
-                        {selectedUser.role === 'admin' 
-                          ? 'Administrators have access to all pages automatically.'
-                          : 'YEP Managers have access to the YEP Portal automatically.'}
-                      </AlertDescription>
-                    </Alert>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedUser.role === 'super-admin'
+                      ? 'Super admins have access to all pages automatically.'
+                      : selectedUser.role === 'admin'
+                      ? 'Select which pages this admin can access. Hover over each option for details.'
+                      : 'Page permissions are only available for admin users.'}
+                  </p>
+                  <TooltipProvider>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {PAGE_PERMISSIONS.map((permission) => (
+                        <Tooltip key={permission.key}>
+                          <TooltipTrigger asChild>
+                            <label
+                              className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                editRoutes.includes(permission.key)
+                                  ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                                  : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                              } ${
+                                selectedUser.role !== 'admin'
+                                  ? 'opacity-60 cursor-not-allowed'
+                                  : ''
+                              }`}
+                            >
+                              <Checkbox
+                                checked={editRoutes.includes(permission.key)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setEditRoutes((prev) => [...prev, permission.key]);
+                                  } else {
+                                    setEditRoutes((prev) => prev.filter(k => k !== permission.key));
+                                  }
+                                }}
+                                disabled={selectedUser.role !== 'admin'}
+                                className="h-5 w-5"
+                              />
+                              <div className="flex-1">
+                                <span className="text-sm font-medium">{permission.label}</span>
+                                {selectedUser.role === 'super-admin' && (
+                                  <Badge variant="secondary" className="text-xs ml-2">
+                                    Auto
+                                  </Badge>
+                                )}
+                              </div>
+                            </label>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">{permission.description}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Route: {permission.route}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </TooltipProvider>
+                  {selectedUser.role === 'admin' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        setSavingAction(true);
+                        const res = await setUserPagePermissions(selectedUser.email, editRoutes);
+                        setSavingAction(false);
+                        if ((res as any).success) {
+                          toast({ title: 'Permissions saved', description: `Updated permissions for ${selectedUser.email}` });
+                        } else {
+                          toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
+                        }
+                      }}
+                      disabled={savingAction}
+                      className="w-full md:w-auto"
+                    >
+                      {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      Save Permissions
+                    </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      setSavingAction(true);
-                      const res = await setUserPagePermissions(selectedUser.email, editRoutes);
-                      setSavingAction(false);
-                      if ((res as any).success) {
-                        toast({ title: 'Permissions saved', description: `Updated routes for ${selectedUser.email}` });
-                      } else {
-                        toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
-                      }
-                    }}
-                    disabled={savingAction || selectedUser.role === 'admin' || selectedUser.role === 'yep-manager'}
-                    className="w-full md:w-auto"
-                  >
-                    {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    Save Permissions
-                  </Button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -759,7 +732,7 @@ export function EnhancedUserManagement() {
                     >
                       <SelectTrigger id="create-role" className="h-11">
                         <SelectValue placeholder="Select a role">
-                          {createRole && (
+                          {createRole && roleDescriptions[createRole] && (
                             <div className="flex items-center gap-2">
                               <span className="text-primary">{roleDescriptions[createRole].icon}</span>
                               <span className="font-medium">{roleDescriptions[createRole].label}</span>
@@ -768,7 +741,7 @@ export function EnhancedUserManagement() {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className="min-w-[280px]">
-                        {(['admin', 'yep-manager', 'mentor', 'participant', 'user'] as AppRole[]).map((role) => {
+                        {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
                           const desc = roleDescriptions[role];
                           return (
                             <SelectItem 
@@ -791,7 +764,7 @@ export function EnhancedUserManagement() {
                     <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-md text-sm">
                       <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-muted-foreground">
-                        {roleDescriptions[createRole].description}
+                        {roleDescriptions[createRole as AppRole]?.description || 'Select a role to see description'}
                       </p>
                     </div>
                   </div>
@@ -799,59 +772,62 @@ export function EnhancedUserManagement() {
               </div>
 
               {/* Page Permissions */}
-              <div className="space-y-4 border-t pt-4">
-                <div className="space-y-2">
-                  <Label>Initial Page Permissions</Label>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Grant access to specific pages. Admins and YEP Managers have full access by default.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {ROUTE_KEYS.map(({ key, label }) => (
-                      <label
-                        key={key}
-                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          createRoutes.includes(key)
-                            ? 'border-primary bg-primary/5 hover:bg-primary/10'
-                            : 'border-border hover:border-primary/50 hover:bg-accent/30'
-                        } ${
-                          (createRole === 'admin' || createRole === 'yep-manager')
-                            ? 'opacity-60 cursor-not-allowed'
-                            : ''
-                        }`}
-                      >
-                        <Checkbox
-                          checked={createRoutes.includes(key)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setCreateRoutes((prev) => [...prev, key]);
-                            } else {
-                              setCreateRoutes((prev) => prev.filter(k => k !== key));
-                            }
-                          }}
-                          disabled={createRole === 'admin' || createRole === 'yep-manager'}
-                          className="h-5 w-5"
-                        />
-                        <span className="text-sm font-medium flex-1">{label}</span>
-                        {(createRole === 'admin' || createRole === 'yep-manager') && (
-                          <Badge variant="secondary" className="text-xs">
-                            Auto
-                          </Badge>
-                        )}
-                      </label>
-                    ))}
+              {(createRole === 'admin' || createRole === 'super-admin') && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <Label>Page Permissions</Label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {createRole === 'super-admin'
+                        ? 'Super admins have access to all pages automatically. No need to select permissions.'
+                        : 'Select which pages this admin can access. Hover over each option for details.'}
+                    </p>
+                    {createRole === 'admin' && (
+                      <TooltipProvider>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {PAGE_PERMISSIONS.map((permission) => (
+                            <Tooltip key={permission.key}>
+                              <TooltipTrigger asChild>
+                                <label
+                                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                    createRoutes.includes(permission.key)
+                                      ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                                      : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                                  }`}
+                                >
+                                  <Checkbox
+                                    checked={createRoutes.includes(permission.key)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setCreateRoutes((prev) => [...prev, permission.key]);
+                                      } else {
+                                        setCreateRoutes((prev) => prev.filter(k => k !== permission.key));
+                                      }
+                                    }}
+                                    className="h-5 w-5"
+                                  />
+                                  <span className="text-sm font-medium flex-1">{permission.label}</span>
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs">
+                                <p className="text-xs">{permission.description}</p>
+                                <p className="text-xs text-muted-foreground mt-1">Route: {permission.route}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </div>
+                      </TooltipProvider>
+                    )}
+                    {createRole === 'super-admin' && (
+                      <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          Super administrators have unrestricted access to all pages and features.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
-                  {(createRole === 'admin' || createRole === 'yep-manager') && (
-                    <Alert>
-                      <Info className="h-4 w-4" />
-                      <AlertDescription className="text-xs">
-                        {createRole === 'admin' 
-                          ? 'Administrators have access to all pages automatically.'
-                          : 'YEP Managers have access to the YEP Portal automatically.'}
-                      </AlertDescription>
-                    </Alert>
-                  )}
                 </div>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-between border-t pt-4">
