@@ -340,8 +340,8 @@ export function EnhancedUserManagement() {
                           <SelectValue placeholder="Select a role">
                             {(editRole || selectedUser.role) && (
                               <div className="flex items-center gap-2">
-                                <span className="text-primary">{roleDescriptions[editRole || selectedUser.role].icon}</span>
-                                <span className="font-medium">{roleDescriptions[editRole || selectedUser.role].label}</span>
+                                <span className="text-primary">{roleDescriptions[(editRole || selectedUser.role) as AppRole].icon}</span>
+                                <span className="font-medium">{roleDescriptions[(editRole || selectedUser.role) as AppRole].label}</span>
                               </div>
                             )}
                           </SelectValue>
@@ -375,8 +375,8 @@ export function EnhancedUserManagement() {
                           const res = await setUserRole(selectedUser.uid, editRole);
                           setSavingAction(false);
                           if ((res as any).success) {
-                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole].label}` });
-                            setSelectedUser({ ...selectedUser, role: editRole });
+                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
+                            setSelectedUser({ ...selectedUser, role: editRole as AppRole });
                             // refresh list
                             loadData();
                           } else {
@@ -390,7 +390,7 @@ export function EnhancedUserManagement() {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {roleDescriptions[editRole || selectedUser.role].description}
+                      {roleDescriptions[(editRole || selectedUser.role) as AppRole].description}
                     </p>
                   </div>
                 </div>
@@ -732,7 +732,7 @@ export function EnhancedUserManagement() {
                     >
                       <SelectTrigger id="create-role" className="h-11">
                         <SelectValue placeholder="Select a role">
-                          {createRole && (
+                          {createRole && roleDescriptions[createRole] && (
                             <div className="flex items-center gap-2">
                               <span className="text-primary">{roleDescriptions[createRole].icon}</span>
                               <span className="font-medium">{roleDescriptions[createRole].label}</span>
@@ -764,7 +764,7 @@ export function EnhancedUserManagement() {
                     <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-md text-sm">
                       <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-muted-foreground">
-                        {roleDescriptions[createRole].description}
+                        {roleDescriptions[createRole as AppRole]?.description || 'Select a role to see description'}
                       </p>
                     </div>
                   </div>

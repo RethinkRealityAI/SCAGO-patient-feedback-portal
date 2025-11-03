@@ -63,6 +63,7 @@ export async function enforceAdminOrRedirect(): Promise<ServerSession> {
   if (!session) {
     console.log('[ServerAuth] enforceAdminOrRedirect: No session, redirecting to login');
     redirect('/login');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   console.log('[ServerAuth] enforceAdminOrRedirect: Session role is:', session.role, 'email:', session.email);
@@ -81,6 +82,7 @@ export async function enforceAdminOrRedirect(): Promise<ServerSession> {
 
   console.log('[ServerAuth] enforceAdminOrRedirect: ❌ Not admin, redirecting to unauthorized. Role:', session.role);
   redirect('/unauthorized');
+  throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
 }
 
 /**
@@ -90,11 +92,13 @@ export async function enforceSuperAdminOrRedirect(): Promise<ServerSession> {
   const session = await getServerSession();
   if (!session) {
     redirect('/login');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   if (session.role !== 'super-admin') {
     console.log('[ServerAuth] enforceSuperAdminOrRedirect: ❌ Not super admin, redirecting. Role:', session.role);
     redirect('/unauthorized');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   console.log('[ServerAuth] enforceSuperAdminOrRedirect: ✅ Super admin access granted');
@@ -111,6 +115,7 @@ export async function enforcePagePermission(permissionKey: PagePermissionKey): P
   const session = await getServerSession();
   if (!session) {
     redirect('/login');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   // Super admin always has access
@@ -133,11 +138,13 @@ export async function enforcePagePermission(permissionKey: PagePermissionKey): P
 
     console.log(`[ServerAuth] Admin ${session.email} lacks ${permissionKey} permission`);
     redirect('/unauthorized');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   // Participants and mentors don't have access to admin pages
   console.log(`[ServerAuth] User ${session.email} with role ${session.role} denied access to ${permissionKey}`);
   redirect('/unauthorized');
+  throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
 }
 
 /**
@@ -148,6 +155,7 @@ export async function enforceParticipantOrMentorOrRedirect(): Promise<ServerSess
   const session = await getServerSession();
   if (!session) {
     redirect('/login');
+    throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
   }
 
   // Allow participants, mentors, and super admin
@@ -156,6 +164,7 @@ export async function enforceParticipantOrMentorOrRedirect(): Promise<ServerSess
   }
 
   redirect('/unauthorized');
+  throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
 }
 
 /**
