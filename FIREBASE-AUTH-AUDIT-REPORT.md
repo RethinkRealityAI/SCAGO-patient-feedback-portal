@@ -13,12 +13,12 @@
 - **Location**: `src/lib/firebase.ts`
 - **Validation**: All required environment variables are set in `.env.local`
   ```
-  NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyD7mz-MY4WtL26YIwIbdJKVQgzNjkwvQmg
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=scago-feedback.firebaseapp.com
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID=scago-feedback
-  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=scago-feedback.firebasestorage.app
-  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=698862461210
-  NEXT_PUBLIC_FIREBASE_APP_ID=1:698862461210:web:3f4074e0410dcfb4f10ca3
+  NEXT_PUBLIC_FIREBASE_API_KEY=<your-api-key>
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=<your-auth-domain>
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID=<your-project-id>
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=<your-storage-bucket>
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=<your-sender-id>
+  NEXT_PUBLIC_FIREBASE_APP_ID=<your-app-id>
   ```
 
 ### 2. **Current Firebase Auth Users** ✅ WORKING
