@@ -137,7 +137,25 @@ export async function resetPassword(email: string): Promise<{ error?: string }> 
 }
 
 /**
- * Check if user is admin
+ * Check if user is super admin
+ */
+export async function isUserSuperAdmin(email: string | null): Promise<boolean> {
+  if (!email) return false;
+
+  try {
+    if (auth.currentUser) {
+      const token = await getIdTokenResult(auth.currentUser, true);
+      if ((token.claims as any)?.role === 'super-admin') return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking super admin status:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if user is admin (super-admin or regular admin)
  */
 export async function isUserAdmin(email: string | null): Promise<boolean> {
   if (!email) return false;
@@ -145,7 +163,8 @@ export async function isUserAdmin(email: string | null): Promise<boolean> {
   try {
     if (auth.currentUser) {
       const token = await getIdTokenResult(auth.currentUser, true);
-      if ((token.claims as any)?.role === 'admin') return true;
+      const role = (token.claims as any)?.role;
+      if (role === 'super-admin' || role === 'admin') return true;
     }
     return false;
   } catch (error) {
@@ -155,40 +174,25 @@ export async function isUserAdmin(email: string | null): Promise<boolean> {
 }
 
 /**
- * Check if user is YEP Manager
+ * Get user role (super-admin, admin, mentor, participant)
  */
-export async function isUserYEPManager(email: string | null): Promise<boolean> {
-  if (!email) return false;
-
-  try {
-    if (auth.currentUser) {
-      const token = await getIdTokenResult(auth.currentUser, true);
-      if ((token.claims as any)?.role === 'yep-manager') return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('Error checking YEP Manager status:', error);
-    return false;
-  }
-}
-
-/**
- * Get user role (admin, yep-manager, or user)
- */
-export async function getUserRole(email: string | null): Promise<'admin' | 'yep-manager' | 'user' | null> {
+export async function getUserRole(email: string | null): Promise<'super-admin' | 'admin' | 'mentor' | 'participant' | null> {
   if (!email) return null;
 
   try {
     if (auth.currentUser) {
       const token = await getIdTokenResult(auth.currentUser, true);
       const role = (token.claims as any)?.role as string | undefined;
+
+      // Return exact role from custom claims
+      if (role === 'super-admin') return 'super-admin';
       if (role === 'admin') return 'admin';
-      if (role === 'yep-manager') return 'yep-manager';
-      if (role === 'mentor') return 'user';
-      if (role === 'participant') return 'user';
-      if (role === 'user') return 'user';
+      if (role === 'mentor') return 'mentor';
+      if (role === 'participant') return 'participant';
     }
-    return 'user';
+
+    // No valid role found
+    return null;
   } catch (error) {
     console.error('Error getting user role:', error);
     return null;
