@@ -51,6 +51,7 @@ import { ExportDialog } from '@/components/youth-empowerment/export-dialog';
 import { AttendanceAnalytics } from '@/components/youth-empowerment/attendance-analytics';
 import YEPFormsManagement from '@/components/yep-forms/yep-forms-management';
 import { YEPInvites } from '@/components/admin/yep-invites';
+import { ProfileConfigManager } from '@/components/admin/profile-config-manager';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 export default function YouthEmpowermentClient() {
@@ -216,13 +217,14 @@ export default function YouthEmpowermentClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
           <TabsTrigger value="mentors">Mentors</TabsTrigger>
           <TabsTrigger value="workshops">Workshops</TabsTrigger>
           <TabsTrigger value="meetings">Meetings</TabsTrigger>
           <TabsTrigger value="forms">Forms</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -461,6 +463,10 @@ export default function YouthEmpowermentClient() {
 
         <TabsContent value="forms">
           <YEPFormsManagement />
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <ProfileConfigManager />
         </TabsContent>
       </Tabs>
 
