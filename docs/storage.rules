@@ -30,22 +30,24 @@ service firebase.storage {
     
     // YEP Files - Admin, YEP Manager, or record owner can read/write
     // Path structure: yep-files/participants/{participantId}/{fileName} or yep-files/mentors/{mentorId}/{fileName}
-    match /yep-files/participants/{participantId}/{fileName} {
+    match /yep-files/participants/{participantId}/{allPaths=**} {
       // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
-      
-      // Participants can manage their own files
-      allow read, write: if isAuthenticated() && 
+
+      // Participants can manage their own files (check both userId and authEmail)
+      allow read, write: if isAuthenticated() &&
+                            exists(/databases/(default)/documents/yep_participants/$(participantId)) &&
                             (firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.userId == request.auth.uid ||
                              firestore.get(/databases/(default)/documents/yep_participants/$(participantId)).data.authEmail == request.auth.token.email);
     }
     
-    match /yep-files/mentors/{mentorId}/{fileName} {
+    match /yep-files/mentors/{mentorId}/{allPaths=**} {
       // Admins and YEP Managers have full access
       allow read, write: if isAdminOrYEPManager();
-      
-      // Mentors can manage their own files
-      allow read, write: if isAuthenticated() && 
+
+      // Mentors can manage their own files (check both userId and authEmail)
+      allow read, write: if isAuthenticated() &&
+                            exists(/databases/(default)/documents/yep_mentors/$(mentorId)) &&
                             (firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.userId == request.auth.uid ||
                              firestore.get(/databases/(default)/documents/yep_mentors/$(mentorId)).data.authEmail == request.auth.token.email);
     }
