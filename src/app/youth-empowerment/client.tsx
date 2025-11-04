@@ -216,7 +216,7 @@ export default function YouthEmpowermentClient() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
           <TabsTrigger value="mentors">Mentors</TabsTrigger>
@@ -232,7 +232,8 @@ export default function YouthEmpowermentClient() {
           </div>
         </TabsContent>
 
-        <TabsContent value="overview-old" className="space-y-6">
+        {/* Legacy overview tab removed - keeping for reference if needed */}
+        {false && <TabsContent value="overview-old" className="space-y-6">
           {/* Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
@@ -283,7 +284,9 @@ export default function YouthEmpowermentClient() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {Math.round(((contractSigned + syllabusSigned + idProvided + scdProof) / (participants.length * 4)) * 100)}%
+                  {participants.length > 0
+                    ? Math.round(((contractSigned + syllabusSigned + idProvided + scdProof) / (participants.length * 4)) * 100)
+                    : 0}%
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Average completion rate
@@ -309,9 +312,9 @@ export default function YouthEmpowermentClient() {
                       <span className="text-sm font-medium">{region}</span>
                       <div className="flex items-center gap-2">
                         <div className="w-20 bg-muted rounded-full h-2">
-                          <div 
-                            className="bg-primary h-2 rounded-full" 
-                            style={{ width: `${(count / participants.length) * 100}%` }}
+                          <div
+                            className="bg-primary h-2 rounded-full"
+                            style={{ width: `${participants.length > 0 ? (count / participants.length) * 100 : 0}%` }}
                           />
                         </div>
                         <span className="text-sm text-muted-foreground w-8">{count}</span>
@@ -336,9 +339,9 @@ export default function YouthEmpowermentClient() {
                     <span className="text-sm font-medium">Contract Signed</span>
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-green-500 h-2 rounded-full" 
-                          style={{ width: `${(contractSigned / participants.length) * 100}%` }}
+                        <div
+                          className="bg-green-500 h-2 rounded-full"
+                          style={{ width: `${participants.length > 0 ? (contractSigned / participants.length) * 100 : 0}%` }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground w-8">{contractSigned}</span>
@@ -348,9 +351,9 @@ export default function YouthEmpowermentClient() {
                     <span className="text-sm font-medium">Syllabus Signed</span>
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-blue-500 h-2 rounded-full" 
-                          style={{ width: `${(syllabusSigned / participants.length) * 100}%` }}
+                        <div
+                          className="bg-blue-500 h-2 rounded-full"
+                          style={{ width: `${participants.length > 0 ? (syllabusSigned / participants.length) * 100 : 0}%` }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground w-8">{syllabusSigned}</span>
@@ -360,9 +363,9 @@ export default function YouthEmpowermentClient() {
                     <span className="text-sm font-medium">ID Provided</span>
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-yellow-500 h-2 rounded-full" 
-                          style={{ width: `${(idProvided / participants.length) * 100}%` }}
+                        <div
+                          className="bg-yellow-500 h-2 rounded-full"
+                          style={{ width: `${participants.length > 0 ? (idProvided / participants.length) * 100 : 0}%` }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground w-8">{idProvided}</span>
@@ -372,9 +375,9 @@ export default function YouthEmpowermentClient() {
                     <span className="text-sm font-medium">SCD Proof</span>
                     <div className="flex items-center gap-2">
                       <div className="w-20 bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-purple-500 h-2 rounded-full" 
-                          style={{ width: `${(scdProof / participants.length) * 100}%` }}
+                        <div
+                          className="bg-purple-500 h-2 rounded-full"
+                          style={{ width: `${participants.length > 0 ? (scdProof / participants.length) * 100 : 0}%` }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground w-8">{scdProof}</span>
@@ -420,7 +423,7 @@ export default function YouthEmpowermentClient() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         <TabsContent value="participants">
           <div className="space-y-6">

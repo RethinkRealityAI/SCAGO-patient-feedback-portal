@@ -96,6 +96,16 @@ export function YEPInvites() {
     try {
       const result = await sendYEPInvite(singleInvite);
 
+      // Add defensive check for undefined result
+      if (!result) {
+        toast({
+          title: 'Error',
+          description: 'Failed to send invite - no response from server',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       if (result.success) {
         toast({
           title: 'Invite Sent',
@@ -141,6 +151,16 @@ export function YEPInvites() {
     setIsSendingLink(true);
     try {
       const result = await resendYEPInvite(singleInvite.email);
+
+      // Add defensive check for undefined result
+      if (!result) {
+        toast({
+          title: 'Error',
+          description: 'Failed to send sign-in link - no response from server',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       if (result.success) {
         toast({
@@ -297,9 +317,19 @@ export function YEPInvites() {
     try {
       const result = await sendBulkYEPInvites(bulkInvites);
 
+      // Add defensive check for undefined result
+      if (!result) {
+        toast({
+          title: 'Error',
+          description: 'Failed to send bulk invites - no response from server',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       if (result.success && result.results) {
         setResults(result.results);
-        
+
         const successCount = result.results.filter(r => r.success).length;
         toast({
           title: 'Bulk Invite Complete',
