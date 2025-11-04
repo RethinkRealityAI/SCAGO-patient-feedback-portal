@@ -1,7 +1,5 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-// Prefer Gemini mapping flow first; fall back to heuristic mapping below
-import { suggestParticipantCsvMapping as geminiSuggestMapping, CsvMappingInputSchema as GeminiInputSchema } from '@/ai/flows/csv-participant-mapper-flow';
 
 // Helper function for Levenshtein distance calculation
 function levenshteinDistance(str1: string, str2: string): number {
@@ -457,29 +455,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = CsvMappingInputSchema.parse(body);
 
-    // Try Gemini flow first
-    try {
-      const geminiParsed = GeminiInputSchema.parse(parsed);
-      const aiResult = await geminiSuggestMapping(geminiParsed);
-      if (aiResult && Object.keys(aiResult.mapping || {}).length > 0) {
-        return new Response(JSON.stringify({ success: true, data: aiResult, source: 'gemini' }), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-    } catch (_) {
-      // fall through to heuristic
-    }
-
+    // Use heuristic mapping (AI flow should be called from server components/actions, not route handlers)
     const result = suggestParticipantCsvMapping(parsed);
-    return new Response(JSON.stringify({ success: true, data: result, source: 'heuristic' }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return NextResponse.json({ success: true, data: result, source: 'heuristic' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid request';
-    return new Response(JSON.stringify({ success: false, error: message }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return NextResponse.json({ success: false, error: message }, { status: 400 });
   }
 }
 

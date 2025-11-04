@@ -32,8 +32,8 @@ function initializeFirebaseAdmin(): admin.app.App {
       .replace(/^"|"$/g, '') // strip surrounding quotes if present
       .replace(/\\n/g, '\n'); // convert escaped newlines
 
-  // Prefer explicit FIREBASE_* variables
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  // Prefer explicit FIREBASE_* variables, fall back to NEXT_PUBLIC_* for projectId
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKeyEnv = process.env.FIREBASE_PRIVATE_KEY;
   const privateKeyB64 = process.env.FIREBASE_PRIVATE_KEY_BASE64;
@@ -89,9 +89,25 @@ function initializeFirebaseAdmin(): admin.app.App {
       hasServiceAccountJson: !!serviceAccountJson || !!serviceAccountB64,
       hasApplicationDefault: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
     });
-    throw new Error(
-      'Missing Firebase Admin credentials. Provide FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY (or *_BASE64), or set FIREBASE_SERVICE_ACCOUNT(_BASE64), or GOOGLE_APPLICATION_CREDENTIALS.'
-    );
+    
+    const errorMsg = [
+      '\n🔥 Firebase Admin SDK Initialization Failed',
+      '\nThe server-side Firebase Admin SDK requires private credentials to function.',
+      '\n⚠️  Missing required credentials:',
+      !clientEmail ? '   - FIREBASE_CLIENT_EMAIL' : '',
+      !privateKeyEnv && !privateKeyB64 ? '   - FIREBASE_PRIVATE_KEY (or FIREBASE_PRIVATE_KEY_BASE64)' : '',
+      '\n📋 To fix this, add Firebase Admin credentials to Netlify:',
+      '   1. Go to Firebase Console > Project Settings > Service Accounts',
+      '   2. Generate a new private key',
+      '   3. Add these environment variables to Netlify:',
+      '      - FIREBASE_PROJECT_ID="' + (projectId || 'scago-feedback') + '"',
+      '      - FIREBASE_CLIENT_EMAIL="YOUR-SERVICE-ACCOUNT@' + (projectId || 'scago-feedback') + '.iam.gserviceaccount.com"',
+      '      - FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"',
+      '\n⚠️  Note: NEXT_PUBLIC_* variables are CLIENT-SIDE credentials and cannot be used for server-side Firebase Admin SDK.',
+      ''
+    ].filter(Boolean).join('\n');
+    
+    throw new Error(errorMsg);
   } catch (error) {
     console.error('Error initializing Firebase Admin:', error);
     throw error;
