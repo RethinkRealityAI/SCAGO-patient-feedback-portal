@@ -46,7 +46,6 @@ export function docToSubmission(doc: QueryDocumentSnapshot<DocumentData> | { id:
 export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
   const submissions: FeedbackSubmission[] = [];
 
-  // Fetch from new organized structure using collectionGroup
   try {
     const submissionsCol = collectionGroup(db, 'submissions');
     const q = query(submissionsCol, orderBy('submittedAt', 'desc'));
@@ -54,22 +53,18 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
     const newSubmissions = snapshot.docs.map(docToSubmission);
     submissions.push(...newSubmissions);
   } catch (error) {
-    console.warn('Could not fetch from new submissions structure:', error);
   }
 
-  // Fetch from legacy feedback collection for backward compatibility
   try {
     const feedbackCol = collection(db, 'feedback');
     const legacyQ = query(feedbackCol, orderBy('submittedAt', 'desc'));
     const legacySnapshot = await getDocs(legacyQ);
     const legacySubmissions = legacySnapshot.docs.map(docToSubmission);
     
-    // Deduplicate: prefer new structure if ID exists in both
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
   } catch (error) {
-    console.warn('Could not fetch from legacy feedback collection:', error);
   }
 
   return submissions;
@@ -80,12 +75,10 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
  * Returns submissions with document IDs properly set
  */
 export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> {
-  // Dynamic import to prevent client bundling
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
 
-  // Fetch from new organized structure using collectionGroup
   try {
     const submissionsSnapshot = await firestore.collectionGroup('submissions').get();
     const newSubmissions = submissionsSnapshot.docs.map(doc => {
@@ -95,15 +88,13 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
         ...data,
         rating: Number(data.rating || 0),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '', // Ensure surveyId exists even if missing
+        surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
     submissions.push(...newSubmissions);
   } catch (error) {
-    console.warn('Could not fetch from new submissions structure (admin):', error);
   }
 
-  // Fetch from legacy feedback collection for backward compatibility
   try {
     const legacySnapshot = await firestore.collection('feedback').get();
     const legacySubmissions = legacySnapshot.docs.map(doc => {
@@ -113,16 +104,14 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
         ...data,
         rating: Number(data.rating || 0),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '', // Ensure surveyId exists even if missing in legacy data
+        surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
     
-    // Deduplicate: prefer new structure if ID exists in both
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
   } catch (error) {
-    console.warn('Could not fetch from legacy feedback collection (admin):', error);
   }
 
   return submissions;
@@ -141,12 +130,10 @@ export async function fetchSubmissionsForSurvey(surveyId: string): Promise<Feedb
  * Fetch submissions for a specific survey using Admin SDK
  */
 export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<FeedbackSubmission[]> {
-  // Dynamic import to prevent client bundling
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
 
-  // Fetch from new organized structure: surveys/{surveyId}/submissions
   try {
     const submissionsSnapshot = await firestore
       .collection('surveys')
@@ -160,14 +147,12 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
         ...data,
         rating: Number(data.rating || 0),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '', // Ensure surveyId exists
+        surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     }));
   } catch (error) {
-    console.warn(`Could not fetch submissions from new structure for survey ${surveyId}:`, error);
   }
 
-  // Also fetch from collectionGroup (in case surveyId wasn't set correctly in path)
   try {
     const allSubmissionsSnapshot = await firestore
       .collectionGroup('submissions')
@@ -180,7 +165,7 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
         ...data,
         rating: Number(data.rating || 0),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '', // Ensure surveyId exists
+        surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
     
@@ -188,10 +173,8 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
     const uniqueFromGroup = collectionGroupSubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueFromGroup);
   } catch (error) {
-    console.warn('Could not fetch from collectionGroup:', error);
   }
 
-  // Fetch from legacy feedback collection for backward compatibility
   try {
     const legacySnapshot = await firestore
       .collection('feedback')
@@ -204,7 +187,7 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
         ...data,
         rating: Number(data.rating || 0),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '', // Ensure surveyId exists even if missing in legacy data
+        surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
     
@@ -212,7 +195,6 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
   } catch (error) {
-    console.warn('Could not fetch from legacy feedback collection:', error);
   }
 
   return submissions;
