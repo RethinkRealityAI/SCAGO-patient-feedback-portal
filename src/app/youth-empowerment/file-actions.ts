@@ -50,51 +50,45 @@ export async function uploadProfileDocument(data: {
     const fileUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
     // Update Firestore record with file URL and metadata
-    // If documentType is provided, use specific field names for different document types
+    // Simplified: All documents go into arrays, no complex field mapping
     const updateData: any = {
       updatedAt: new Date(),
     };
 
-    if (data.documentType === 'additional') {
+    // Get current document data
+    const doc = await firestore.collection(data.collection).doc(data.recordId).get();
+    const docData = doc.data();
+
+    if (data.documentType && data.documentType !== 'additional') {
+      // Handle specific document types (health_card, photo_id, etc.) as categorized uploads
+      const existingDocuments = docData?.documents || [];
+
+      const newDocument = {
+        type: data.documentType,
+        url: fileUrl,
+        fileName: data.fileName,
+        fileType: data.fileType,
+        uploadedAt: new Date(),
+        uploadedBy: 'user', // Mark as user-uploaded (not admin)
+      };
+
+      // Remove any existing document of the same type (replace)
+      const filteredDocuments = existingDocuments.filter((d: any) => d.type !== data.documentType);
+      updateData.documents = [...filteredDocuments, newDocument];
+    } else if (data.documentType === 'additional') {
       // Handle additional documents - add to array
-      const doc = await firestore.collection(data.collection).doc(data.recordId).get();
-      const docData = doc.data();
       const existingDocuments = docData?.additionalDocuments || [];
-      
+
       const newDocument = {
         url: fileUrl,
         fileName: data.fileName,
         fileType: data.fileType,
         uploadedAt: new Date(),
       };
-      
+
       updateData.additionalDocuments = [...existingDocuments, newDocument];
-    } else if (data.documentType) {
-      // Map to specific fields based on document type
-      updateData[`${data.documentType}Url`] = fileUrl;
-      updateData[`${data.documentType}FileName`] = data.fileName;
-      updateData[`${data.documentType}FileType`] = data.fileType;
-      
-      // Set boolean flags for admin dashboard compatibility
-      if (data.collection === 'yep_participants') {
-        // Map participant document types to admin flags
-        if (data.documentType === 'health_card' || data.documentType === 'photo_id') {
-          updateData.idProvided = true; // Both health card and photo ID count as ID provided
-        } else if (data.documentType === 'consent_form') {
-          updateData.contractSigned = true; // Consent form counts as contract signed
-        }
-      } else if (data.collection === 'yep_mentors') {
-        // Map mentor document types to admin flags
-        if (data.documentType === 'police_check') {
-          updateData.vulnerableSectorCheck = true; // Police check provided
-        } else if (data.documentType === 'resume') {
-          updateData.resumeProvided = true; // Resume provided
-        } else if (data.documentType === 'references') {
-          updateData.referencesProvided = true; // References provided
-        }
-      }
     } else {
-      // Legacy: single file upload
+      // Legacy: single file upload (for backward compatibility)
       updateData.fileUrl = fileUrl;
       updateData.fileName = data.fileName;
       updateData.fileType = data.fileType;
@@ -148,45 +142,25 @@ export async function deleteProfileDocument(data: {
       updatedAt: new Date(),
     };
 
+    // Get current document data
+    const doc = await firestore.collection(data.collection).doc(data.recordId).get();
+    const docData = doc.data();
+
     if (data.documentType === 'additional') {
       // Remove document from additionalDocuments array
-      const doc = await firestore.collection(data.collection).doc(data.recordId).get();
-      const docData = doc.data();
       const existingDocuments = docData?.additionalDocuments || [];
-      
+
       updateData.additionalDocuments = existingDocuments.filter(
         (doc: { url: string }) => doc.url !== data.fileUrl
       );
     } else if (data.documentType) {
-      // Clear specific document type fields
-      updateData[`${data.documentType}Url`] = null;
-      updateData[`${data.documentType}FileName`] = null;
-      updateData[`${data.documentType}FileType`] = null;
-      
-      // Clear boolean flags for admin dashboard compatibility
-      // Note: Only clear if no other related documents exist
-      if (data.collection === 'yep_participants') {
-        if (data.documentType === 'health_card' || data.documentType === 'photo_id') {
-          // Check if other ID document exists before clearing flag
-          const doc = await firestore.collection(data.collection).doc(data.recordId).get();
-          const docData = doc.data();
-          const hasOtherIdDoc = (data.documentType === 'health_card' && docData?.photo_idUrl) ||
-                                (data.documentType === 'photo_id' && docData?.health_cardUrl);
-          if (!hasOtherIdDoc) {
-            updateData.idProvided = false;
-          }
-        } else if (data.documentType === 'consent_form') {
-          updateData.contractSigned = false;
-        }
-      } else if (data.collection === 'yep_mentors') {
-        if (data.documentType === 'police_check') {
-          updateData.vulnerableSectorCheck = false;
-        } else if (data.documentType === 'resume') {
-          updateData.resumeProvided = false;
-        } else if (data.documentType === 'references') {
-          updateData.referencesProvided = false;
-        }
-      }
+      // Remove specific document type from documents array
+      const existingDocuments = docData?.documents || [];
+
+      updateData.documents = existingDocuments.filter(
+        (doc: { type: string; url: string }) =>
+          !(doc.type === data.documentType && doc.url === data.fileUrl)
+      );
     } else {
       // Legacy: single file fields
       updateData.fileUrl = null;

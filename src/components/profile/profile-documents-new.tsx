@@ -224,42 +224,50 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
   };
 
   const getDocumentStatus = (doc: RequiredDocument): DocumentStatus => {
-    const fileField = doc.fileField || `${doc.id}Url`;
-    const fileUrl = (profile as Record<string, any>)[fileField] as string | undefined;
-    const fileName = (profile as Record<string, any>)[`${doc.id}FileName`] || 
-                     (profile as Record<string, any>)[fileField.replace('Url', 'Name')] as string | undefined;
-    
-    // Check if document was provided by admin (boolean flags)
+    // Look for document in the documents array
+    const documents = (profile as any).documents || [];
+    const userDocument = documents.find((d: any) => d.type === doc.id && d.uploadedBy === 'user');
+
+    if (userDocument) {
+      return {
+        uploaded: true,
+        fileUrl: userDocument.url,
+        fileName: userDocument.fileName || 'Document',
+        adminProvided: false,
+      };
+    }
+
+    // Check if document was provided by admin (boolean flags) - legacy support
     let adminProvided = false;
     let adminProvidedSource = '';
-    
+
     if (role === 'participant' && 'idProvided' in profile) {
       const participant = profile as YEPParticipant;
       if (doc.id === 'health_card' || doc.id === 'photo_id') {
-        adminProvided = !!participant.idProvided && !fileUrl;
+        adminProvided = !!participant.idProvided;
         adminProvidedSource = 'ID provided by admin';
       } else if (doc.id === 'consent_form') {
-        adminProvided = !!participant.contractSigned && !fileUrl;
+        adminProvided = !!participant.contractSigned;
         adminProvidedSource = 'Contract signed (admin verified)';
       }
     } else if (role === 'mentor' && 'vulnerableSectorCheck' in profile) {
       const mentor = profile as YEPMentor;
       if (doc.id === 'police_check') {
-        adminProvided = !!mentor.vulnerableSectorCheck && !fileUrl;
+        adminProvided = !!mentor.vulnerableSectorCheck;
         adminProvidedSource = 'Police check verified by admin';
       } else if (doc.id === 'resume') {
-        adminProvided = !!mentor.resumeProvided && !fileUrl;
+        adminProvided = !!mentor.resumeProvided;
         adminProvidedSource = 'Resume on file (admin)';
       } else if (doc.id === 'references') {
-        adminProvided = !!mentor.referencesProvided && !fileUrl;
+        adminProvided = !!mentor.referencesProvided;
         adminProvidedSource = 'References on file (admin)';
       }
     }
-    
+
     return {
-      uploaded: !!fileUrl || adminProvided,
-      fileUrl,
-      fileName: fileName || (adminProvided ? adminProvidedSource : 'Document'),
+      uploaded: adminProvided,
+      fileUrl: undefined,
+      fileName: adminProvided ? adminProvidedSource : 'Document',
       adminProvided,
     };
   };

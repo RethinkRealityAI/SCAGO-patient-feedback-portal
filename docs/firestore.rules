@@ -88,15 +88,13 @@ service cloud.firestore {
                          .hasOnly(['phoneNumber', 'emergencyContactRelationship', 'emergencyContactNumber',
                                    'mailingAddress', 'streetAddress', 'city', 'province', 'postalCode',
                                    'availability', 'notes',
-                                   // Legacy document fields
+                                   // Simplified document storage
+                                   'documents', 'additionalDocuments',
+                                   // Legacy document fields (for backward compatibility)
                                    'fileUrl', 'fileName', 'fileType',
-                                   // New document-specific fields
                                    'health_cardUrl', 'health_cardFileName', 'health_cardFileType',
                                    'photo_idUrl', 'photo_idFileName', 'photo_idFileType',
                                    'consent_formUrl', 'consent_formFileName', 'consent_formFileType',
-                                   // Additional documents array
-                                   'additionalDocuments',
-                                   // Boolean flags set by uploads
                                    'idProvided', 'contractSigned',
                                    // System fields
                                    'lastLoginAt', 'profileCompleted', 'updatedAt']);
@@ -118,13 +116,13 @@ service cloud.firestore {
                        // Only allow updating specific fields (including all document upload fields)
                        request.resource.data.diff(resource.data).changedKeys()
                          .hasOnly(['phone', 'availability',
-                                   // Legacy document fields
+                                   // Simplified document storage
+                                   'documents', 'additionalDocuments',
+                                   // Legacy document fields (for backward compatibility)
                                    'fileUrl', 'fileName', 'fileType',
-                                   // New document-specific fields
                                    'police_checkUrl', 'police_checkFileName', 'police_checkFileType',
                                    'resumeUrl', 'resumeFileName', 'resumeFileType',
                                    'referencesUrl', 'referencesFileName', 'referencesFileType',
-                                   // Boolean flags set by uploads
                                    'vulnerableSectorCheck', 'resumeProvided', 'referencesProvided',
                                    // System fields
                                    'lastLoginAt', 'profileCompleted', 'updatedAt']);
