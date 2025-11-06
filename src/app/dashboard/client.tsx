@@ -935,16 +935,16 @@ export default function Dashboard() {
         onRemove={removeNotification}
         onClearAll={clearAllNotifications}
       />
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid gap-6">
+      <div className="container mx-auto px-4 py-4 sm:py-8">
+        <div className="grid gap-4 sm:gap-6">
         {/* Header with Enhanced Filters */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold">
+              <h1 className="text-xl sm:text-2xl font-bold">
                 {isAllSurveysMode ? 'Survey Overview Dashboard' : isConsent ? 'Consent Form Submissions' : 'Feedback Dashboard'}
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 {isAllSurveysMode ? 'High-level insights across all survey submissions' : isConsent ? 'SCAGO Digital Consent & Information Collection' : 'Comprehensive hospital experience analytics'}
               </p>
             </div>
@@ -2024,29 +2024,30 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Survey</TableHead>
-                  {isConsent ? (
-                    <>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>City</TableHead>
-                    </>
-                  ) : (
-                    <>
-                      <TableHead>Rating</TableHead>
-                      <TableHead>Hospital</TableHead>
-                      <TableHead>Experience</TableHead>
-                    </>
-                  )}
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <CardContent className="p-0 sm:p-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Date</TableHead>
+                    <TableHead className="whitespace-nowrap">Survey</TableHead>
+                    {isConsent ? (
+                      <>
+                        <TableHead className="whitespace-nowrap">Name</TableHead>
+                        <TableHead className="whitespace-nowrap">Email</TableHead>
+                        <TableHead className="whitespace-nowrap">City</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead className="whitespace-nowrap">Rating</TableHead>
+                        <TableHead className="whitespace-nowrap">Hospital</TableHead>
+                        <TableHead className="whitespace-nowrap">Experience</TableHead>
+                      </>
+                    )}
+                    <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {paginatedSubmissions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={isConsent ? 5 : 4} className="h-64 text-center">
@@ -2133,8 +2134,9 @@ export default function Dashboard() {
                 )}
               </TableBody>
             </Table>
+            </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-white/70 via-white/60 to-blue-50/50 dark:from-gray-900/70 dark:via-gray-900/60 dark:to-indigo-950/50 backdrop-blur-2xl backdrop-saturate-150 border border-white/30 dark:border-white/20 shadow-2xl ring-1 ring-white/20">
+          <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-white/70 via-white/60 to-blue-50/50 dark:from-gray-900/70 dark:via-gray-900/60 dark:to-indigo-950/50 backdrop-blur-2xl backdrop-saturate-150 border border-white/30 dark:border-white/20 shadow-2xl ring-1 ring-white/20">
             <DialogHeader className="flex-shrink-0 border-b border-white/20 pb-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 backdrop-blur-md rounded-t-lg">
               <div className="flex items-start justify-between">
                 <div>

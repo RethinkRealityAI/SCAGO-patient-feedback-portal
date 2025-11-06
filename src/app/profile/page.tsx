@@ -293,21 +293,21 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-      <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <div className="container mx-auto py-4 sm:py-8 px-4 max-w-6xl">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <User className="h-7 w-7 text-primary" />
+              <div className="p-2 sm:p-3 bg-primary/10 rounded-lg">
+                <User className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold">
-                  {role === 'participant' 
-                    ? (profile as YEPParticipant).youthParticipant 
+                <h1 className="text-2xl sm:text-3xl font-bold break-words">
+                  {role === 'participant'
+                    ? (profile as YEPParticipant).youthParticipant
                     : (profile as YEPMentor).name}
                 </h1>
-                <p className="text-muted-foreground capitalize">{role} Profile</p>
+                <p className="text-sm sm:text-base text-muted-foreground capitalize">{role} Profile</p>
               </div>
             </div>
           </div>
@@ -324,49 +324,49 @@ export default function ProfilePage() {
         )}
 
         {/* Profile Tabs */}
-        <Tabs defaultValue={defaultTab} className="space-y-6">
-          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-7' : 'grid-cols-6'} h-auto`}>
-            <TabsTrigger value="details" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Details</span>
+        <Tabs defaultValue={defaultTab} className="space-y-4 sm:space-y-6">
+          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-4 sm:grid-cols-7' : 'grid-cols-3 sm:grid-cols-6'} h-auto gap-1`}>
+            <TabsTrigger value="details" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <User className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Details</span>
             </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Documents</span>
+            <TabsTrigger value="documents" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Documents</span>
             </TabsTrigger>
-            <TabsTrigger value="messages" className="gap-2 py-3 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Messages</span>
+            <TabsTrigger value="messages" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Messages</span>
               {notifications.unreadMessages > 0 && (
-                <Badge variant="default" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                <Badge variant="default" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] sm:relative sm:top-0 sm:right-0 sm:ml-1 sm:h-5 sm:w-5 sm:text-xs">
                   {notifications.unreadMessages > 99 ? '99+' : notifications.unreadMessages}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="meetings" className="gap-2 py-3 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Calendar className="h-4 w-4" />
-              <span className="hidden sm:inline">Meetings</span>
+            <TabsTrigger value="meetings" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 relative data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Meetings</span>
               {notifications.pendingMeetings > 0 && (
-                <Badge variant="default" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                <Badge variant="default" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] sm:relative sm:top-0 sm:right-0 sm:ml-1 sm:h-5 sm:w-5 sm:text-xs">
                   {notifications.pendingMeetings > 99 ? '99+' : notifications.pendingMeetings}
                 </Badge>
               )}
             </TabsTrigger>
             {role === 'participant' && (
-              <TabsTrigger value="workshops" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <BookOpen className="h-4 w-4" />
-                <span className="hidden sm:inline">Workshops</span>
+              <TabsTrigger value="workshops" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+                <BookOpen className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline text-xs sm:text-sm">Workshops</span>
               </TabsTrigger>
             )}
             {role === 'participant' && (
-              <TabsTrigger value="forms" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <ClipboardList className="h-4 w-4" />
-                <span className="hidden sm:inline">Forms</span>
+              <TabsTrigger value="forms" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline text-xs sm:text-sm">Forms</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="security" className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Shield className="h-4 w-4" />
-              <span className="hidden sm:inline">Security</span>
+            <TabsTrigger value="security" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Security</span>
             </TabsTrigger>
           </TabsList>
 
