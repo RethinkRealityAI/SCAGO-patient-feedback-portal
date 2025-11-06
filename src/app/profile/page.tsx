@@ -34,6 +34,7 @@ import { ProfileWorkshops } from '@/components/profile/profile-workshops';
 import { ProfileForms } from '@/components/profile/profile-forms';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
@@ -52,6 +53,38 @@ export default function ProfilePage() {
 
   const isWelcome = searchParams?.get('welcome') === 'true';
   const defaultTab = searchParams?.get('tab') || 'details';
+
+  // Calculate profile completion percentage
+  const calculateCompletion = () => {
+    if (!profile) return 0;
+
+    if (role === 'participant') {
+      const p = profile as YEPParticipant;
+      const fields = [
+        p.phoneNumber,
+        p.email,
+        p.emergencyContactRelationship,
+        p.emergencyContactNumber,
+        p.streetAddress,
+        p.city,
+        p.province,
+        p.postalCode,
+      ];
+      const completed = fields.filter(f => f && f.toString().trim()).length;
+      return Math.round((completed / fields.length) * 100);
+    } else {
+      const m = profile as YEPMentor;
+      const fields = [
+        m.email,
+        m.phone,
+        m.availability,
+      ];
+      const completed = fields.filter(f => f && f.toString().trim()).length;
+      return Math.round((completed / fields.length) * 100);
+    }
+  };
+
+  const completionPercentage = calculateCompletion();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -301,7 +334,7 @@ export default function ProfilePage() {
               <div className="p-2 sm:p-3 bg-primary/10 rounded-lg">
                 <User className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h1 className="text-2xl sm:text-3xl font-bold break-words">
                   {role === 'participant'
                     ? (profile as YEPParticipant).youthParticipant
@@ -309,6 +342,23 @@ export default function ProfilePage() {
                 </h1>
                 <p className="text-sm sm:text-base text-muted-foreground capitalize">{role} Profile</p>
               </div>
+            </div>
+            {/* Profile Completion Indicator */}
+            <div className="w-full sm:w-auto sm:min-w-[250px] mt-4 sm:mt-0">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">Profile Completion</span>
+                    <span className="text-xs sm:text-sm font-semibold text-primary">{completionPercentage}%</span>
+                  </div>
+                  <Progress value={completionPercentage} className="h-2" />
+                </div>
+              </div>
+              {completionPercentage < 100 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Complete your profile to unlock all features
+                </p>
+              )}
             </div>
           </div>
         </div>

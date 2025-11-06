@@ -88,6 +88,89 @@ export default function AdminPage() {
       {/* Quick Stats */}
       <PlatformStats />
 
+      {/* Quick Actions */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Quick Actions
+          </CardTitle>
+          <CardDescription>Common administrative tasks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => {
+                const tabsList = document.querySelector('[role="tablist"]');
+                const usersTab = tabsList?.querySelector('[value="users"]') as HTMLButtonElement;
+                usersTab?.click();
+              }}
+            >
+              <Users className="h-5 w-5" />
+              <span className="text-xs">Manage Users</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => {
+                const tabsList = document.querySelector('[role="tablist"]');
+                const yepTab = tabsList?.querySelector('[value="yep-invites"]') as HTMLButtonElement;
+                yepTab?.click();
+              }}
+            >
+              <GraduationCap className="h-5 w-5" />
+              <span className="text-xs">YEP Invites</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => {
+                const tabsList = document.querySelector('[role="tablist"]');
+                const healthTab = tabsList?.querySelector('[value="health"]') as HTMLButtonElement;
+                healthTab?.click();
+              }}
+            >
+              <Activity className="h-5 w-5" />
+              <span className="text-xs">System Health</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => {
+                const tabsList = document.querySelector('[role="tablist"]');
+                const dataTab = tabsList?.querySelector('[value="data"]') as HTMLButtonElement;
+                dataTab?.click();
+              }}
+            >
+              <Database className="h-5 w-5" />
+              <span className="text-xs">Data Export</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => {
+                const tabsList = document.querySelector('[role="tablist"]');
+                const activityTab = tabsList?.querySelector('[value="activity"]') as HTMLButtonElement;
+                activityTab?.click();
+              }}
+            >
+              <Activity className="h-5 w-5" />
+              <span className="text-xs">Activity Log</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-2 py-4"
+              onClick={() => window.location.href = '/dashboard'}
+            >
+              <Settings className="h-5 w-5" />
+              <span className="text-xs">Dashboard</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Main Content Tabs */}
       <Tabs defaultValue="users" className="space-y-4 sm:space-y-6">
         <TabsList className="grid w-full grid-cols-4 sm:grid-cols-4 lg:grid-cols-8 h-auto gap-1">

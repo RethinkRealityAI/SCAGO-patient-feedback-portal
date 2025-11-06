@@ -2025,7 +2025,106 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="p-0 sm:p-6">
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="block md:hidden">
+              {paginatedSubmissions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center space-y-4 py-8 px-4">
+                  <div className="rounded-full bg-muted p-6">
+                    <ClipboardList className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-2 text-center">
+                    <h3 className="text-lg font-semibold">No submissions found</h3>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      {activeFiltersCount > 0
+                        ? "Try adjusting your filters to see more results"
+                        : isConsent
+                          ? "Consent form submissions will appear here once participants start filling them out"
+                          : "Feedback submissions will appear here once patients start submitting their experiences"
+                      }
+                    </p>
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <Button variant="outline" onClick={clearAllFilters} className="mt-4">
+                      Clear All Filters
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 p-4">
+                  {paginatedSubmissions.map(submission => {
+                    const date = submission.submittedAt ? new Date(submission.submittedAt) : null;
+                    const dateStr = date && !isNaN(date.getTime())
+                      ? date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : 'Invalid Date';
+
+                    return (
+                      <Card key={submission.id} className="border-l-4 border-l-primary">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <Badge variant="outline" className="font-normal mb-2">
+                                {surveyTitleMap.get(submission.surveyId) || (submission.surveyId ? submission.surveyId.substring(0, 8) + '...' : 'Unknown Survey')}
+                              </Badge>
+                              <p className="text-xs text-muted-foreground">{dateStr}</p>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>
+                              View
+                            </Button>
+                          </div>
+                          {isConsent ? (
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Name:</span>
+                                <span className="font-medium">{`${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Email:</span>
+                                <span className="font-medium truncate ml-2">{(submission as any)?.email || 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">City:</span>
+                                <span className="font-medium">{(submission as any)?.city?.selection || 'N/A'}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Rating:</span>
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const rating = Number(submission.rating);
+                                    const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10;
+                                    return (
+                                      <>
+                                        <div className={`h-2 w-2 rounded-full ${
+                                          isValidRating && rating >= 8 ? 'bg-green-500' :
+                                          isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                                        }`} />
+                                        <span className="font-semibold">{isValidRating ? `${rating}/10` : 'N/A'}</span>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Hospital:</span>
+                                <span className="font-medium">{(submission as any)?.hospital || (submission as any)?.['hospital-on']?.selection || 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Experience:</span>
+                                <p className="font-medium text-xs mt-1 line-clamp-2">{submission.hospitalInteraction || 'N/A'}</p>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2134,6 +2233,7 @@ export default function Dashboard() {
                 )}
               </TableBody>
             </Table>
+            </div>
             </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-white/70 via-white/60 to-blue-50/50 dark:from-gray-900/70 dark:via-gray-900/60 dark:to-indigo-950/50 backdrop-blur-2xl backdrop-saturate-150 border border-white/30 dark:border-white/20 shadow-2xl ring-1 ring-white/20">
@@ -2643,30 +2743,50 @@ export default function Dashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => handlePageChange(currentPage - 1)}
-                  />
-                </PaginationItem>
-                {[...Array(totalPages)].map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      onClick={() => handlePageChange(i + 1)}
-                      isActive={currentPage === i + 1}
-                    >
-                      {i + 1}
-                    </PaginationLink>
+            {/* Pagination - Mobile Optimized */}
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} ({filtered.length} total submissions)
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
                   </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => handlePageChange(currentPage + 1)}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  {/* Show fewer page numbers on mobile */}
+                  <div className="hidden sm:flex">
+                    {[...Array(Math.min(5, totalPages))].map((_, i) => (
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          onClick={() => handlePageChange(i + 1)}
+                          isActive={currentPage === i + 1}
+                          className="cursor-pointer"
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                  </div>
+                  {/* Mobile: Show current page only */}
+                  <div className="flex sm:hidden">
+                    <PaginationItem>
+                      <PaginationLink isActive className="cursor-default">
+                        {currentPage}
+                      </PaginationLink>
+                    </PaginationItem>
+                  </div>
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           </CardContent>
         </Card>
         </div>
