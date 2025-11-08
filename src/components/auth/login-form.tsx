@@ -103,17 +103,35 @@ export default function LoginForm() {
         // Handle redirect URL if present
         if (redirectUrl) {
           const destination = decodeURIComponent(redirectUrl);
-          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/admin';
+          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/profile';
           console.log('[Login] Redirecting to:', safeDestination, 'from redirect parameter');
           window.location.href = safeDestination;
           return;
         }
 
-        // Redirect based on role
-        if (role === 'super-admin' || role === 'admin') {
-          console.log('[Login] Admin detected, redirecting to /admin');
-          // Use window.location for full page reload to ensure cookies are sent
+        // Get the appropriate redirect URL based on role and permissions
+        try {
+          const redirectResponse = await fetch('/api/auth/redirect-url');
+          if (redirectResponse.ok) {
+            const { redirectUrl: defaultRedirect } = await redirectResponse.json();
+            console.log('[Login] Redirecting to:', defaultRedirect, 'based on role and permissions');
+            window.location.href = defaultRedirect;
+            return;
+          }
+        } catch (error) {
+          console.error('[Login] Error getting redirect URL:', error);
+        }
+
+        // Fallback redirect based on role
+        if (role === 'super-admin') {
+          console.log('[Login] Super admin detected, redirecting to /admin');
           window.location.href = '/admin';
+          return;
+        }
+
+        if (role === 'admin') {
+          console.log('[Login] Admin detected, redirecting to /profile (fallback)');
+          window.location.href = '/profile';
           return;
         }
 
@@ -123,9 +141,9 @@ export default function LoginForm() {
           return;
         }
 
-        // Fallback (should never reach here with proper role validation)
+        // Final fallback
         console.warn('[Login] Unexpected role, redirecting to profile');
-        router.replace('/profile');
+        window.location.href = '/profile';
         return;
       } else {
         setLoading(false);
