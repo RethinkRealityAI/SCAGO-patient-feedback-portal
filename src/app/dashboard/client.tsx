@@ -928,6 +928,19 @@ export default function Dashboard() {
     )
   }
 
+  // Compute dashboard title and description based on mode
+  const dashboardTitle = isAllSurveysMode
+    ? 'Survey Overview Dashboard'
+    : isConsent
+      ? 'Consent Form Submissions'
+      : 'Feedback Dashboard';
+
+  const dashboardDescription = isAllSurveysMode
+    ? 'High-level insights across all survey submissions'
+    : isConsent
+      ? 'SCAGO Digital Consent & Information Collection'
+      : 'Comprehensive hospital experience analytics';
+
   return (
     <>
       <NotificationSystem
@@ -942,10 +955,10 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">
-                {isAllSurveysMode ? 'Survey Overview Dashboard' : isConsent ? 'Consent Form Submissions' : 'Feedback Dashboard'}
+                {dashboardTitle}
               </h1>
               <p className="text-muted-foreground">
-                {isAllSurveysMode ? 'High-level insights across all survey submissions' : isConsent ? 'SCAGO Digital Consent & Information Collection' : 'Comprehensive hospital experience analytics'}
+                {dashboardDescription}
               </p>
             </div>
             <div className="flex items-center gap-3">
