@@ -2247,7 +2247,6 @@ export default function Dashboard() {
               </TableBody>
             </Table>
             </div>
-            </div>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-white/70 via-white/60 to-blue-50/50 dark:from-gray-900/70 dark:via-gray-900/60 dark:to-indigo-950/50 backdrop-blur-2xl backdrop-saturate-150 border border-white/30 dark:border-white/20 shadow-2xl ring-1 ring-white/20">
             <DialogHeader className="flex-shrink-0 border-b border-white/20 pb-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 backdrop-blur-md rounded-t-lg">
@@ -2756,50 +2755,6 @@ export default function Dashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-            {/* Pagination - Mobile Optimized */}
-            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages} ({filtered.length} total submissions)
-              </div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                  {/* Show fewer page numbers on mobile */}
-                  <div className="hidden sm:flex">
-                    {[...Array(Math.min(5, totalPages))].map((_, i) => (
-                      <PaginationItem key={i}>
-                        <PaginationLink
-                          onClick={() => handlePageChange(i + 1)}
-                          isActive={currentPage === i + 1}
-                          className="cursor-pointer"
-                        >
-                          {i + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                  </div>
-                  {/* Mobile: Show current page only */}
-                  <div className="flex sm:hidden">
-                    <PaginationItem>
-                      <PaginationLink isActive className="cursor-default">
-                        {currentPage}
-                      </PaginationLink>
-                    </PaginationItem>
-                  </div>
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
           </CardContent>
         </Card>
         </div>
