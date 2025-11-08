@@ -928,6 +928,19 @@ export default function Dashboard() {
     )
   }
 
+  // Compute dashboard title and description based on mode
+  const dashboardTitle = isAllSurveysMode
+    ? 'Survey Overview Dashboard'
+    : isConsent
+      ? 'Consent Form Submissions'
+      : 'Feedback Dashboard';
+
+  const dashboardDescription = isAllSurveysMode
+    ? 'High-level insights across all survey submissions'
+    : isConsent
+      ? 'SCAGO Digital Consent & Information Collection'
+      : 'Comprehensive hospital experience analytics';
+
   return (
     <>
       <NotificationSystem

@@ -247,4 +247,41 @@ export async function hasPagePermission(email: string, permissionKey: PagePermis
   }
 }
 
+/**
+ * Get all accessible pages for a user based on their role and permissions.
+ * Returns an array of PagePermission objects they can access.
+ */
+export async function getAccessiblePages(email: string, role: AppRole): Promise<import('@/lib/permissions').PagePermission[]> {
+  const { PAGE_PERMISSIONS } = await import('@/lib/permissions');
+
+  // Participants and mentors can only access their profile
+  if (role === 'participant' || role === 'mentor') {
+    return [];
+  }
+
+  // Super admins have access to all pages
+  if (role === 'super-admin') {
+    return PAGE_PERMISSIONS;
+  }
+
+  // Regular admins: check their specific permissions
+  if (role === 'admin') {
+    const { getAdminFirestore } = await getFirebaseAdmin();
+    const firestore = getAdminFirestore();
+    try {
+      const permsDoc = await firestore.collection('config').doc('page_permissions').get();
+      const routesByEmail = permsDoc.exists ? ((permsDoc.data() as any)?.routesByEmail || {}) : {};
+      const allowedPermissions: string[] = routesByEmail[email.toLowerCase()] || [];
+
+      // Filter PAGE_PERMISSIONS to only those the admin has
+      return PAGE_PERMISSIONS.filter(p => allowedPermissions.includes(p.key));
+    } catch (err) {
+      console.error('[ServerAuth] Error getting accessible pages:', err);
+      return [];
+    }
+  }
+
+  return [];
+}
+
 
