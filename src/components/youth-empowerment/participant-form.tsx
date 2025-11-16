@@ -58,8 +58,6 @@ const participantFormSchema = z.object({
   proofOfAffiliationWithSCD: z.boolean().optional().default(false),
   scagoCounterpart: z.string().optional().or(z.literal('')),
   dob: z.string().optional().or(z.literal('')),
-  file: z.string().optional().or(z.literal('')),
-  fileUpload: z.instanceof(File).optional(),
   // Additional legacy fields
   approved: z.boolean().optional().default(false),
   canadianStatusOther: z.string().optional().or(z.literal('')),
@@ -88,6 +86,19 @@ interface ParticipantFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+// Helper function to calculate age from date of birth
+function calculateAge(dob: string): number | undefined {
+  if (!dob) return undefined;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
 }
 
 export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: ParticipantFormProps) {
@@ -154,7 +165,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   useEffect(() => {
     const resolveMentorName = async (assignedMentor: string | undefined) => {
       if (!assignedMentor) return '';
-      
+
         // If it looks like a Firestore ID (20 chars alphanumeric), resolve it to name
         if (assignedMentor && looksLikeFirestoreId(assignedMentor)) {
         const result = await getMentorByNameOrId(assignedMentor);
@@ -162,7 +173,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           return result.mentor.name;
         }
       }
-      
+
       // Otherwise assume it's already a name
       return assignedMentor;
     };
@@ -171,7 +182,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       if (participant) {
         // Resolve mentor ID to name if needed
         const mentorName = await resolveMentorName(participant.assignedMentor);
-        
+
         form.reset({
           youthParticipant: participant.youthParticipant || '',
           email: participant.email || '',
@@ -289,6 +300,17 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
     }
   };
 
+  // Watch DOB and auto-calculate age
+  const watchDOB = form.watch('dob');
+  useEffect(() => {
+    if (watchDOB) {
+      const calculatedAge = calculateAge(watchDOB);
+      if (calculatedAge !== undefined && calculatedAge !== form.getValues('age')) {
+        form.setValue('age', calculatedAge);
+      }
+    }
+  }, [watchDOB, form]);
+
   const onSubmit = async (data: ParticipantFormData) => {
     setIsLoading(true);
     try {
@@ -322,7 +344,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           mentorName = mentorResult.mentor!.name;
         }
       }
-      
+
       // Clean the data to remove undefined values
       const formData: any = {
         youthParticipant: data.youthParticipant,
@@ -355,6 +377,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         interviewed: data.interviewed || false,
         interviewNotes: data.interviewNotes || '',
         recruited: data.recruited || false,
+        streetAddress: data.streetAddress || '',
+        city: data.city || '',
+        province: data.province || '',
+        postalCode: data.postalCode || '',
       };
 
       // Only include SIN if provided and not empty
@@ -364,7 +390,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
       // Only include file if a new one is uploaded
       if (uploadedFile) {
-        formData.file = uploadedFile;
+        formData.fileUpload = uploadedFile;
       }
 
       let result;
@@ -377,7 +403,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       if (result.success) {
         toast({
           title: participant ? 'Participant Updated' : 'Participant Created',
-          description: participant 
+          description: participant
             ? 'Participant information has been updated successfully.'
             : 'New participant has been added to the system.',
         });
@@ -415,7 +441,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
             {participant ? 'Edit Participant' : 'Add New Participant'}
           </DialogTitle>
           <DialogDescription>
-            {participant 
+            {participant
               ? 'Update participant information and documents.'
               : 'Add a new youth participant to the program.'
             }
@@ -424,11 +450,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 min-h-0">
-            {/* Basic Information - Full Width */}
+            {/* Basic Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Basic Information</CardTitle>
-                <CardDescription>Personal details and contact information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                   <FormField
@@ -436,7 +461,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     name="youthParticipant"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Youth Participant Name *</FormLabel>
+                        <FormLabel>Full Name *</FormLabel>
                         <FormControl>
                           <Input {...field} placeholder="Enter full name" />
                         </FormControl>
@@ -445,118 +470,52 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email Address *</FormLabel>
-                        <FormControl>
-                          <Input type="email" {...field} placeholder="participant@example.com" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email *</FormLabel>
+                          <FormControl>
+                            <Input type="email" {...field} placeholder="participant@example.com" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="phoneNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <Input type="tel" {...field} placeholder="(555) 123-4567" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <FormField
                     control={form.control}
                     name="etransferEmailAddress"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>E-transfer Email Address</FormLabel>
+                        <FormLabel>E-transfer Email</FormLabel>
                         <FormControl>
                           <Input type="email" {...field} placeholder="etransfer@example.com" />
                         </FormControl>
                         <FormDescription>
-                          Email address for receiving e-transfers (optional)
+                          For receiving payments
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="phoneNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Number</FormLabel>
-                        <FormControl>
-                          <Input type="tel" {...field} placeholder="(555) 123-4567" />
-                        </FormControl>
-                        <FormDescription>
-                          Contact phone number (optional)
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Address Fields */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-medium text-gray-900">Mailing Address</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="streetAddress"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Street Address</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="123 Main Street" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="city"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>City</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="Toronto" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="province"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Province</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="Ontario" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="postalCode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Postal Code</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="M5V 3A8" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <FormDescription>
-                      Complete mailing address (all fields optional)
-                    </FormDescription>
-                  </div>
 
                   <FormField
                     control={form.control}
@@ -583,21 +542,83 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="dob"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Date of Birth *</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Address Fields */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Mailing Address</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="streetAddress"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>Street Address</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="123 Main Street" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="city"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>City</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Toronto" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="province"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Province</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Ontario" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="postalCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Postal Code</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="M5V 3A8" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="dob"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Date of Birth *</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <FormField
                       control={form.control}
                       name="age"
@@ -605,10 +626,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                         <FormItem>
                           <FormLabel>Age</FormLabel>
                           <FormControl>
-                            <Input 
-                              type="number" 
-                              {...field} 
-                              value={field.value || ''} 
+                            <Input
+                              type="number"
+                              {...field}
+                              value={field.value || ''}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 if (value === '') {
@@ -618,23 +639,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                   field.onChange(isNaN(numValue) ? undefined : numValue);
                                 }
                               }}
-                              placeholder="Enter age"
+                              placeholder="Auto-calculated"
+                              disabled
                             />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="location"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Location</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="City, Province" />
-                          </FormControl>
+                          <FormDescription>
+                            Auto-calculated from date of birth
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -646,13 +657,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     name="affiliationWithSCD"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Affiliation with SCD</FormLabel>
+                        <FormLabel>SCD Affiliation</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., Living with SCD, Advocate, Sibling of someone with SCD" />
+                          <Input {...field} placeholder="e.g., Living with SCD, Advocate, Family member" />
                         </FormControl>
-                        <FormDescription>
-                          Connection to Sickle Cell Disease
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -662,11 +670,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
 
             {/* Status & Documents and Program Details - Side by Side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Status and Documents - Compact */}
+                {/* Status and Documents */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Status & Documents</CardTitle>
-                    <CardDescription>Program status and required documents</CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="grid grid-cols-2 gap-3">
@@ -681,9 +688,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="text-sm">Approved</FormLabel>
-                            </div>
+                            <FormLabel className="text-sm font-normal">Approved</FormLabel>
                           </FormItem>
                         )}
                       />
@@ -699,9 +704,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="text-sm">Contract Signed</FormLabel>
-                            </div>
+                            <FormLabel className="text-sm font-normal">Contract Signed</FormLabel>
                           </FormItem>
                         )}
                       />
@@ -717,9 +720,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="text-sm">Signed Syllabus</FormLabel>
-                            </div>
+                            <FormLabel className="text-sm font-normal">Signed Syllabus</FormLabel>
                           </FormItem>
                         )}
                       />
@@ -735,9 +736,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="text-sm">ID Provided</FormLabel>
-                            </div>
+                            <FormLabel className="text-sm font-normal">ID Provided</FormLabel>
                           </FormItem>
                         )}
                       />
@@ -753,9 +752,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                                 onCheckedChange={field.onChange}
                               />
                             </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="text-sm">SCD Affiliation</FormLabel>
-                            </div>
+                            <FormLabel className="text-sm font-normal">SCD Affiliation Proof</FormLabel>
                           </FormItem>
                         )}
                       />
@@ -763,11 +760,10 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                   </CardContent>
                 </Card>
 
-                {/* Program Details - Compact */}
+                {/* Program Details */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Program Details</CardTitle>
-                    <CardDescription>Assignment and availability information</CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-4">
                     <FormField
@@ -783,64 +779,56 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                               disabled={false}
                             />
                           </FormControl>
-                          <FormDescription>
-                            Select days and time slots when the participant is available
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="assignedMentor"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Assigned Mentor</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select mentor" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {mentors.length === 0 ? (
-                                  <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                                    No mentors available. Please add mentors first.
-                                  </div>
-                                ) : (
-                                  mentors.map((mentor) => (
-                                    <SelectItem key={mentor.id} value={mentor.name}>
-                                      {mentor.name}
-                                      {mentor.title && ` - ${mentor.title}`}
-                                    </SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="scagoCounterpart"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>SCAGO Counterpart</FormLabel>
+                    <FormField
+                      control={form.control}
+                      name="assignedMentor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assigned Mentor</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
-                              <Input {...field} placeholder="Staff member name" />
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select mentor" />
+                              </SelectTrigger>
                             </FormControl>
-                            <FormDescription>
-                              SCAGO staff member assigned to this participant
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                            <SelectContent>
+                              {mentors.length === 0 ? (
+                                <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                                  No mentors available
+                                </div>
+                              ) : (
+                                mentors.map((mentor) => (
+                                  <SelectItem key={mentor.id} value={mentor.name}>
+                                    {mentor.name}
+                                    {mentor.title && ` - ${mentor.title}`}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="scagoCounterpart"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>SCAGO Counterpart</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Staff member name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -851,7 +839,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Legal & Security</CardTitle>
-                  <CardDescription>Legal status and sensitive information</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
@@ -878,18 +865,18 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                       </FormItem>
                     )}
                   />
-                  
+
                   {form.watch('canadianStatus') === 'Other' && (
                     <FormField
                       control={form.control}
                       name="canadianStatusOther"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Please specify your status</FormLabel>
+                          <FormLabel>Please specify *</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
-                              placeholder="Please specify your Canadian status"
+                              placeholder="Specify your Canadian status"
                             />
                           </FormControl>
                           <FormMessage />
@@ -907,8 +894,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                         {participant?.sinLast4 && (
                           <Alert className="mb-2">
                             <AlertDescription>
-                              A SIN was previously provided (ending in: ••••{participant.sinLast4}). 
-                              Re-enter the full SIN to update it, or leave blank to keep the existing one.
+                              SIN on file ending in: ••••{participant.sinLast4}
                             </AlertDescription>
                           </Alert>
                         )}
@@ -917,13 +903,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                             value={participant ? '' : (field.value || '')}
                             onChange={field.onChange}
                             disabled={!form.watch('idProvided')}
-                            placeholder={participant?.sinLast4 ? "Re-enter SIN to update, or leave blank" : "Enter SIN (will be securely hashed)"}
+                            placeholder={participant?.sinLast4 ? "Re-enter to update" : "Enter SIN"}
                             showValidation={true}
                             isEditing={!!participant}
                           />
                         </FormControl>
                         <FormDescription>
-                          Only the last 4 digits will be stored for reference. Enable "ID Provided" to enter SIN.
+                          Enable "ID Provided" to enter SIN
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -932,18 +918,17 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 </CardContent>
               </Card>
 
-              {/* Document Upload - Now next to Legal & Security */}
+              {/* Document Upload */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Document Upload</CardTitle>
-                  <CardDescription>Upload supporting documents</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {existingFileUrl && !uploadedFile && (
                     <Alert>
                       <FileText className="h-4 w-4" />
                       <AlertDescription className="flex items-center justify-between">
-                        <span>Existing file attached</span>
+                        <span>File attached</span>
                         <div className="flex gap-2">
                           <Button
                             type="button"
@@ -968,52 +953,36 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     </Alert>
                   )}
 
-                  <FormField
-                    control={form.control}
-                    name="file"
-                    render={({ field: { onChange, ...field } }) => (
-                      <FormItem>
-                        <FormLabel>Upload File</FormLabel>
-                        <FormControl>
-                          <div className="flex items-center gap-4">
-                            <Input
-                              type="file"
-                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleFileChange(e);
-                                  onChange(file);
-                                }
-                              }}
-                              className="max-w-sm"
-                            />
-                            {uploadedFile && (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Upload className="h-4 w-4" />
-                                {uploadedFile.name}
-                              </div>
-                            )}
-                          </div>
-                        </FormControl>
-                        <FormDescription>
-                          Upload supporting documents (PDF, DOC, images)
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="space-y-2">
+                    <Label>Upload File</Label>
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        onChange={handleFileChange}
+                        className="max-w-sm"
+                      />
+                      {uploadedFile && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Upload className="h-4 w-4" />
+                          {uploadedFile.name}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Upload supporting documents (PDF, DOC, images)
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Project Information and Program Status & Notes - Side by Side */}
+            {/* Project Information and Program Status - Side by Side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Project Information */}
               <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Project Information</CardTitle>
-                <CardDescription>Youth proposal and project details</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -1021,68 +990,56 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                   name="youthProposal"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Youth Proposal</FormLabel>
+                      <FormLabel>Proposal</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          {...field} 
-                          placeholder="Describe the youth's project proposal..."
+                        <Textarea
+                          {...field}
+                          placeholder="Describe the project proposal..."
                           rows={4}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Detailed description of the proposed project
-                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="projectCategory"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Project Category</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="e.g., Advocacy, Education, Community Engagement" />
-                        </FormControl>
-                        <FormDescription>
-                          Type of project or initiative
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="projectCategory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="e.g., Advocacy, Education" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="duties"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duties/Responsibilities</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} placeholder="Describe specific duties and responsibilities" rows={3} />
-                        </FormControl>
-                        <FormDescription>
-                          Specific duties and responsibilities
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="duties"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duties</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} placeholder="Specific responsibilities" rows={3} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
 
               {/* Program Status & Notes */}
               <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Program Status & Notes</CardTitle>
-                <CardDescription>Recruitment status and additional notes</CardDescription>
+                <CardTitle className="text-lg">Status & Notes</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="interviewed"
@@ -1094,12 +1051,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                             onCheckedChange={field.onChange}
                           />
                         </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Interviewed</FormLabel>
-                          <FormDescription>
-                            Has been interviewed
-                          </FormDescription>
-                        </div>
+                        <FormLabel className="text-sm font-normal">Interviewed</FormLabel>
                       </FormItem>
                     )}
                   />
@@ -1115,33 +1067,11 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                             onCheckedChange={field.onChange}
                           />
                         </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Recruited</FormLabel>
-                          <FormDescription>
-                            Successfully recruited
-                          </FormDescription>
-                        </div>
+                        <FormLabel className="text-sm font-normal">Recruited</FormLabel>
                       </FormItem>
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="nextSteps"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Next Steps</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Next steps or follow-up actions" />
-                      </FormControl>
-                      <FormDescription>
-                        Planned next steps or follow-up actions
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <FormField
                   control={form.control}
@@ -1150,15 +1080,26 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     <FormItem>
                       <FormLabel>Interview Notes</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          {...field} 
+                        <Textarea
+                          {...field}
                           placeholder="Notes from interviews or meetings"
                           rows={3}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Notes from interviews or meetings
-                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nextSteps"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Next Steps</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Follow-up actions" />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1171,15 +1112,12 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                     <FormItem>
                       <FormLabel>General Notes</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          {...field} 
-                          placeholder="Additional notes or comments"
+                        <Textarea
+                          {...field}
+                          placeholder="Additional comments"
                           rows={3}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Additional notes or comments
-                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
