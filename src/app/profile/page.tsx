@@ -375,7 +375,7 @@ export default function ProfilePage() {
 
         {/* Profile Tabs */}
         <Tabs defaultValue={defaultTab} className="space-y-4 sm:space-y-6">
-          <TabsList className={`grid w-full ${role === 'participant' ? 'grid-cols-4 sm:grid-cols-7' : 'grid-cols-3 sm:grid-cols-6'} h-auto gap-1`}>
+          <TabsList className={`grid w-full grid-cols-4 sm:grid-cols-7 h-auto gap-1`}>
             <TabsTrigger value="details" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
               <User className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="hidden sm:inline text-xs sm:text-sm">Details</span>
@@ -408,12 +408,10 @@ export default function ProfilePage() {
                 <span className="hidden sm:inline text-xs sm:text-sm">Workshops</span>
               </TabsTrigger>
             )}
-            {role === 'participant' && (
-              <TabsTrigger value="forms" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
-                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline text-xs sm:text-sm">Forms</span>
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="forms" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
+              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline text-xs sm:text-sm">Forms</span>
+            </TabsTrigger>
             <TabsTrigger value="security" className="gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground min-h-[44px]">
               <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="hidden sm:inline text-xs sm:text-sm">Security</span>
@@ -458,14 +456,12 @@ export default function ProfilePage() {
             </TabsContent>
           )}
 
-          {role === 'participant' && (
-            <TabsContent value="forms" className="space-y-6">
-              <ProfileForms
-                profile={profile}
-                role={role}
-              />
-            </TabsContent>
-          )}
+          <TabsContent value="forms" className="space-y-6">
+            <ProfileForms
+              profile={profile}
+              role={role}
+            />
+          </TabsContent>
 
           <TabsContent value="security" className="space-y-6">
             <ProfileSecurity user={user} profile={profile} />

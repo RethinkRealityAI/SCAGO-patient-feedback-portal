@@ -93,6 +93,7 @@ export interface YEPFormTemplate {
   isTemplate: boolean;
   isActive: boolean;
   showInParticipantProfile?: boolean; // Show this form in participant profile Forms tab
+  showInMentorProfile?: boolean; // Show this form in mentor profile Forms tab
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -189,6 +190,7 @@ export const yepFormTemplateSchema = z.object({
   isTemplate: z.boolean().default(true),
   isActive: z.boolean().default(true),
   showInParticipantProfile: z.boolean().default(false).optional(),
+  showInMentorProfile: z.boolean().default(false).optional(),
 });
 
 export const yepFormSubmissionSchema = z.object({
