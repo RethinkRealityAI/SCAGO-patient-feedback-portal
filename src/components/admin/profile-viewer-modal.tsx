@@ -33,6 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 import { ParticipantWorkshops } from '@/components/youth-empowerment/participant-workshops';
+import { ProfileForms } from '@/components/profile/profile-forms';
 
 interface ProfileViewerModalProps {
   open: boolean;
@@ -146,7 +147,7 @@ export function ProfileViewerModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="documents">
               Documents
@@ -157,6 +158,7 @@ export function ProfileViewerModal({
               )}
             </TabsTrigger>
             <TabsTrigger value="workshops">Workshops</TabsTrigger>
+            <TabsTrigger value="forms">Forms</TabsTrigger>
             <TabsTrigger value="status">Status</TabsTrigger>
           </TabsList>
 
@@ -426,6 +428,16 @@ export function ProfileViewerModal({
                   <p className="text-muted-foreground">Workshop attendance is only available for participants</p>
                 </CardContent>
               </Card>
+            )}
+          </TabsContent>
+
+          {/* Forms Tab */}
+          <TabsContent value="forms" className="mt-4">
+            {role === 'participant' && (
+              <ProfileForms profile={profile as YEPParticipant} role="participant" />
+            )}
+            {role === 'mentor' && (
+              <ProfileForms profile={profile as YEPMentor} role="mentor" />
             )}
           </TabsContent>
 
