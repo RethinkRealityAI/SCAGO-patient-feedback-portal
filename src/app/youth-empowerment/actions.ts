@@ -263,8 +263,27 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       const fileRef = ref(storage, `yep-files/${Date.now()}-${validatedData.fileUpload.name}`);
       const snapshot = await uploadBytes(fileRef, validatedData.fileUpload);
       fileUrl = await getDownloadURL(snapshot.ref);
-      fileName = validatedData.fileUpload.name;
+      // Use custom fileName if provided, otherwise use the uploaded file name
+      fileName = validatedData.fileName || validatedData.fileUpload.name;
       fileType = validatedData.fileUpload.type;
+    }
+
+    // Handle additional document uploads
+    let additionalDocuments: any[] = [];
+    if (validatedData.additionalFileUploads && Array.isArray(validatedData.additionalFileUploads)) {
+      additionalDocuments = await Promise.all(
+        validatedData.additionalFileUploads.map(async (fileData: any) => {
+          const fileRef = ref(storage, `yep-files/${Date.now()}-${Math.random()}-${fileData.file.name}`);
+          const snapshot = await uploadBytes(fileRef, fileData.file);
+          const url = await getDownloadURL(snapshot.ref);
+          return {
+            url,
+            fileName: fileData.fileName || fileData.file.name,
+            fileType: fileData.file.type,
+            uploadedAt: new Date().toISOString(),
+          };
+        })
+      );
     }
 
     const participantData: any = {
@@ -303,6 +322,7 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       fileUrl: fileUrl || '',
       fileName: fileName || '',
       fileType: fileType || '',
+      additionalDocuments: additionalDocuments,
       // Additional legacy fields
       approved: validatedData.approved ?? false,
       canadianStatusOther: validatedData.canadianStatusOther || '',
@@ -417,8 +437,36 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
       const fileRef = ref(storage, `yep-files/${Date.now()}-${data.fileUpload.name}`);
       const snapshot = await uploadBytes(fileRef, data.fileUpload);
       updateData.fileUrl = await getDownloadURL(snapshot.ref);
-      updateData.fileName = data.fileUpload.name;
+      // Use custom fileName if provided, otherwise use the uploaded file name
+      updateData.fileName = data.fileName || data.fileUpload.name;
       updateData.fileType = data.fileUpload.type;
+    } else if (data.fileName && !data.fileUpload) {
+      // Just updating the filename without re-uploading
+      updateData.fileName = data.fileName;
+    }
+
+    // Handle additional document uploads
+    if (data.additionalFileUploads && Array.isArray(data.additionalFileUploads)) {
+      const uploadedDocs = await Promise.all(
+        data.additionalFileUploads.map(async (fileData: any) => {
+          const fileRef = ref(storage, `yep-files/${Date.now()}-${Math.random()}-${fileData.file.name}`);
+          const snapshot = await uploadBytes(fileRef, fileData.file);
+          const url = await getDownloadURL(snapshot.ref);
+          return {
+            url,
+            fileName: fileData.fileName || fileData.file.name,
+            fileType: fileData.file.type,
+            uploadedAt: new Date().toISOString(),
+          };
+        })
+      );
+
+      // Merge with existing additional documents
+      const existingDocs = data.existingAdditionalDocuments || [];
+      updateData.additionalDocuments = [...existingDocs, ...uploadedDocs];
+    } else if (data.existingAdditionalDocuments) {
+      // Just update existing documents (may have renamed files)
+      updateData.additionalDocuments = data.existingAdditionalDocuments;
     }
 
     await updateDoc(doc(db, 'yep_participants', id), updateData);
