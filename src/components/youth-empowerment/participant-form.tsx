@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Upload, FileText, Eye, Download } from 'lucide-react';
+import { Loader2, Upload, FileText, Eye, Download, X, Edit2, Save, File, Image, FileCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createParticipant, updateParticipant, getMentors } from '@/app/youth-empowerment/actions';
 import { getMentorByNameOrId } from '@/app/youth-empowerment/relationship-actions';
@@ -101,16 +101,34 @@ function calculateAge(dob: string): number | undefined {
   return age;
 }
 
+// Helper to get file icon based on type
+function getFileIcon(fileName: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
+    return <Image className="h-4 w-4" />;
+  }
+  if (['pdf'].includes(ext || '')) {
+    return <FileText className="h-4 w-4" />;
+  }
+  if (['doc', 'docx'].includes(ext || '')) {
+    return <FileCode className="h-4 w-4" />;
+  }
+  return <File className="h-4 w-4" />;
+}
+
 export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: ParticipantFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [mentors, setMentors] = useState<YEPMentor[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
+  const [existingFileName, setExistingFileName] = useState<string | null>(null);
+  const [isEditingFileName, setIsEditingFileName] = useState(false);
+  const [customFileName, setCustomFileName] = useState('');
   const { toast } = useToast();
 
   const form = useForm<ParticipantFormData>({
     resolver: zodResolver(participantFormSchema),
-    mode: 'onSubmit', // Only validate on submit, not on every change
+    mode: 'onSubmit',
     defaultValues: {
       youthParticipant: participant?.youthParticipant || '',
       email: participant?.email || '',
@@ -130,12 +148,11 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       idProvided: participant?.idProvided || false,
       canadianStatus: participant?.canadianStatus || 'Canadian Citizen',
       canadianStatusOther: participant?.canadianStatusOther || '',
-      sin: '', // Never pre-fill SIN for security
+      sin: '',
       youthProposal: participant?.youthProposal || '',
       proofOfAffiliationWithSCD: participant?.proofOfAffiliationWithSCD || false,
       scagoCounterpart: participant?.scagoCounterpart || '',
       dob: participant?.dob || '',
-      // New fields
       age: participant?.age || undefined,
       citizenshipStatus: participant?.citizenshipStatus || '',
       location: participant?.location || '',
@@ -155,32 +172,32 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       loadMentors();
       if (participant?.fileUrl) {
         setExistingFileUrl(participant.fileUrl);
+        setExistingFileName(participant.fileName || 'Uploaded Document');
+        setCustomFileName(participant.fileName || 'Uploaded Document');
       } else {
         setExistingFileUrl(null);
+        setExistingFileName(null);
+        setCustomFileName('');
       }
     }
   }, [isOpen, participant]);
 
-  // Reset form when participant changes
   useEffect(() => {
     const resolveMentorName = async (assignedMentor: string | undefined) => {
       if (!assignedMentor) return '';
 
-        // If it looks like a Firestore ID (20 chars alphanumeric), resolve it to name
-        if (assignedMentor && looksLikeFirestoreId(assignedMentor)) {
+      if (assignedMentor && looksLikeFirestoreId(assignedMentor)) {
         const result = await getMentorByNameOrId(assignedMentor);
         if (result.success && result.mentor) {
           return result.mentor.name;
         }
       }
 
-      // Otherwise assume it's already a name
       return assignedMentor;
     };
 
     const initializeForm = async () => {
       if (participant) {
-        // Resolve mentor ID to name if needed
         const mentorName = await resolveMentorName(participant.assignedMentor);
 
         form.reset({
@@ -202,12 +219,11 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           idProvided: participant.idProvided || false,
           canadianStatus: participant.canadianStatus || 'Canadian Citizen',
           canadianStatusOther: participant.canadianStatusOther || '',
-          sin: '', // Never pre-fill SIN for security - always empty when editing
+          sin: '',
           youthProposal: participant.youthProposal || '',
           proofOfAffiliationWithSCD: participant.proofOfAffiliationWithSCD || false,
           scagoCounterpart: participant.scagoCounterpart || '',
           dob: participant.dob || '',
-          // New fields
           age: participant.age || undefined,
           citizenshipStatus: participant.citizenshipStatus || '',
           location: participant.location || '',
@@ -220,15 +236,13 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           interviewNotes: participant.interviewNotes || '',
           recruited: participant.recruited || false,
         });
-        // Explicitly clear the SIN field to ensure it's completely empty
         form.setValue('sin', '');
-        // Clear any validation errors for SIN field
         form.clearErrors('sin');
-        // Reset file states
         setUploadedFile(null);
         setExistingFileUrl(participant.fileUrl || null);
+        setExistingFileName(participant.fileName || null);
+        setCustomFileName(participant.fileName || '');
       } else {
-        // Reset to default values for new participant
         form.reset({
           youthParticipant: '',
           email: '',
@@ -253,7 +267,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           proofOfAffiliationWithSCD: false,
           scagoCounterpart: '',
           dob: '',
-          // New fields
           age: undefined,
           citizenshipStatus: '',
           location: '',
@@ -266,16 +279,16 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           interviewNotes: '',
           recruited: false,
         });
-        // Reset file states for new participant
         setUploadedFile(null);
         setExistingFileUrl(null);
-        // Clear any validation errors for SIN field
+        setExistingFileName(null);
+        setCustomFileName('');
         form.clearErrors('sin');
       }
     };
 
     initializeForm();
-  }, [participant?.id, form]); // Only depend on participant ID, not the entire participant object
+  }, [participant?.id, form]);
 
   const loadMentors = async () => {
     try {
@@ -289,14 +302,46 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validate file size (10MB max)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File Too Large',
+          description: 'Maximum file size is 10MB',
+          variant: 'destructive',
+        });
+        event.target.value = '';
+        return;
+      }
       setUploadedFile(file);
-      setExistingFileUrl(null); // Clear existing file when new one is selected
+      setExistingFileUrl(null);
+      setCustomFileName(file.name);
     }
   };
 
-  const handleFileDownload = () => {
+  const handleFileView = () => {
     if (existingFileUrl) {
       window.open(existingFileUrl, '_blank');
+    }
+  };
+
+  const handleFileRemove = () => {
+    setUploadedFile(null);
+    setExistingFileUrl(null);
+    setExistingFileName(null);
+    setCustomFileName('');
+    // Reset the file input
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleFileNameSave = () => {
+    if (customFileName.trim()) {
+      setExistingFileName(customFileName);
+      setIsEditingFileName(false);
+      toast({
+        title: 'Filename Updated',
+        description: 'The filename will be saved when you submit the form.',
+      });
     }
   };
 
@@ -314,15 +359,12 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   const onSubmit = async (data: ParticipantFormData) => {
     setIsLoading(true);
     try {
-        // Resolve mentor ID to name if needed (for backward compatibility)
-        let mentorName = data.assignedMentor || '';
-        if (mentorName && looksLikeFirestoreId(mentorName)) {
-        // Looks like an ID, resolve to name
+      let mentorName = data.assignedMentor || '';
+      if (mentorName && looksLikeFirestoreId(mentorName)) {
         const mentorResult = await getMentorByNameOrId(mentorName);
         if (mentorResult.success && mentorResult.mentor) {
           mentorName = mentorResult.mentor.name;
         } else {
-          // Mentor not found - clear assignment
           toast({
             title: 'Warning',
             description: 'Assigned mentor not found. Assignment cleared.',
@@ -331,7 +373,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           mentorName = '';
         }
       } else if (mentorName) {
-        // Validate mentor exists by name
         const mentorResult = await getMentorByNameOrId(mentorName);
         if (!mentorResult.success) {
           toast({
@@ -345,7 +386,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         }
       }
 
-      // Clean the data to remove undefined values
       const formData: any = {
         youthParticipant: data.youthParticipant,
         email: data.email,
@@ -357,7 +397,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         contractSigned: data.contractSigned,
         signedSyllabus: data.signedSyllabus,
         availability: data.availability || '',
-        assignedMentor: mentorName, // Store mentor name, not ID
+        assignedMentor: mentorName,
         idProvided: data.idProvided,
         canadianStatus: data.canadianStatus,
         canadianStatusOther: data.canadianStatusOther || '',
@@ -365,7 +405,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         proofOfAffiliationWithSCD: data.proofOfAffiliationWithSCD,
         scagoCounterpart: data.scagoCounterpart || '',
         dob: data.dob,
-        // New fields
         age: data.age,
         citizenshipStatus: data.citizenshipStatus || '',
         location: data.location || '',
@@ -383,14 +422,21 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         postalCode: data.postalCode || '',
       };
 
-      // Only include SIN if provided and not empty
       if (data.sin && data.sin.trim() !== '') {
         formData.sin = data.sin;
       }
 
-      // Only include file if a new one is uploaded
+      // Include custom filename if changed
+      if (customFileName && customFileName !== existingFileName) {
+        formData.fileName = customFileName;
+      }
+
       if (uploadedFile) {
         formData.fileUpload = uploadedFile;
+        // If uploading new file, use the custom name or original name
+        if (!formData.fileName) {
+          formData.fileName = customFileName || uploadedFile.name;
+        }
       }
 
       let result;
@@ -412,6 +458,8 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         form.reset();
         setUploadedFile(null);
         setExistingFileUrl(null);
+        setExistingFileName(null);
+        setCustomFileName('');
       } else {
         toast({
           title: 'Error',
@@ -918,43 +966,91 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 </CardContent>
               </Card>
 
-              {/* Document Upload */}
+              {/* Document Upload - Enhanced */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Document Upload</CardTitle>
+                  <CardDescription>Upload and manage supporting documents</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {existingFileUrl && !uploadedFile && (
-                    <Alert>
-                      <FileText className="h-4 w-4" />
-                      <AlertDescription className="flex items-center justify-between">
-                        <span>File attached</span>
-                        <div className="flex gap-2">
+                  {/* Existing File Display */}
+                  {(existingFileUrl || uploadedFile) && (
+                    <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="mt-1">
+                            {getFileIcon(existingFileName || uploadedFile?.name || '')}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {isEditingFileName ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={customFileName}
+                                  onChange={(e) => setCustomFileName(e.target.value)}
+                                  className="h-8 text-sm"
+                                  placeholder="Enter filename"
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={handleFileNameSave}
+                                >
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate">
+                                  {uploadedFile ? uploadedFile.name : existingFileName}
+                                </p>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setIsEditingFileName(true)}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {uploadedFile
+                                ? `${(uploadedFile.size / 1024).toFixed(1)} KB - New upload`
+                                : 'Existing file'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {existingFileUrl && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleFileView}
+                              className="h-8 px-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            onClick={handleFileDownload}
+                            onClick={handleFileRemove}
+                            className="h-8 px-2 text-destructive hover:text-destructive"
                           >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(existingFileUrl, '_blank')}
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Download
+                            <X className="h-4 w-4" />
                           </Button>
                         </div>
-                      </AlertDescription>
-                    </Alert>
+                      </div>
+                    </div>
                   )}
 
+                  {/* Upload Button */}
                   <div className="space-y-2">
-                    <Label>Upload File</Label>
+                    <Label>{existingFileUrl || uploadedFile ? 'Replace File' : 'Upload File'}</Label>
                     <div className="flex items-center gap-4">
                       <Input
                         type="file"
@@ -962,15 +1058,9 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                         onChange={handleFileChange}
                         className="max-w-sm"
                       />
-                      {uploadedFile && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Upload className="h-4 w-4" />
-                          {uploadedFile.name}
-                        </div>
-                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Upload supporting documents (PDF, DOC, images)
+                    <p className="text-xs text-muted-foreground">
+                      Accepted: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
                     </p>
                   </div>
                 </CardContent>
