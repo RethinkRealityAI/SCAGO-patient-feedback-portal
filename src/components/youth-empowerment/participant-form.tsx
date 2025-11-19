@@ -14,7 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Upload, FileText, Eye, Download, X, Edit2, Save, File, Image, FileCode } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Upload, FileText, Eye, Download, X, Edit2, Save, File, Image, FileCode, Plus, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createParticipant, updateParticipant, getMentors } from '@/app/youth-empowerment/actions';
 import { getMentorByNameOrId } from '@/app/youth-empowerment/relationship-actions';
@@ -34,7 +35,6 @@ const participantFormSchema = z.object({
   emergencyContactNumber: z.string().optional().or(z.literal('')),
   region: z.string().optional().or(z.literal('')),
   mailingAddress: z.string().optional().or(z.literal('')),
-  // Separate address fields
   streetAddress: z.string().optional().or(z.literal('')),
   city: z.string().optional().or(z.literal('')),
   province: z.string().optional().or(z.literal('')),
@@ -48,7 +48,6 @@ const participantFormSchema = z.object({
   idProvided: z.boolean().optional().default(false),
   canadianStatus: z.enum(['Canadian Citizen', 'Permanent Resident', 'Other']).optional().default('Other'),
   sin: z.string().optional().refine((val) => {
-    // Only validate if the value exists and is not empty
     if (!val || val.trim() === '') return true;
     return validateSINLenient(val);
   }, 'Invalid SIN format').or(z.literal('')),
@@ -58,7 +57,6 @@ const participantFormSchema = z.object({
   proofOfAffiliationWithSCD: z.boolean().optional().default(false),
   scagoCounterpart: z.string().optional().or(z.literal('')),
   dob: z.string().optional().or(z.literal('')),
-  // Additional legacy fields
   approved: z.boolean().optional().default(false),
   canadianStatusOther: z.string().optional().or(z.literal('')),
   citizenshipStatus: z.string().optional().or(z.literal('')),
@@ -88,6 +86,17 @@ interface ParticipantFormProps {
   onSuccess: () => void;
 }
 
+interface FileWithMetadata {
+  id: string;
+  file?: File;
+  url?: string;
+  fileName: string;
+  fileType: string;
+  isExisting: boolean;
+  isEditing: boolean;
+  uploadedAt?: string;
+}
+
 // Helper function to calculate age from date of birth
 function calculateAge(dob: string): number | undefined {
   if (!dob) return undefined;
@@ -102,28 +111,28 @@ function calculateAge(dob: string): number | undefined {
 }
 
 // Helper to get file icon based on type
-function getFileIcon(fileName: string) {
+function getFileIcon(fileName: string, className = "h-4 w-4") {
   const ext = fileName.split('.').pop()?.toLowerCase();
   if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
-    return <Image className="h-4 w-4" />;
+    return <Image className={className} />;
   }
   if (['pdf'].includes(ext || '')) {
-    return <FileText className="h-4 w-4" />;
+    return <FileText className={className} />;
   }
   if (['doc', 'docx'].includes(ext || '')) {
-    return <FileCode className="h-4 w-4" />;
+    return <FileCode className={className} />;
   }
-  return <File className="h-4 w-4" />;
+  return <File className={className} />;
 }
 
 export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: ParticipantFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [mentors, setMentors] = useState<YEPMentor[]>([]);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
-  const [existingFileName, setExistingFileName] = useState<string | null>(null);
-  const [isEditingFileName, setIsEditingFileName] = useState(false);
-  const [customFileName, setCustomFileName] = useState('');
+
+  // Multiple file management
+  const [documents, setDocuments] = useState<FileWithMetadata[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const { toast } = useToast();
 
   const form = useForm<ParticipantFormData>({
@@ -170,17 +179,43 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   useEffect(() => {
     if (isOpen) {
       loadMentors();
-      if (participant?.fileUrl) {
-        setExistingFileUrl(participant.fileUrl);
-        setExistingFileName(participant.fileName || 'Uploaded Document');
-        setCustomFileName(participant.fileName || 'Uploaded Document');
-      } else {
-        setExistingFileUrl(null);
-        setExistingFileName(null);
-        setCustomFileName('');
-      }
+      loadExistingDocuments();
     }
   }, [isOpen, participant]);
+
+  const loadExistingDocuments = () => {
+    const existingDocs: FileWithMetadata[] = [];
+
+    // Load primary file
+    if (participant?.fileUrl) {
+      existingDocs.push({
+        id: 'primary',
+        url: participant.fileUrl,
+        fileName: participant.fileName || 'Primary Document',
+        fileType: participant.fileType || 'application/pdf',
+        isExisting: true,
+        isEditing: false,
+        uploadedAt: participant.updatedAt?.toString(),
+      });
+    }
+
+    // Load additional documents
+    if (participant?.additionalDocuments) {
+      participant.additionalDocuments.forEach((doc, index) => {
+        existingDocs.push({
+          id: `additional-${index}`,
+          url: doc.url,
+          fileName: doc.fileName,
+          fileType: doc.fileType,
+          isExisting: true,
+          isEditing: false,
+          uploadedAt: doc.uploadedAt?.toString(),
+        });
+      });
+    }
+
+    setDocuments(existingDocs);
+  };
 
   useEffect(() => {
     const resolveMentorName = async (assignedMentor: string | undefined) => {
@@ -238,10 +273,6 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         });
         form.setValue('sin', '');
         form.clearErrors('sin');
-        setUploadedFile(null);
-        setExistingFileUrl(participant.fileUrl || null);
-        setExistingFileName(participant.fileName || null);
-        setCustomFileName(participant.fileName || '');
       } else {
         form.reset({
           youthParticipant: '',
@@ -279,10 +310,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
           interviewNotes: '',
           recruited: false,
         });
-        setUploadedFile(null);
-        setExistingFileUrl(null);
-        setExistingFileName(null);
-        setCustomFileName('');
+        setDocuments([]);
         form.clearErrors('sin');
       }
     };
@@ -299,49 +327,70 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Validate file size (10MB max)
-      if (file.size > 10 * 1024 * 1024) {
-        toast({
-          title: 'File Too Large',
-          description: 'Maximum file size is 10MB',
-          variant: 'destructive',
-        });
-        event.target.value = '';
-        return;
-      }
-      setUploadedFile(file);
-      setExistingFileUrl(null);
-      setCustomFileName(file.name);
-    }
-  };
+  const handleBulkFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setUploadError(null);
 
-  const handleFileView = () => {
-    if (existingFileUrl) {
-      window.open(existingFileUrl, '_blank');
-    }
-  };
-
-  const handleFileRemove = () => {
-    setUploadedFile(null);
-    setExistingFileUrl(null);
-    setExistingFileName(null);
-    setCustomFileName('');
-    // Reset the file input
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    if (fileInput) fileInput.value = '';
-  };
-
-  const handleFileNameSave = () => {
-    if (customFileName.trim()) {
-      setExistingFileName(customFileName);
-      setIsEditingFileName(false);
+    // Validate files
+    const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
+    if (invalidFiles.length > 0) {
+      setUploadError(`${invalidFiles.length} file(s) exceed 10MB limit`);
       toast({
-        title: 'Filename Updated',
-        description: 'The filename will be saved when you submit the form.',
+        title: 'File Size Error',
+        description: `${invalidFiles.length} file(s) are too large. Maximum size is 10MB per file.`,
+        variant: 'destructive',
       });
+      return;
+    }
+
+    // Add new files to documents list
+    const newFiles: FileWithMetadata[] = files.map(file => ({
+      id: `new-${Date.now()}-${Math.random()}`,
+      file,
+      fileName: file.name,
+      fileType: file.type,
+      isExisting: false,
+      isEditing: false,
+    }));
+
+    setDocuments(prev => [...prev, ...newFiles]);
+
+    // Reset file input
+    event.target.value = '';
+
+    toast({
+      title: 'Files Added',
+      description: `${files.length} file(s) ready to upload`,
+    });
+  };
+
+  const handleFileNameEdit = (id: string, newName: string) => {
+    setDocuments(prev =>
+      prev.map(doc =>
+        doc.id === id ? { ...doc, fileName: newName } : doc
+      )
+    );
+  };
+
+  const handleToggleEdit = (id: string) => {
+    setDocuments(prev =>
+      prev.map(doc =>
+        doc.id === id ? { ...doc, isEditing: !doc.isEditing } : doc
+      )
+    );
+  };
+
+  const handleRemoveDocument = (id: string) => {
+    setDocuments(prev => prev.filter(doc => doc.id !== id));
+    toast({
+      title: 'Document Removed',
+      description: 'File will be removed when you save the form',
+    });
+  };
+
+  const handleFileView = (url?: string) => {
+    if (url) {
+      window.open(url, '_blank');
     }
   };
 
@@ -426,17 +475,39 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         formData.sin = data.sin;
       }
 
-      // Include custom filename if changed
-      if (customFileName && customFileName !== existingFileName) {
-        formData.fileName = customFileName;
+      // Handle documents
+      const primaryDoc = documents.find(d => d.id === 'primary');
+      const additionalDocs = documents.filter(d => d.id !== 'primary');
+
+      // Handle primary document
+      if (primaryDoc) {
+        if (primaryDoc.file) {
+          formData.fileUpload = primaryDoc.file;
+          formData.fileName = primaryDoc.fileName;
+        } else if (primaryDoc.isExisting) {
+          // Just update the filename if changed
+          formData.fileName = primaryDoc.fileName;
+        }
       }
 
-      if (uploadedFile) {
-        formData.fileUpload = uploadedFile;
-        // If uploading new file, use the custom name or original name
-        if (!formData.fileName) {
-          formData.fileName = customFileName || uploadedFile.name;
-        }
+      // Handle additional documents (new uploads)
+      const newUploads = additionalDocs.filter(d => d.file);
+      if (newUploads.length > 0) {
+        formData.additionalFileUploads = newUploads.map(d => ({
+          file: d.file!,
+          fileName: d.fileName,
+        }));
+      }
+
+      // Handle existing additional documents
+      const existingAdditionalDocs = additionalDocs.filter(d => d.isExisting);
+      if (existingAdditionalDocs.length > 0) {
+        formData.existingAdditionalDocuments = existingAdditionalDocs.map(d => ({
+          url: d.url!,
+          fileName: d.fileName,
+          fileType: d.fileType,
+          uploadedAt: d.uploadedAt,
+        }));
       }
 
       let result;
@@ -456,10 +527,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         onSuccess();
         onClose();
         form.reset();
-        setUploadedFile(null);
-        setExistingFileUrl(null);
-        setExistingFileName(null);
-        setCustomFileName('');
+        setDocuments([]);
       } else {
         toast({
           title: 'Error',
@@ -966,101 +1034,132 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
                 </CardContent>
               </Card>
 
-              {/* Document Upload - Enhanced */}
+              {/* Document Upload - Enhanced with Bulk Upload */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Document Upload</CardTitle>
-                  <CardDescription>Upload and manage supporting documents</CardDescription>
+                  <CardTitle className="text-lg">Documents</CardTitle>
+                  <CardDescription>Upload and manage multiple documents</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Existing File Display */}
-                  {(existingFileUrl || uploadedFile) && (
-                    <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className="mt-1">
-                            {getFileIcon(existingFileName || uploadedFile?.name || '')}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            {isEditingFileName ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={customFileName}
-                                  onChange={(e) => setCustomFileName(e.target.value)}
-                                  className="h-8 text-sm"
-                                  placeholder="Enter filename"
-                                />
+                  {/* Display Error */}
+                  {uploadError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{uploadError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Existing Files Display */}
+                  {documents.length > 0 && (
+                    <div className="space-y-2">
+                      {documents.map((doc) => (
+                        <div key={doc.id} className="border rounded-lg p-3 space-y-2 bg-muted/30">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <div className="mt-0.5">
+                                {getFileIcon(doc.fileName)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {doc.isEditing ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={doc.fileName}
+                                      onChange={(e) => handleFileNameEdit(doc.id, e.target.value)}
+                                      className="h-7 text-sm"
+                                      placeholder="Enter filename"
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleToggleEdit(doc.id)}
+                                      className="h-7 px-2"
+                                    >
+                                      <Save className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-medium truncate">
+                                      {doc.fileName}
+                                    </p>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleToggleEdit(doc.id)}
+                                      className="h-5 w-5 p-0"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 mt-1">
+                                  {doc.file && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {(doc.file.size / 1024).toFixed(1)} KB
+                                    </Badge>
+                                  )}
+                                  <Badge variant={doc.isExisting ? "outline" : "default"} className="text-xs">
+                                    {doc.isExisting ? 'Uploaded' : 'New'}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {doc.url && (
                                 <Button
                                   type="button"
-                                  size="sm"
                                   variant="ghost"
-                                  onClick={handleFileNameSave}
-                                >
-                                  <Save className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium truncate">
-                                  {uploadedFile ? uploadedFile.name : existingFileName}
-                                </p>
-                                <Button
-                                  type="button"
                                   size="sm"
-                                  variant="ghost"
-                                  onClick={() => setIsEditingFileName(true)}
-                                  className="h-6 w-6 p-0"
+                                  onClick={() => handleFileView(doc.url)}
+                                  className="h-7 px-2"
                                 >
-                                  <Edit2 className="h-3 w-3" />
+                                  <Eye className="h-3 w-3" />
                                 </Button>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {uploadedFile
-                                ? `${(uploadedFile.size / 1024).toFixed(1)} KB - New upload`
-                                : 'Existing file'}
-                            </p>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveDocument(doc.id)}
+                                className="h-7 px-2 text-destructive hover:text-destructive"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          {existingFileUrl && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleFileView}
-                              className="h-8 px-2"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleFileRemove}
-                            className="h-8 px-2 text-destructive hover:text-destructive"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   )}
 
-                  {/* Upload Button */}
+                  {/* Bulk Upload Button */}
                   <div className="space-y-2">
-                    <Label>{existingFileUrl || uploadedFile ? 'Replace File' : 'Upload File'}</Label>
-                    <div className="flex items-center gap-4">
+                    <Label>
+                      {documents.length > 0 ? 'Add More Files' : 'Upload Files'}
+                    </Label>
+                    <div className="flex items-center gap-2">
                       <Input
                         type="file"
                         accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                        onChange={handleFileChange}
-                        className="max-w-sm"
+                        onChange={handleBulkFileChange}
+                        multiple
+                        className="hidden"
+                        id="bulk-file-upload"
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('bulk-file-upload')?.click()}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Select Files
+                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Accepted: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                      Select multiple files: PDF, DOC, DOCX, JPG, PNG (Max 10MB each)
                     </p>
                   </div>
                 </CardContent>
