@@ -476,6 +476,80 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
   }
 }
 
+// Get form submissions for a profile (participant or mentor)
+export async function getYEPFormSubmissionsForProfile(profileId: string, role: 'participant' | 'mentor') {
+  try {
+    const session = await getServerSession();
+    if (!session) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Verify user has access (admin or owns the profile record)
+    const firestore = getAdminFirestore();
+    if (session.role !== 'admin' && session.role !== 'super-admin' && session.role !== 'yep-manager') {
+      // Verify profile belongs to user
+      const collection = role === 'participant' ? 'yep_participants' : 'yep_mentors';
+      const profileDoc = await firestore.collection(collection).doc(profileId).get();
+      if (!profileDoc.exists) {
+        return { success: false, error: `${role.charAt(0).toUpperCase() + role.slice(1)} not found` };
+      }
+      const profileData = profileDoc.data();
+      if (profileData?.userId !== session.uid &&
+          profileData?.email !== session.email &&
+          profileData?.authEmail !== session.email) {
+        return { success: false, error: 'Unauthorized' };
+      }
+    }
+
+    let submissions: YEPFormSubmission[] = [];
+    const fieldName = role === 'participant' ? 'participantId' : 'mentorId';
+
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-submissions')
+        .where(fieldName, '==', profileId)
+        .orderBy('submittedAt', 'desc')
+        .get();
+      submissions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+          processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+        } as unknown as YEPFormSubmission;
+      });
+    } catch (e: any) {
+      // Fallback without composite index: fetch and filter in-memory
+      const snapshot = await firestore.collection('yep-form-submissions').get();
+      submissions = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+            processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+          } as unknown as YEPFormSubmission;
+        })
+        .filter((s: any) => s[fieldName] === profileId)
+        .sort((a: any, b: any) => {
+          const aDate = a.submittedAt instanceof Date ? a.submittedAt : new Date(a.submittedAt);
+          const bDate = b.submittedAt instanceof Date ? b.submittedAt : new Date(b.submittedAt);
+          return bDate.getTime() - aDate.getTime();
+        });
+    }
+
+    return { success: true, data: submissions };
+  } catch (error) {
+    console.error('Error fetching profile form submissions:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch submissions'
+    };
+  }
+}
+
 // Get form templates available for participant or mentor profile
 export async function getYEPFormTemplatesForParticipantProfile() {
   try {
