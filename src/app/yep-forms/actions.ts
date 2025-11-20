@@ -486,7 +486,7 @@ export async function getYEPFormSubmissionsForProfile(profileId: string, role: '
 
     // Verify user has access (admin or owns the profile record)
     const firestore = getAdminFirestore();
-    if (session.role !== 'admin' && session.role !== 'super-admin' && session.role !== 'yep-manager') {
+    if (session.role !== 'admin' && session.role !== 'super-admin') {
       // Verify profile belongs to user
       const collection = role === 'participant' ? 'yep_participants' : 'yep_mentors';
       const profileDoc = await firestore.collection(collection).doc(profileId).get();
