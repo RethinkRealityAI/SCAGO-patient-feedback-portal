@@ -79,47 +79,49 @@ export function ProfileViewerModal({
   };
 
   // Get all document URLs
-  const documents = [];
-  
+  const documents: Array<{ name: string; url: string; filename: string }> = [];
+
   if (role === 'participant') {
-    if (profile.healthCardUrl) {
-      documents.push({ name: 'Health Card', url: profile.healthCardUrl, filename: profile.healthCardFileName || 'health-card' });
+    const participantProfile = profile as YEPParticipant;
+    if (participantProfile.healthCardUrl) {
+      documents.push({ name: 'Health Card', url: participantProfile.healthCardUrl, filename: participantProfile.healthCardFileName || 'health-card' });
     }
-    if (profile.photoIdUrl) {
-      documents.push({ name: 'Photo ID', url: profile.photoIdUrl, filename: profile.photoIdFileName || 'photo-id' });
+    if (participantProfile.photoIdUrl) {
+      documents.push({ name: 'Photo ID', url: participantProfile.photoIdUrl, filename: participantProfile.photoIdFileName || 'photo-id' });
     }
-    if (profile.consentFormUrl) {
-      documents.push({ name: 'Consent Form', url: profile.consentFormUrl, filename: profile.consentFormFileName || 'consent-form' });
+    if (participantProfile.consentFormUrl) {
+      documents.push({ name: 'Consent Form', url: participantProfile.consentFormUrl, filename: participantProfile.consentFormFileName || 'consent-form' });
     }
-    if (profile.fileUrl) {
-      documents.push({ name: 'Additional File', url: profile.fileUrl, filename: profile.fileName || 'document' });
+    if (participantProfile.fileUrl) {
+      documents.push({ name: 'Additional File', url: participantProfile.fileUrl, filename: participantProfile.fileName || 'document' });
     }
     // Add additional documents uploaded by participant
-    if (profile.additionalDocuments && Array.isArray(profile.additionalDocuments)) {
-      profile.additionalDocuments.forEach((doc) => {
-        documents.push({ 
-          name: 'Additional Document', 
-          url: doc.url, 
-          filename: doc.fileName || 'document' 
+    if (participantProfile.additionalDocuments && Array.isArray(participantProfile.additionalDocuments)) {
+      participantProfile.additionalDocuments.forEach((doc: any) => {
+        documents.push({
+          name: 'Additional Document',
+          url: doc.url,
+          filename: doc.fileName || 'document'
         });
       });
     }
   } else {
-    if (profile.policeCheckUrl) {
-      documents.push({ name: 'Police Check', url: profile.policeCheckUrl, filename: profile.policeCheckFileName || 'police-check' });
+    const mentorProfile = profile as YEPMentor;
+    if (mentorProfile.policeCheckUrl) {
+      documents.push({ name: 'Police Check', url: mentorProfile.policeCheckUrl, filename: mentorProfile.policeCheckFileName || 'police-check' });
     }
-    if (profile.resumeUrl) {
-      documents.push({ name: 'Resume', url: profile.resumeUrl, filename: profile.resumeFileName || 'resume' });
+    if (mentorProfile.resumeUrl) {
+      documents.push({ name: 'Resume', url: mentorProfile.resumeUrl, filename: mentorProfile.resumeFileName || 'resume' });
     }
-    if (profile.referencesUrl) {
-      documents.push({ name: 'References', url: profile.referencesUrl, filename: profile.referencesFileName || 'references' });
+    if (mentorProfile.referencesUrl) {
+      documents.push({ name: 'References', url: mentorProfile.referencesUrl, filename: mentorProfile.referencesFileName || 'references' });
     }
-    if (profile.fileUrl) {
-      documents.push({ name: 'Additional File', url: profile.fileUrl, filename: profile.fileName || 'document' });
+    if (mentorProfile.fileUrl) {
+      documents.push({ name: 'Additional File', url: mentorProfile.fileUrl, filename: mentorProfile.fileName || 'document' });
     }
   }
 
-  const name = role === 'participant' ? profile.youthParticipant : profile.name;
+  const name = role === 'participant' ? (profile as YEPParticipant).youthParticipant : (profile as YEPMentor).name;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -186,14 +188,14 @@ export function ProfileViewerModal({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopyEmail(profile.email)}
+                        onClick={() => profile.email && handleCopyEmail(profile.email)}
                       >
                         Copy
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`mailto:${profile.email}`)}
+                        onClick={() => profile.email && window.open(`mailto:${profile.email}`)}
                       >
                         <Mail className="h-4 w-4" />
                       </Button>
@@ -201,27 +203,33 @@ export function ProfileViewerModal({
                   </div>
                 )}
 
-                {(profile.phoneNumber || profile.phone) && (
+                {((role === 'participant' && (profile as YEPParticipant).phoneNumber) || (role === 'mentor' && (profile as YEPMentor).phone)) && (
                   <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <Phone className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Phone</p>
-                        <p className="font-medium">{profile.phoneNumber || profile.phone}</p>
+                        <p className="font-medium">{role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopyPhone(profile.phoneNumber || profile.phone)}
+                        onClick={() => {
+                          const phone = role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone;
+                          phone && handleCopyPhone(phone);
+                        }}
                       >
                         Copy
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`tel:${profile.phoneNumber || profile.phone}`)}
+                        onClick={() => {
+                          const phone = role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone;
+                          phone && window.open(`tel:${phone}`);
+                        }}
                       >
                         <Phone className="h-4 w-4" />
                       </Button>

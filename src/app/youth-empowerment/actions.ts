@@ -130,6 +130,17 @@ const participantSchema = z.object({
   dob: z.string().optional().or(z.literal('')),
   file: z.string().optional().or(z.literal('')),
   fileUpload: z.instanceof(File).optional(),
+  fileName: z.string().optional().or(z.literal('')),
+  additionalFileUploads: z.array(z.object({
+    file: z.instanceof(File),
+    fileName: z.string(),
+  })).optional(),
+  existingAdditionalDocuments: z.array(z.object({
+    url: z.string(),
+    fileName: z.string(),
+    fileType: z.string(),
+    uploadedAt: z.string().optional(),
+  })).optional(),
   // Additional legacy fields
   approved: z.union([
     z.boolean(),
