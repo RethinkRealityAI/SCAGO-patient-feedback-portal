@@ -33,6 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { YEPParticipant, YEPMentor } from '@/lib/youth-empowerment';
 import { ParticipantWorkshops } from '@/components/youth-empowerment/participant-workshops';
+import { ProfileForms } from '@/components/profile/profile-forms';
 
 interface ProfileViewerModalProps {
   open: boolean;
@@ -78,47 +79,49 @@ export function ProfileViewerModal({
   };
 
   // Get all document URLs
-  const documents = [];
-  
+  const documents: Array<{ name: string; url: string; filename: string }> = [];
+
   if (role === 'participant') {
-    if (profile.healthCardUrl) {
-      documents.push({ name: 'Health Card', url: profile.healthCardUrl, filename: profile.healthCardFileName || 'health-card' });
+    const participantProfile = profile as YEPParticipant;
+    if (participantProfile.healthCardUrl) {
+      documents.push({ name: 'Health Card', url: participantProfile.healthCardUrl, filename: participantProfile.healthCardFileName || 'health-card' });
     }
-    if (profile.photoIdUrl) {
-      documents.push({ name: 'Photo ID', url: profile.photoIdUrl, filename: profile.photoIdFileName || 'photo-id' });
+    if (participantProfile.photoIdUrl) {
+      documents.push({ name: 'Photo ID', url: participantProfile.photoIdUrl, filename: participantProfile.photoIdFileName || 'photo-id' });
     }
-    if (profile.consentFormUrl) {
-      documents.push({ name: 'Consent Form', url: profile.consentFormUrl, filename: profile.consentFormFileName || 'consent-form' });
+    if (participantProfile.consentFormUrl) {
+      documents.push({ name: 'Consent Form', url: participantProfile.consentFormUrl, filename: participantProfile.consentFormFileName || 'consent-form' });
     }
-    if (profile.fileUrl) {
-      documents.push({ name: 'Additional File', url: profile.fileUrl, filename: profile.fileName || 'document' });
+    if (participantProfile.fileUrl) {
+      documents.push({ name: 'Additional File', url: participantProfile.fileUrl, filename: participantProfile.fileName || 'document' });
     }
     // Add additional documents uploaded by participant
-    if (profile.additionalDocuments && Array.isArray(profile.additionalDocuments)) {
-      profile.additionalDocuments.forEach((doc) => {
-        documents.push({ 
-          name: 'Additional Document', 
-          url: doc.url, 
-          filename: doc.fileName || 'document' 
+    if (participantProfile.additionalDocuments && Array.isArray(participantProfile.additionalDocuments)) {
+      participantProfile.additionalDocuments.forEach((doc: any) => {
+        documents.push({
+          name: 'Additional Document',
+          url: doc.url,
+          filename: doc.fileName || 'document'
         });
       });
     }
   } else {
-    if (profile.policeCheckUrl) {
-      documents.push({ name: 'Police Check', url: profile.policeCheckUrl, filename: profile.policeCheckFileName || 'police-check' });
+    const mentorProfile = profile as YEPMentor;
+    if (mentorProfile.policeCheckUrl) {
+      documents.push({ name: 'Police Check', url: mentorProfile.policeCheckUrl, filename: mentorProfile.policeCheckFileName || 'police-check' });
     }
-    if (profile.resumeUrl) {
-      documents.push({ name: 'Resume', url: profile.resumeUrl, filename: profile.resumeFileName || 'resume' });
+    if (mentorProfile.resumeUrl) {
+      documents.push({ name: 'Resume', url: mentorProfile.resumeUrl, filename: mentorProfile.resumeFileName || 'resume' });
     }
-    if (profile.referencesUrl) {
-      documents.push({ name: 'References', url: profile.referencesUrl, filename: profile.referencesFileName || 'references' });
+    if (mentorProfile.referencesUrl) {
+      documents.push({ name: 'References', url: mentorProfile.referencesUrl, filename: mentorProfile.referencesFileName || 'references' });
     }
-    if (profile.fileUrl) {
-      documents.push({ name: 'Additional File', url: profile.fileUrl, filename: profile.fileName || 'document' });
+    if (mentorProfile.fileUrl) {
+      documents.push({ name: 'Additional File', url: mentorProfile.fileUrl, filename: mentorProfile.fileName || 'document' });
     }
   }
 
-  const name = role === 'participant' ? profile.youthParticipant : profile.name;
+  const name = role === 'participant' ? (profile as YEPParticipant).youthParticipant : (profile as YEPMentor).name;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,7 +149,7 @@ export function ProfileViewerModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="documents">
               Documents
@@ -157,6 +160,7 @@ export function ProfileViewerModal({
               )}
             </TabsTrigger>
             <TabsTrigger value="workshops">Workshops</TabsTrigger>
+            <TabsTrigger value="forms">Forms</TabsTrigger>
             <TabsTrigger value="status">Status</TabsTrigger>
           </TabsList>
 
@@ -184,14 +188,14 @@ export function ProfileViewerModal({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopyEmail(profile.email)}
+                        onClick={() => profile.email && handleCopyEmail(profile.email)}
                       >
                         Copy
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`mailto:${profile.email}`)}
+                        onClick={() => profile.email && window.open(`mailto:${profile.email}`)}
                       >
                         <Mail className="h-4 w-4" />
                       </Button>
@@ -199,27 +203,33 @@ export function ProfileViewerModal({
                   </div>
                 )}
 
-                {(profile.phoneNumber || profile.phone) && (
+                {((role === 'participant' && (profile as YEPParticipant).phoneNumber) || (role === 'mentor' && (profile as YEPMentor).phone)) && (
                   <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <Phone className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Phone</p>
-                        <p className="font-medium">{profile.phoneNumber || profile.phone}</p>
+                        <p className="font-medium">{role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopyPhone(profile.phoneNumber || profile.phone)}
+                        onClick={() => {
+                          const phone = role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone;
+                          phone && handleCopyPhone(phone);
+                        }}
                       >
                         Copy
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`tel:${profile.phoneNumber || profile.phone}`)}
+                        onClick={() => {
+                          const phone = role === 'participant' ? (profile as YEPParticipant).phoneNumber : (profile as YEPMentor).phone;
+                          phone && window.open(`tel:${phone}`);
+                        }}
                       >
                         <Phone className="h-4 w-4" />
                       </Button>
@@ -227,12 +237,12 @@ export function ProfileViewerModal({
                   </div>
                 )}
 
-                {profile.region && (
+                {role === 'participant' && (profile as YEPParticipant).region && (
                   <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Region</p>
-                      <p className="font-medium">{profile.region}</p>
+                      <p className="font-medium">{(profile as YEPParticipant).region}</p>
                     </div>
                   </div>
                 )}
@@ -243,7 +253,7 @@ export function ProfileViewerModal({
             {role === 'participant' && (
               <>
                 {/* Address */}
-                {(profile.streetAddress || profile.city || profile.province) && (
+                {((profile as YEPParticipant).streetAddress || (profile as YEPParticipant).city || (profile as YEPParticipant).province) && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -253,10 +263,10 @@ export function ProfileViewerModal({
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-1">
-                        {profile.streetAddress && <p>{profile.streetAddress}</p>}
-                        {(profile.city || profile.province || profile.postalCode) && (
+                        {(profile as YEPParticipant).streetAddress && <p>{(profile as YEPParticipant).streetAddress}</p>}
+                        {((profile as YEPParticipant).city || (profile as YEPParticipant).province || (profile as YEPParticipant).postalCode) && (
                           <p>
-                            {[profile.city, profile.province, profile.postalCode]
+                            {[(profile as YEPParticipant).city, (profile as YEPParticipant).province, (profile as YEPParticipant).postalCode]
                               .filter(Boolean)
                               .join(', ')}
                           </p>
@@ -267,7 +277,7 @@ export function ProfileViewerModal({
                 )}
 
                 {/* Emergency Contact */}
-                {(profile.emergencyContactRelationship || profile.emergencyContactNumber) && (
+                {((profile as YEPParticipant).emergencyContactRelationship || (profile as YEPParticipant).emergencyContactNumber) && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -276,16 +286,16 @@ export function ProfileViewerModal({
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {profile.emergencyContactRelationship && (
+                      {(profile as YEPParticipant).emergencyContactRelationship && (
                         <div>
                           <p className="text-sm text-muted-foreground">Relationship</p>
-                          <p className="font-medium">{profile.emergencyContactRelationship}</p>
+                          <p className="font-medium">{(profile as YEPParticipant).emergencyContactRelationship}</p>
                         </div>
                       )}
-                      {profile.emergencyContactNumber && (
+                      {(profile as YEPParticipant).emergencyContactNumber && (
                         <div>
                           <p className="text-sm text-muted-foreground">Phone</p>
-                          <p className="font-medium">{profile.emergencyContactNumber}</p>
+                          <p className="font-medium">{(profile as YEPParticipant).emergencyContactNumber}</p>
                         </div>
                       )}
                     </CardContent>
@@ -293,7 +303,7 @@ export function ProfileViewerModal({
                 )}
 
                 {/* Assigned Mentor */}
-                {profile.assignedMentor && (
+                {(profile as YEPParticipant).assignedMentor && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -302,7 +312,7 @@ export function ProfileViewerModal({
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="font-medium">{profile.assignedMentor}</p>
+                      <p className="font-medium">{(profile as YEPParticipant).assignedMentor}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -312,28 +322,28 @@ export function ProfileViewerModal({
             {/* Mentor-specific info */}
             {role === 'mentor' && (
               <>
-                {profile.title && (
+                {(profile as YEPMentor).title && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Professional Title</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="font-medium">{profile.title}</p>
+                      <p className="font-medium">{(profile as YEPMentor).title}</p>
                     </CardContent>
                   </Card>
                 )}
 
-                {profile.assignedStudents && profile.assignedStudents.length > 0 && (
+                {(profile as YEPMentor).assignedStudents && (profile as YEPMentor).assignedStudents!.length > 0 && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Users className="h-5 w-5" />
-                        Assigned Participants ({profile.assignedStudents.length})
+                        Assigned Participants ({(profile as YEPMentor).assignedStudents!.length})
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {profile.assignedStudents.map((student: string, index: number) => (
+                        {(profile as YEPMentor).assignedStudents!.map((student: string, index: number) => (
                           <div key={index} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span>{student}</span>
@@ -362,13 +372,15 @@ export function ProfileViewerModal({
             )}
 
             {/* Notes */}
-            {profile.notes && (
+            {role === 'participant' && (profile as YEPParticipant).notes && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-muted-foreground">{profile.notes}</p>
+                  <p className="whitespace-pre-wrap text-muted-foreground">
+                    {(profile as YEPParticipant).notes}
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -415,9 +427,9 @@ export function ProfileViewerModal({
           {/* Workshops Tab */}
           <TabsContent value="workshops" className="space-y-4 mt-4">
             {role === 'participant' ? (
-              <ParticipantWorkshops 
-                participantId={profile.id} 
-                participantName={profile.youthParticipant || profile.name} 
+              <ParticipantWorkshops
+                participantId={profile.id}
+                participantName={(profile as YEPParticipant).youthParticipant}
               />
             ) : (
               <Card>
@@ -426,6 +438,16 @@ export function ProfileViewerModal({
                   <p className="text-muted-foreground">Workshop attendance is only available for participants</p>
                 </CardContent>
               </Card>
+            )}
+          </TabsContent>
+
+          {/* Forms Tab */}
+          <TabsContent value="forms" className="mt-4">
+            {role === 'participant' && (
+              <ProfileForms profile={profile as YEPParticipant} role="participant" />
+            )}
+            {role === 'mentor' && (
+              <ProfileForms profile={profile as YEPMentor} role="mentor" />
             )}
           </TabsContent>
 
@@ -441,27 +463,27 @@ export function ProfileViewerModal({
                     <>
                       <StatusBadge
                         label="Approved"
-                        value={profile.approved}
+                        value={(profile as YEPParticipant).approved}
                       />
                       <StatusBadge
                         label="Contract Signed"
-                        value={profile.contractSigned}
+                        value={(profile as YEPParticipant).contractSigned}
                       />
                       <StatusBadge
                         label="ID Provided"
-                        value={profile.idProvided}
+                        value={(profile as YEPParticipant).idProvided}
                       />
                       <StatusBadge
                         label="Syllabus Signed"
-                        value={profile.signedSyllabus}
+                        value={(profile as YEPParticipant).signedSyllabus}
                       />
                       <StatusBadge
                         label="Interviewed"
-                        value={profile.interviewed}
+                        value={(profile as YEPParticipant).interviewed}
                       />
                       <StatusBadge
                         label="Recruited"
-                        value={profile.recruited}
+                        value={(profile as YEPParticipant).recruited}
                       />
                     </>
                   )}
@@ -469,19 +491,19 @@ export function ProfileViewerModal({
                     <>
                       <StatusBadge
                         label="Police Check"
-                        value={profile.vulnerableSectorCheck}
+                        value={(profile as YEPMentor).vulnerableSectorCheck}
                       />
                       <StatusBadge
                         label="Contract Signed"
-                        value={profile.contractSigned}
+                        value={(profile as YEPMentor).contractSigned}
                       />
                       <StatusBadge
                         label="Resume Provided"
-                        value={profile.resumeProvided}
+                        value={(profile as YEPMentor).resumeProvided}
                       />
                       <StatusBadge
                         label="References Provided"
-                        value={profile.referencesProvided}
+                        value={(profile as YEPMentor).referencesProvided}
                       />
                     </>
                   )}

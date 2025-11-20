@@ -277,6 +277,28 @@ export default function YEPFormEditor({ formTemplate }: YEPFormEditorProps) {
                   {form.formState.errors.showInParticipantProfile && (
                     <p className="text-sm text-red-500">{(form.formState.errors as any).showInParticipantProfile.message}</p>
                   )}
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      control={form.control}
+                      name="showInMentorProfile"
+                      render={({ field }) => (
+                        <Switch
+                          id="showInMentorProfile"
+                          checked={Boolean(field.value)}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
+                    <div className="space-y-0.5">
+                      <Label htmlFor="showInMentorProfile">Show in Mentor Profile</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Display this form in the Forms tab of mentor profiles
+                      </p>
+                    </div>
+                  </div>
+                  {form.formState.errors.showInMentorProfile && (
+                    <p className="text-sm text-red-500">{(form.formState.errors as any).showInMentorProfile.message}</p>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="targetEntity">Target Entity</Label>
                     <Controller

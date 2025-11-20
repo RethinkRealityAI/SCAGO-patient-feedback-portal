@@ -476,26 +476,29 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
   }
 }
 
-// Get form templates available for participant profile
+// Get form templates available for participant or mentor profile
 export async function getYEPFormTemplatesForParticipantProfile() {
   try {
     const session = await getServerSession();
     if (!session) {
       return { success: false, error: 'Not authenticated' };
     }
-    
-    // Only allow participants and admins to access forms for participant profile
-    if (session.role !== 'participant' && session.role !== 'admin' && session.role !== 'super-admin') {
-      return { success: false, error: 'Unauthorized - only participants and admins can access profile forms' };
+
+    // Allow participants, mentors, and admins to access forms
+    if (session.role !== 'participant' && session.role !== 'mentor' && session.role !== 'admin' && session.role !== 'super-admin' && session.role !== 'yep-manager') {
+      return { success: false, error: 'Unauthorized - only participants, mentors, and admins can access profile forms' };
     }
-    
+
     const firestore = getAdminFirestore();
     let templates: YEPFormTemplate[] = [];
-    
+
+    // Determine which field to filter by based on role
+    const showInProfileField = session.role === 'mentor' ? 'showInMentorProfile' : 'showInParticipantProfile';
+
     try {
       const snapshot = await firestore
         .collection('yep-form-templates')
-        .where('showInParticipantProfile', '==', true)
+        .where(showInProfileField, '==', true)
         .where('isActive', '==', true)
         .orderBy('updatedAt', 'desc')
         .get();
@@ -521,7 +524,7 @@ export async function getYEPFormTemplatesForParticipantProfile() {
             updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
           } as unknown as YEPFormTemplate;
         })
-        .filter((t: any) => t.showInParticipantProfile === true && t.isActive === true)
+        .filter((t: any) => (t[showInProfileField] === true) && t.isActive === true)
         .sort((a: any, b: any) => {
           const aDate = a.updatedAt instanceof Date ? a.updatedAt : new Date(a.updatedAt);
           const bDate = b.updatedAt instanceof Date ? b.updatedAt : new Date(b.updatedAt);
