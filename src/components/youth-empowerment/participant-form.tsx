@@ -214,6 +214,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
       });
     }
 
+    console.log('[ParticipantForm] Loaded existing documents:', existingDocs.length);
     setDocuments(existingDocs);
   };
 
@@ -381,7 +382,11 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
   };
 
   const handleRemoveDocument = (id: string) => {
-    setDocuments(prev => prev.filter(doc => doc.id !== id));
+    setDocuments(prev => {
+      const updated = prev.filter(doc => doc.id !== id);
+      console.log('[ParticipantForm] Removing document:', id, 'Remaining:', updated.length);
+      return updated;
+    });
     toast({
       title: 'Document Removed',
       description: 'File will be removed when you save the form',
@@ -508,8 +513,15 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         uploadedAt: d.uploadedAt,
       }));
 
+      console.log('[ParticipantForm] Submitting form with documents:', {
+        newUploads: newUploads.length,
+        existingDocs: existingAdditionalDocs.length,
+        totalInState: documents.length,
+      });
+
       let result;
       if (participant) {
+        console.log('[ParticipantForm] Updating participant:', participant.id);
         result = await updateParticipant(participant.id, formData);
       } else {
         result = await createParticipant(formData);

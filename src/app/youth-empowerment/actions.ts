@@ -251,7 +251,11 @@ const meetingSchema = z.object({
 export async function createParticipant(data: z.infer<typeof participantSchema>) {
   try {
     const validatedData = participantSchema.parse(data);
-    
+
+    // Generate a document ID upfront so we can use it for storage paths
+    const participantRef = doc(collection(db, 'yep_participants'));
+    const participantId = participantRef.id;
+
     // Handle SIN if provided - always provide defaults for security
     let sinLast4 = 'N/A';
     let sinHash = 'N/A';
@@ -266,12 +270,12 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       }
     }
 
-    // Handle file upload if provided
+    // Handle file upload if provided - use organized storage path
     let fileUrl = '';
     let fileName = '';
     let fileType = '';
     if (validatedData.fileUpload) {
-      const fileRef = ref(storage, `yep-files/${Date.now()}-${validatedData.fileUpload.name}`);
+      const fileRef = ref(storage, `yep-files/participants/${participantId}/${Date.now()}-${validatedData.fileUpload.name}`);
       const snapshot = await uploadBytes(fileRef, validatedData.fileUpload);
       fileUrl = await getDownloadURL(snapshot.ref);
       // Use custom fileName if provided, otherwise use the uploaded file name
@@ -279,12 +283,12 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       fileType = validatedData.fileUpload.type;
     }
 
-    // Handle additional document uploads
+    // Handle additional document uploads - use organized storage path
     let additionalDocuments: any[] = [];
     if (validatedData.additionalFileUploads && Array.isArray(validatedData.additionalFileUploads)) {
       additionalDocuments = await Promise.all(
         validatedData.additionalFileUploads.map(async (fileData: any) => {
-          const fileRef = ref(storage, `yep-files/${Date.now()}-${Math.random()}-${fileData.file.name}`);
+          const fileRef = ref(storage, `yep-files/participants/${participantId}/${Date.now()}-${Math.random()}-${fileData.file.name}`);
           const snapshot = await uploadBytes(fileRef, fileData.file);
           const url = await getDownloadURL(snapshot.ref);
           return {
@@ -356,7 +360,8 @@ export async function createParticipant(data: z.infer<typeof participantSchema>)
       }
     });
 
-    const docRef = await addDoc(collection(db, 'yep_participants'), participantData);
+    await setDoc(participantRef, participantData);
+    const docRef = participantRef;
     
     // Sync mentor-participant relationship if mentor assigned on creation
     if (validatedData.assignedMentor) {
@@ -443,9 +448,9 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
       }
     }
 
-    // Handle file upload if provided
+    // Handle file upload if provided - use organized storage path
     if (data.fileUpload) {
-      const fileRef = ref(storage, `yep-files/${Date.now()}-${data.fileUpload.name}`);
+      const fileRef = ref(storage, `yep-files/participants/${id}/${Date.now()}-${data.fileUpload.name}`);
       const snapshot = await uploadBytes(fileRef, data.fileUpload);
       updateData.fileUrl = await getDownloadURL(snapshot.ref);
       // Use custom fileName if provided, otherwise use the uploaded file name
@@ -456,11 +461,12 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
       updateData.fileName = data.fileName;
     }
 
-    // Handle additional document uploads
+    // Handle additional document uploads - use organized storage path
     if (data.additionalFileUploads && Array.isArray(data.additionalFileUploads) && data.additionalFileUploads.length > 0) {
+      console.log('[updateParticipant] Uploading new documents:', data.additionalFileUploads.length);
       const uploadedDocs = await Promise.all(
         data.additionalFileUploads.map(async (fileData: any) => {
-          const fileRef = ref(storage, `yep-files/${Date.now()}-${Math.random()}-${fileData.file.name}`);
+          const fileRef = ref(storage, `yep-files/participants/${id}/${Date.now()}-${Math.random()}-${fileData.file.name}`);
           const snapshot = await uploadBytes(fileRef, fileData.file);
           const url = await getDownloadURL(snapshot.ref);
           return {
@@ -475,13 +481,17 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
       // Merge with existing additional documents
       const existingDocs = data.existingAdditionalDocuments || [];
       updateData.additionalDocuments = [...existingDocs, ...uploadedDocs];
+      console.log('[updateParticipant] Merged documents:', updateData.additionalDocuments.length, 'total');
     } else if (data.existingAdditionalDocuments !== undefined) {
       // Update with existing documents only (may have renamed files or deleted some)
       // If existingAdditionalDocuments is an empty array, this will clear all documents
       updateData.additionalDocuments = data.existingAdditionalDocuments;
+      console.log('[updateParticipant] Setting existing documents only:', updateData.additionalDocuments.length);
     }
 
+    console.log('[updateParticipant] Updating Firestore with additionalDocuments:', updateData.additionalDocuments?.length || 0);
     await updateDoc(doc(db, 'yep_participants', id), updateData);
+    console.log('[updateParticipant] Firestore update completed successfully');
     
     // Sync mentor-participant relationship if mentor changed
     if (data.assignedMentor !== undefined && oldMentor !== newMentor) {
