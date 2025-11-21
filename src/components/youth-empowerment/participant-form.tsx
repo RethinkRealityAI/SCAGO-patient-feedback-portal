@@ -362,6 +362,7 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
     toast({
       title: 'Files Added',
       description: `${files.length} file(s) ready to upload`,
+      variant: 'success',
     });
   };
 

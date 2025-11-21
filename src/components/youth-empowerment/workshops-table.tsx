@@ -136,6 +136,7 @@ export function WorkshopsTable({ onRefresh }: WorkshopsTableProps) {
         toast({
           title: 'Workshop Deleted',
           description: 'Workshop has been removed from the system.',
+          variant: 'success',
         });
         loadWorkshops();
         onRefresh?.();
