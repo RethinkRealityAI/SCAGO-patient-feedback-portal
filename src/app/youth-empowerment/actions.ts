@@ -647,6 +647,8 @@ export async function getParticipants(filters?: {
         fileUrl: data.fileUrl || '',
         fileName: data.fileName || '',
         fileType: data.fileType || '',
+        // Additional documents field - critical for document display
+        additionalDocuments: data.additionalDocuments || [],
         // New fields from current participants data
         age: data.age || null,
         emergencyContactRelationship: data.emergencyContactRelationship || '',
