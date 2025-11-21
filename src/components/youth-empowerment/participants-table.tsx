@@ -207,6 +207,7 @@ export function ParticipantsTable({ onRefresh }: ParticipantsTableProps) {
         toast({
           title: 'Participant Deleted',
           description: 'Participant has been removed from the system.',
+          variant: 'success',
         });
         loadParticipants();
         onRefresh?.();
