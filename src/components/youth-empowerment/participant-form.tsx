@@ -499,16 +499,14 @@ export function ParticipantForm({ participant, isOpen, onClose, onSuccess }: Par
         }));
       }
 
-      // Handle existing additional documents
+      // Handle existing additional documents (always send, even if empty, to handle deletions)
       const existingAdditionalDocs = additionalDocs.filter(d => d.isExisting);
-      if (existingAdditionalDocs.length > 0) {
-        formData.existingAdditionalDocuments = existingAdditionalDocs.map(d => ({
-          url: d.url!,
-          fileName: d.fileName,
-          fileType: d.fileType,
-          uploadedAt: d.uploadedAt,
-        }));
-      }
+      formData.existingAdditionalDocuments = existingAdditionalDocs.map(d => ({
+        url: d.url!,
+        fileName: d.fileName,
+        fileType: d.fileType,
+        uploadedAt: d.uploadedAt,
+      }));
 
       let result;
       if (participant) {

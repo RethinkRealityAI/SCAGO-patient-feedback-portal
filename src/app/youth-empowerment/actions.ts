@@ -457,7 +457,7 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
     }
 
     // Handle additional document uploads
-    if (data.additionalFileUploads && Array.isArray(data.additionalFileUploads)) {
+    if (data.additionalFileUploads && Array.isArray(data.additionalFileUploads) && data.additionalFileUploads.length > 0) {
       const uploadedDocs = await Promise.all(
         data.additionalFileUploads.map(async (fileData: any) => {
           const fileRef = ref(storage, `yep-files/${Date.now()}-${Math.random()}-${fileData.file.name}`);
@@ -475,8 +475,9 @@ export async function updateParticipant(id: string, data: Partial<z.infer<typeof
       // Merge with existing additional documents
       const existingDocs = data.existingAdditionalDocuments || [];
       updateData.additionalDocuments = [...existingDocs, ...uploadedDocs];
-    } else if (data.existingAdditionalDocuments) {
-      // Just update existing documents (may have renamed files)
+    } else if (data.existingAdditionalDocuments !== undefined) {
+      // Update with existing documents only (may have renamed files or deleted some)
+      // If existingAdditionalDocuments is an empty array, this will clear all documents
       updateData.additionalDocuments = data.existingAdditionalDocuments;
     }
 
