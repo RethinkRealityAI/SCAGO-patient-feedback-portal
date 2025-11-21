@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, FileText, CheckCircle, AlertCircle, History, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getYEPFormTemplatesForParticipantProfile, getYEPFormSubmissionsForParticipant } from '@/app/yep-forms/actions';
+import { getYEPFormTemplatesForParticipantProfile, getYEPFormSubmissionsForProfile } from '@/app/yep-forms/actions';
 import { YEPFormTemplate, YEPFormSubmission } from '@/lib/yep-forms-types';
 import YEPFormSubmissionComponent from '@/components/yep-forms/yep-form-submission';
 import { format } from 'date-fns';
@@ -56,7 +56,7 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
     if (!profile?.id) return;
     setLoadingHistory(true);
     try {
-      const result = await getYEPFormSubmissionsForParticipant(profile.id);
+      const result = await getYEPFormSubmissionsForProfile(profile.id, role);
       if (result.success && result.data) {
         setCompletedForms(result.data);
       }
@@ -65,11 +65,11 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
     } finally {
       setLoadingHistory(false);
     }
-  }, [profile?.id]);
+  }, [profile?.id, role]);
 
   useEffect(() => {
     loadForms();
-    if (role === 'participant' && profile?.id) {
+    if (profile?.id) {
       loadCompletedForms();
     }
   }, [profile?.id, role, loadForms, loadCompletedForms]);
@@ -116,12 +116,10 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
             <FileText className="h-4 w-4" />
             Available Forms
           </TabsTrigger>
-          {role === 'participant' && (
-            <TabsTrigger value="completed" className="gap-2">
-              <History className="h-4 w-4" />
-              Completed Forms ({completedForms.length})
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="completed" className="gap-2">
+            <History className="h-4 w-4" />
+            Completed Forms ({completedForms.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="available" className="space-y-4">
@@ -195,8 +193,7 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
           )}
         </TabsContent>
 
-        {role === 'participant' && (
-          <TabsContent value="completed" className="space-y-4">
+        <TabsContent value="completed" className="space-y-4">
             {loadingHistory ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -271,8 +268,7 @@ export function ProfileForms({ profile, role }: ProfileFormsProps) {
                 </div>
               </>
             )}
-          </TabsContent>
-        )}
+        </TabsContent>
       </Tabs>
     </div>
   );
