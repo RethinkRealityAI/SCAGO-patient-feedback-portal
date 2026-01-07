@@ -49,7 +49,7 @@ export async function analyzeFeedback() {
     // Verify user has dashboard access (server-side auth check)
     const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
-    
+
     // Fetch all submissions using utility function (handles both new and legacy structures)
     const { fetchAllSubmissionsAdmin } = await getSubmissionUtils();
     const feedbackList = await fetchAllSubmissionsAdmin();
@@ -70,15 +70,15 @@ export async function analyzeFeedback() {
       const raw = (f as any).submittedAt as any;
       const d = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : null));
       if (!d || isNaN(d.getTime())) continue;
-      const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
+      const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
       const cur = byDate.get(key) || { count: 0, sum: 0 };
       byDate.set(key, { count: cur.count + 1, sum: cur.sum + Number(f.rating || 0) });
     }
-    const sorted = Array.from(byDate.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+    const sorted = Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     const last7 = sorted.slice(-7);
     const prev7 = sorted.slice(-14, -7);
-    const avgLast7 = last7.length ? last7.reduce((a, [,v])=>a+v.sum,0) / last7.reduce((a,[,v])=>a+v.count,0) : 0;
-    const avgPrev7 = prev7.length ? prev7.reduce((a, [,v])=>a+v.sum,0) / prev7.reduce((a,[,v])=>a+v.count,0) : 0;
+    const avgLast7 = last7.length ? last7.reduce((a, [, v]) => a + v.sum, 0) / last7.reduce((a, [, v]) => a + v.count, 0) : 0;
+    const avgPrev7 = prev7.length ? prev7.reduce((a, [, v]) => a + v.sum, 0) / prev7.reduce((a, [, v]) => a + v.count, 0) : 0;
     const trend = avgPrev7 ? (avgLast7 - avgPrev7) : 0;
 
     // Build AI context text and run analysis
@@ -115,7 +115,7 @@ export async function analyzeFeedback() {
   } catch (error) {
     console.error('Error analyzing feedback:', error);
     if (error instanceof Error) {
-        return { error: error.message };
+      return { error: error.message };
     }
     return { error: 'An unknown error occurred during analysis.' };
   }
@@ -126,19 +126,19 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     // Verify user has dashboard access (server-side auth check)
     const { enforcePagePermission } = await getServerAuth();
     await enforcePagePermission('forms-dashboard');
-    
+
     // Validate surveyId
     if (!surveyId || surveyId.trim() === '') {
       return { error: 'Survey ID is required for analysis.' };
     }
-    
+
     // Fetch submissions for this survey using utility function
     const { fetchSubmissionsForSurveyAdmin } = await getSubmissionUtils();
     const allSubmissions = await fetchSubmissionsForSurveyAdmin(surveyId);
-    
+
     // Get survey-specific context
     const surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
-    
+
     // Filter by surveyId (already filtered by fetchSubmissionsForSurveyAdmin, but ensure consistency)
     const feedbackList = allSubmissions.filter(f => f.surveyId && f.surveyId === surveyId);
 
@@ -159,7 +159,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       }).filter(Boolean);
       const cities = feedbackList.map(s => (s as any).city?.selection).filter(Boolean);
       const hospitals = feedbackList.map(s => (s as any).primaryHospital?.selection).filter(Boolean);
-      
+
       feedbackText = feedbackList.map(f => {
         const firstName = (f as any).firstName || '';
         const lastName = (f as any).lastName || '';
@@ -168,7 +168,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
         const connStr = Array.isArray(conn) ? conn.join(', ') : conn;
         return `- Name: ${firstName} ${lastName}, City: ${city}, SCD Connection: ${connStr}, May Contact: ${(f as any).mayContact}`;
       }).join('\n');
-      
+
       metrics = {
         totalSubmissions: feedbackList.length,
         mayContactRate: `${Math.round((mayContactYes / feedbackList.length) * 100)}%`,
@@ -183,9 +183,9 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
         const sid = (f as any).surveyId || 'unknown';
         surveyBreakdown.set(sid, (surveyBreakdown.get(sid) || 0) + 1);
       });
-      
+
       feedbackText = `Survey breakdown: ${Array.from(surveyBreakdown.entries()).map(([id, count]) => `${id}: ${count}`).join(', ')}`;
-      
+
       metrics = {
         totalSubmissions: feedbackList.length,
         uniqueSurveys: surveyBreakdown.size,
@@ -199,11 +199,11 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
         const r = Number(f.rating || 0);
         if (r >= 9) promoters++; else if (r >= 7) passives++; else detractors++;
       }
-      
+
       feedbackText = feedbackList
         .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
         .join('\n');
-      
+
       metrics = {
         totalSubmissions: feedbackList.length,
         averageRating: averageRating.toFixed(1),
@@ -215,14 +215,14 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
 
     // Get context-aware AI prompt
     const contextPrompt = getAnalysisPrompt(surveyContext, feedbackList.length);
-    
+
     // Run AI analysis with survey-specific context
     const aiInput = {
       location: surveyContext.type === 'consent' ? 'SCAGO Community' : 'Various Hospitals',
       rating: surveyContext.type === 'feedback' ? Math.round(Number(metrics.averageRating)) : 8,
       feedbackText: `${contextPrompt}\n\nData:\n${feedbackText}`
     };
-    
+
     const runAnalysisFlow = await getAIAnalysis();
     const ai: AIAnalysisResult = await runAnalysisFlow(aiInput);
 
@@ -250,7 +250,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
   } catch (error) {
     console.error('Error analyzing feedback for survey:', error);
     if (error instanceof Error) {
-        return { error: error.message };
+      return { error: error.message };
     }
     return { error: 'An unknown error occurred during analysis.' };
   }
@@ -266,7 +266,7 @@ export async function getSubmissions(): Promise<FeedbackSubmission[] | { error: 
   } catch (e) {
     console.error("Error fetching submissions:", e);
     if (e instanceof Error && e.message.includes('permission-denied')) {
-        return { error: 'Could not fetch submissions due to a permission error. Please check your Firestore security rules.' };
+      return { error: 'Could not fetch submissions due to a permission error. Please check your Firestore security rules.' };
     }
     return { error: 'An unexpected error occurred while fetching submissions.' };
   }
@@ -279,7 +279,7 @@ export async function getSubmissionsForSurvey(surveyId: string): Promise<Feedbac
     if (!surveyId || surveyId.trim() === '') {
       return { error: 'Survey ID is required.' };
     }
-    
+
     // Use utility function that handles both new and legacy structures
     const { fetchSubmissionsForSurvey } = await import('@/lib/submission-utils');
     const feedbackList = await fetchSubmissionsForSurvey(surveyId);
@@ -287,15 +287,15 @@ export async function getSubmissionsForSurvey(surveyId: string): Promise<Feedbac
   } catch (e) {
     console.error("Error fetching submissions for survey:", e);
     if (e instanceof Error && e.message.includes('permission-denied')) {
-        return { error: 'Could not fetch submissions due to a permission error. Please check your Firestore security rules.' };
+      return { error: 'Could not fetch submissions due to a permission error. Please check your Firestore security rules.' };
     }
     return { error: 'An unexpected error occurred while fetching submissions.' };
   }
 }
 
-export async function generateAnalysisPdf(params: { 
-  title: string; 
-  surveyId: string; 
+export async function generateAnalysisPdf(params: {
+  title: string;
+  surveyId: string;
   analysisMarkdown: string;
   includeSubmissions?: boolean;
 }): Promise<{ error?: string; pdfBase64?: string }> {
@@ -312,21 +312,21 @@ export async function generateAnalysisPdf(params: {
 
     // Title
     const title = `${params.title} — Survey ${params.surveyId}`;
-    currentPage.drawText(title, { 
-      x: margin, 
-      y: height - margin - 24, 
-      size: 20, 
-      font: boldFont, 
-      color: rgb(0.2, 0.2, 0.2) 
+    currentPage.drawText(title, {
+      x: margin,
+      y: height - margin - 24,
+      size: 20,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.2)
     });
 
     // Date
-    currentPage.drawText(`Generated: ${new Date().toLocaleString()}`, { 
-      x: margin, 
-      y: height - margin - 45, 
-      size: 10, 
-      font, 
-      color: rgb(0.5, 0.5, 0.5) 
+    currentPage.drawText(`Generated: ${new Date().toLocaleString()}`, {
+      x: margin,
+      y: height - margin - 45,
+      size: 10,
+      font,
+      color: rgb(0.5, 0.5, 0.5)
     });
 
     // AI Analysis Section
@@ -336,24 +336,24 @@ export async function generateAnalysisPdf(params: {
 
     for (const raw of lines) {
       const isHeader = raw.startsWith('#');
-      const text = raw.replace(/^#+\s*/,'').replace(/^\*\s*/,'• ');
+      const text = raw.replace(/^#+\s*/, '').replace(/^\*\s*/, '• ');
       const textFont = isHeader ? boldFont : font;
       const textSize = isHeader ? 14 : 11;
-      
+
       // Check if we need a new page
       if (cursorY < margin + lineHeight) {
         currentPage = doc.addPage([612, 792]);
         cursorY = height - margin;
       }
-      
+
       // Draw text with proper formatting
       if (text.trim()) {
-        currentPage.drawText(text, { 
-          x: text.startsWith('• ') ? margin + 15 : margin, 
-          y: cursorY, 
-          size: textSize, 
-          font: textFont, 
-          color: rgb(0, 0, 0) 
+        currentPage.drawText(text, {
+          x: text.startsWith('• ') ? margin + 15 : margin,
+          y: cursorY,
+          size: textSize,
+          font: textFont,
+          color: rgb(0, 0, 0)
         });
         cursorY -= lineHeight * (isHeader ? 1.5 : 1);
       } else {
@@ -366,13 +366,13 @@ export async function generateAnalysisPdf(params: {
       // Add a new page for submissions
       currentPage = doc.addPage([612, 792]);
       cursorY = height - margin;
-      
-      currentPage.drawText('Submission Data', { 
-        x: margin, 
-        y: cursorY, 
-        size: 16, 
-        font: boldFont, 
-        color: rgb(0.2, 0.2, 0.2) 
+
+      currentPage.drawText('Submission Data', {
+        x: margin,
+        y: cursorY,
+        size: 16,
+        font: boldFont,
+        color: rgb(0.2, 0.2, 0.2)
       });
       cursorY -= 30;
 
@@ -388,12 +388,12 @@ export async function generateAnalysisPdf(params: {
       submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
 
       // Add submission summary
-      currentPage.drawText(`Total Submissions: ${submissions.length}`, { 
-        x: margin, 
-        y: cursorY, 
-        size: 12, 
-        font, 
-        color: rgb(0, 0, 0) 
+      currentPage.drawText(`Total Submissions: ${submissions.length}`, {
+        x: margin,
+        y: cursorY,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0)
       });
       cursorY -= 20;
 
@@ -405,12 +405,12 @@ export async function generateAnalysisPdf(params: {
         }
 
         // Submission header
-        currentPage.drawText(`Submission #${idx + 1}`, { 
-          x: margin, 
-          y: cursorY, 
-          size: 12, 
-          font: boldFont, 
-          color: rgb(0.3, 0.3, 0.3) 
+        currentPage.drawText(`Submission #${idx + 1}`, {
+          x: margin,
+          y: cursorY,
+          size: 12,
+          font: boldFont,
+          color: rgb(0.3, 0.3, 0.3)
         });
         cursorY -= 15;
 
@@ -422,16 +422,16 @@ export async function generateAnalysisPdf(params: {
         ];
 
         for (const detail of details) {
-          currentPage.drawText(detail, { 
-            x: margin + 10, 
-            y: cursorY, 
-            size: 10, 
-            font, 
-            color: rgb(0.4, 0.4, 0.4) 
+          currentPage.drawText(detail, {
+            x: margin + 10,
+            y: cursorY,
+            size: 10,
+            font,
+            color: rgb(0.4, 0.4, 0.4)
           });
           cursorY -= 12;
         }
-        
+
         cursorY -= 10; // Extra spacing between submissions
       }
     }
@@ -479,14 +479,14 @@ export async function analyzeSingleFeedback(input: { rating: number; hospitalInt
 export async function chatWithFeedbackData(query: string, surveyId?: string): Promise<{ error?: string; response?: string }> {
   try {
     // Verify user has dashboard access (server-side auth check)
-    const { enforcePagePermission } = await getServerAuth();
-    await enforcePagePermission('forms-dashboard');
-    
-    // Fetch submissions using utility function (handles both new and legacy structures)
-    const { fetchAllSubmissionsAdmin } = await getSubmissionUtils();
-    const allSubmissions = await fetchAllSubmissionsAdmin();
+    const authModule = await getServerAuth();
+    await authModule.enforcePagePermission('forms-dashboard');
+
+    // Fetch submissions using utility function
+    const utilsModule = await getSubmissionUtils();
+    const allSubmissions = await utilsModule.fetchAllSubmissionsAdmin();
     const surveyContext = getSurveyContextFromId(surveyId || 'all', allSubmissions);
-    
+
     // Filter by survey if surveyId is provided
     let feedbackList = allSubmissions;
     if (surveyId && surveyId !== 'all') {
@@ -507,13 +507,29 @@ ${surveyContext.analysisPrompt}
 
 User question: ${query}`;
 
-    // Use the chat-with-data flow
-    const { chatWithData } = await import('@/ai/flows/chat-with-data-flow');
-    const response = await chatWithData(contextualizedQuery, feedbackList);
-    
-    return { response };
+    // Dynamically import AI flow with specialized error handling
+    let chatWithData;
+    try {
+      const flowModule = await import('@/ai/flows/chat-with-data-flow');
+      chatWithData = flowModule.chatWithData;
+    } catch (importError) {
+      console.error('[chatWithFeedbackData] Failed to import AI flow:', importError);
+      const msg = importError instanceof Error ? importError.message : String(importError);
+      return { error: `AI service initialization failed: ${msg}. Please check the server logs.` };
+    }
+
+    // Process the request
+    try {
+      const response = await chatWithData(contextualizedQuery, feedbackList);
+      return { response };
+    } catch (processError) {
+      console.error('[chatWithFeedbackData] Processing failed:', processError);
+      const msg = processError instanceof Error ? processError.message : String(processError);
+      return { error: `Unable to process request: ${msg}` };
+    }
+
   } catch (e) {
-    console.error('Error in chat with feedback data:', e);
-    return { error: 'Failed to process your query. Please try again.' };
+    console.error('[chatWithFeedbackData] Unexpected error:', e);
+    return { error: 'An unexpected system error occurred. Please try again later.' };
   }
 }

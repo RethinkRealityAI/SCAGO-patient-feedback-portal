@@ -1,21 +1,21 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { enforceAdminInAction } from '@/lib/server-auth';
-import { 
-  ImportResult, 
-  ImportError, 
-  ImportOptions, 
+import {
+  ImportResult,
+  ImportError,
+  ImportOptions,
   ImportMapping,
   validateData,
   convertDataTypes,
   checkDuplicates,
   TABLE_SCHEMAS
 } from '@/lib/import-utils';
-import { 
-  createParticipant, 
-  createMentor, 
-  createWorkshop, 
+import {
+  createParticipant,
+  createMentor,
+  createWorkshop,
   createAdvisorMeeting,
   getParticipants,
   getMentors,
@@ -70,7 +70,7 @@ export async function importParticipants(
     if (!options.updateExisting) {
       const existingParticipants = await getParticipants();
       const duplicates = checkDuplicates(convertedData, 'participants', existingParticipants);
-      
+
       if (Object.keys(duplicates).length > 0 && options.skipDuplicates) {
         result.skipped = Object.values(duplicates).flat().length;
         result.message = `Skipped ${result.skipped} duplicate records`;
@@ -80,18 +80,19 @@ export async function importParticipants(
     // Process in batches
     const batchSize = options.batchSize || 50;
     const batches = [];
-    
+
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
 
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     for (const batch of batches) {
       const batchPromises = batch.map(async (participantData) => {
         try {
           // Use upsertParticipantByEmail for proper validation and security
           const upsertResult = await upsertParticipantByEmail(participantData);
-          
+
           if (upsertResult.success) {
             if (upsertResult.action === 'created') {
               result.imported++;
@@ -119,7 +120,7 @@ export async function importParticipants(
 
     result.success = true;
     result.message = `Successfully imported ${result.imported} participants, updated ${result.updated}, skipped ${result.skipped}`;
-    
+
   } catch (error) {
     result.message = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     result.errors.push({
@@ -148,6 +149,7 @@ export async function importMentors(
   };
 
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
@@ -176,7 +178,7 @@ export async function importMentors(
     // Process in batches
     const batchSize = options.batchSize || 50;
     const batches = [];
-    
+
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
@@ -189,7 +191,7 @@ export async function importMentors(
             .collection('yep_mentors')
             .where('email', '==', mentorData.email)
             .get();
-          
+
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing mentor
             const existingDoc = existingSnapshot.docs[0];
@@ -203,8 +205,8 @@ export async function importMentors(
               assignedStudents: Array.isArray(mentorData.assignedStudents)
                 ? mentorData.assignedStudents
                 : (typeof mentorData.assignedStudents === 'string' && mentorData.assignedStudents.includes(',')
-                    ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
-                    : []),
+                  ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
+                  : []),
               file: mentorData.file || '',
               updatedAt: new Date()
             }, { merge: true } as any);
@@ -221,8 +223,8 @@ export async function importMentors(
               assignedStudents: Array.isArray(mentorData.assignedStudents)
                 ? mentorData.assignedStudents
                 : (typeof mentorData.assignedStudents === 'string' && mentorData.assignedStudents.includes(',')
-                    ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
-                    : []),
+                  ? mentorData.assignedStudents.split(',').map((s: string) => s.trim())
+                  : []),
               file: mentorData.file || '',
               createdAt: new Date(),
               updatedAt: new Date()
@@ -245,7 +247,7 @@ export async function importMentors(
 
     result.success = true;
     result.message = `Successfully imported ${result.imported} mentors, updated ${result.updated}, skipped ${result.skipped}`;
-    
+
   } catch (error) {
     result.message = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     result.errors.push({
@@ -274,6 +276,7 @@ export async function importWorkshops(
   };
 
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
@@ -302,7 +305,7 @@ export async function importWorkshops(
     // Process in batches
     const batchSize = options.batchSize || 50;
     const batches = [];
-    
+
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
@@ -316,7 +319,7 @@ export async function importWorkshops(
             .where('title', '==', workshopData.title)
             .where('date', '==', workshopData.date)
             .get();
-          
+
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing workshop
             const existingDoc = existingSnapshot.docs[0];
@@ -350,7 +353,7 @@ export async function importWorkshops(
 
     result.success = true;
     result.message = `Successfully imported ${result.imported} workshops, updated ${result.updated}, skipped ${result.skipped}`;
-    
+
   } catch (error) {
     result.message = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     result.errors.push({
@@ -379,6 +382,7 @@ export async function importAttendance(
   };
 
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
@@ -407,7 +411,7 @@ export async function importAttendance(
     // Process in batches
     const batchSize = options.batchSize || 50;
     const batches = [];
-    
+
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
@@ -421,7 +425,7 @@ export async function importAttendance(
             .where('participantId', '==', attendanceData.participantId)
             .where('workshopId', '==', attendanceData.workshopId)
             .get();
-          
+
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing attendance
             const existingDoc = existingSnapshot.docs[0];
@@ -455,7 +459,7 @@ export async function importAttendance(
 
     result.success = true;
     result.message = `Successfully imported ${result.imported} attendance records, updated ${result.updated}, skipped ${result.skipped}`;
-    
+
   } catch (error) {
     result.message = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     result.errors.push({
@@ -484,6 +488,7 @@ export async function importMeetings(
   };
 
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     // Map CSV columns to database fields
     const mappedData = data.map(row => {
@@ -512,7 +517,7 @@ export async function importMeetings(
     // Process in batches
     const batchSize = options.batchSize || 50;
     const batches = [];
-    
+
     for (let i = 0; i < convertedData.length; i += batchSize) {
       batches.push(convertedData.slice(i, i + batchSize));
     }
@@ -527,7 +532,7 @@ export async function importMeetings(
             .where('mentorId', '==', meetingData.mentorId)
             .where('meetingDate', '==', meetingData.meetingDate)
             .get();
-          
+
           if (!existingSnapshot.empty && options.updateExisting) {
             // Update existing meeting
             const existingDoc = existingSnapshot.docs[0];
@@ -561,7 +566,7 @@ export async function importMeetings(
 
     result.success = true;
     result.message = `Successfully imported ${result.imported} meetings, updated ${result.updated}, skipped ${result.skipped}`;
-    
+
   } catch (error) {
     result.message = `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     result.errors.push({

@@ -1,13 +1,13 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { enforceAdminInAction, getServerSession } from '@/lib/server-auth';
-import { 
-  YEPFormTemplate, 
-  YEPFormSubmission, 
+import {
+  YEPFormTemplate,
+  YEPFormSubmission,
   yepFormTemplateSchema,
   yepFormSubmissionSchema,
-  YEPFormCategory 
+  YEPFormCategory
 } from '@/lib/yep-forms-types';
 import { nanoid } from 'nanoid';
 
@@ -36,7 +36,7 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
     await enforceAdminInAction();
     const session = await getServerSession();
     const validatedData = yepFormTemplateSchema.parse(data);
-    
+
     const formTemplate: YEPFormTemplate = {
       id: nanoid(),
       ...validatedData,
@@ -46,15 +46,16 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
       version: 1,
     };
 
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     await firestore.collection('yep-form-templates').doc(formTemplate.id).set(formTemplate as any);
-    
+
     return { success: true, data: formTemplate };
   } catch (error) {
     console.error('Error creating YEP form template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to create form template' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create form template'
     };
   }
 }
@@ -63,6 +64,7 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
 export async function getYEPFormTemplates() {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     let templates: YEPFormTemplate[] = [];
     try {
@@ -81,13 +83,13 @@ export async function getYEPFormTemplates() {
         .filter(t => (t as any).isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
     }
-    
+
     return { success: true, data: templates };
   } catch (error) {
     console.error('Error fetching YEP form templates:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form templates' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form templates'
     };
   }
 }
@@ -95,20 +97,21 @@ export async function getYEPFormTemplates() {
 // Get a single YEP form template by ID
 export async function getYEPFormTemplate(id: string) {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const docSnap = await firestore.collection('yep-form-templates').doc(id).get();
-    
+
     if (!docSnap.exists) {
       return { success: false, error: 'Form template not found' };
     }
-    
+
     const template = { id: docSnap.id, ...docSnap.data() } as unknown as YEPFormTemplate;
     return { success: true, data: template };
   } catch (error) {
     console.error('Error fetching YEP form template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form template' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form template'
     };
   }
 }
@@ -118,22 +121,23 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
   try {
     await enforceAdminInAction();
     const validatedData = yepFormTemplateSchema.partial().parse(data);
-    
+
     const updateData = {
       ...validatedData,
       updatedAt: new Date(),
       version: (data.version || 1) + 1,
     };
 
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     await firestore.collection('yep-form-templates').doc(id).set(updateData as any, { merge: true });
-    
+
     return { success: true };
   } catch (error) {
     console.error('Error updating YEP form template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to update form template' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update form template'
     };
   }
 }
@@ -142,18 +146,19 @@ export async function updateYEPFormTemplate(id: string, data: Partial<Omit<YEPFo
 export async function deleteYEPFormTemplate(id: string) {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     await firestore.collection('yep-form-templates').doc(id).set({
       isActive: false,
       updatedAt: new Date(),
     } as any, { merge: true });
-    
+
     return { success: true };
   } catch (error) {
     console.error('Error deleting YEP form template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to delete form template' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete form template'
     };
   }
 }
@@ -166,7 +171,7 @@ export async function duplicateYEPFormTemplate(id: string, newName: string) {
     if (!originalResult.success || !originalResult.data) {
       return { success: false, error: 'Original template not found' };
     }
-    
+
     const original = originalResult.data;
     const duplicatedData = {
       name: newName,
@@ -178,14 +183,14 @@ export async function duplicateYEPFormTemplate(id: string, newName: string) {
       isActive: true,
       showInParticipantProfile: original.showInParticipantProfile || false,
     };
-    
+
     const result = await createYEPFormTemplate(duplicatedData);
     return result;
   } catch (error) {
     console.error('Error duplicating YEP form template:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to duplicate form template' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to duplicate form template'
     };
   }
 }
@@ -206,8 +211,9 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
       data,
     });
 
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
-    
+
     // Get form template to include name
     const templateDoc = await firestore.collection('yep-form-templates').doc(formTemplateId).get();
     const templateData = templateDoc.exists ? templateDoc.data() : null;
@@ -216,7 +222,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
     // Get participant/mentor profile if applicable
     let participantId: string | undefined;
     let mentorId: string | undefined;
-    
+
     if (session.role === 'participant') {
       // Find participant record
       const participantQuery = await firestore
@@ -224,7 +230,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
         .where('userId', '==', session.uid)
         .limit(1)
         .get();
-      
+
       if (participantQuery.empty && session.email) {
         // Try by email
         const emailQuery = await firestore
@@ -245,7 +251,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
         .where('userId', '==', session.uid)
         .limit(1)
         .get();
-      
+
       if (mentorQuery.empty && session.email) {
         // Try by email
         const emailQuery = await firestore
@@ -260,7 +266,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
         mentorId = mentorQuery.docs[0].id;
       }
     }
-    
+
     const submission: YEPFormSubmission = {
       id: nanoid(),
       formTemplateId: validatedData.formTemplateId,
@@ -275,14 +281,14 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
     };
 
     await firestore.collection('yep-form-submissions').doc(submission.id).set(submission as any);
-    
+
     const safeSubmission = { ...submission, submittedAt: submission.submittedAt.toISOString() };
     return { success: true, data: safeSubmission };
   } catch (error) {
     console.error('Error submitting YEP form:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to submit form' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to submit form'
     };
   }
 }
@@ -291,6 +297,7 @@ export async function submitYEPForm(formTemplateId: string, data: Record<string,
 export async function getYEPFormSubmissions(formTemplateId: string) {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     let submissions: YEPFormSubmission[] = [];
     try {
@@ -327,13 +334,13 @@ export async function getYEPFormSubmissions(formTemplateId: string) {
           return bDate.getTime() - aDate.getTime();
         });
     }
-    
+
     return { success: true, data: submissions };
   } catch (error) {
     console.error('Error fetching YEP form submissions:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form submissions' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form submissions'
     };
   }
 }
@@ -342,6 +349,7 @@ export async function getYEPFormSubmissions(formTemplateId: string) {
 export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     let templates: YEPFormTemplate[] = [];
     try {
@@ -360,13 +368,13 @@ export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
         .filter((t: any) => t.category === category && t.isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
     }
-    
+
     return { success: true, data: templates };
   } catch (error) {
     console.error('Error fetching YEP form templates by category:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form templates' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form templates'
     };
   }
 }
@@ -375,6 +383,7 @@ export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
 export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     let templates: YEPFormTemplate[] = [];
     try {
@@ -393,13 +402,13 @@ export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
         .filter((t: any) => t.targetEntity === targetEntity && t.isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
     }
-    
+
     return { success: true, data: templates };
   } catch (error) {
     console.error('Error fetching YEP form templates by target entity:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form templates' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form templates'
     };
   }
 }
@@ -411,8 +420,9 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
     if (!session) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     // Verify user has access (admin or owns the participant record)
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     if (session.role !== 'admin' && session.role !== 'super-admin') {
       // Verify participant belongs to user
@@ -421,15 +431,15 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
         return { success: false, error: 'Participant not found' };
       }
       const participantData = participantDoc.data();
-      if (participantData?.userId !== session.uid && 
-          participantData?.email !== session.email && 
-          participantData?.authEmail !== session.email) {
+      if (participantData?.userId !== session.uid &&
+        participantData?.email !== session.email &&
+        participantData?.authEmail !== session.email) {
         return { success: false, error: 'Unauthorized' };
       }
     }
-    
+
     let submissions: YEPFormSubmission[] = [];
-    
+
     try {
       const snapshot = await firestore
         .collection('yep-form-submissions')
@@ -465,13 +475,13 @@ export async function getYEPFormSubmissionsForParticipant(participantId: string)
           return bDate.getTime() - aDate.getTime();
         });
     }
-    
+
     return { success: true, data: submissions };
   } catch (error) {
     console.error('Error fetching participant form submissions:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch submissions' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch submissions'
     };
   }
 }
@@ -485,6 +495,7 @@ export async function getYEPFormSubmissionsForProfile(profileId: string, role: '
     }
 
     // Verify user has access (admin or owns the profile record)
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     if (session.role !== 'admin' && session.role !== 'super-admin') {
       // Verify profile belongs to user
@@ -495,8 +506,8 @@ export async function getYEPFormSubmissionsForProfile(profileId: string, role: '
       }
       const profileData = profileDoc.data();
       if (profileData?.userId !== session.uid &&
-          profileData?.email !== session.email &&
-          profileData?.authEmail !== session.email) {
+        profileData?.email !== session.email &&
+        profileData?.authEmail !== session.email) {
         return { success: false, error: 'Unauthorized' };
       }
     }
@@ -563,6 +574,7 @@ export async function getYEPFormTemplatesForParticipantProfile() {
       return { success: false, error: 'Unauthorized - only participants, mentors, and admins can access profile forms' };
     }
 
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     let templates: YEPFormTemplate[] = [];
 
@@ -605,13 +617,13 @@ export async function getYEPFormTemplatesForParticipantProfile() {
           return bDate.getTime() - aDate.getTime();
         });
     }
-    
+
     return { success: true, data: templates };
   } catch (error) {
     console.error('Error fetching YEP form templates for participant profile:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch form templates' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch form templates'
     };
   }
 }

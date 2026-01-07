@@ -1,6 +1,6 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { enforceAdminInAction } from '@/lib/server-auth';
 
 export interface BackupMetadata {
@@ -21,6 +21,7 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
     const backupId = `backup-${timestamp.getTime()}`;
 
     // Backup surveys
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const surveysSnapshot = await firestore.collection('surveys').get();
     const surveys = surveysSnapshot.docs.map(doc => ({
@@ -75,6 +76,7 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
 export async function exportDataAsJSON(): Promise<{ success: boolean; data?: string; error?: string }> {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     // Get all surveys
     const surveysSnapshot = await firestore.collection('surveys').get();
@@ -118,6 +120,7 @@ export async function exportDataAsJSON(): Promise<{ success: boolean; data?: str
 export async function listBackups(): Promise<{ success: boolean; backups?: BackupMetadata[]; error?: string }> {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const backupsSnapshot = await firestore.collection('backups').get();
     const backups: BackupMetadata[] = backupsSnapshot.docs.map(doc => {
@@ -150,13 +153,13 @@ export async function restoreFromBackup(backupId: string): Promise<{ success: bo
     // This is a dangerous operation and should require admin authentication
     // For now, just return a message
     console.warn('Restore operation requested for backup:', backupId);
-    
+
     // TODO: Implement restore logic with proper safeguards
     // 1. Verify admin authentication
     // 2. Create a backup of current data before restoring
     // 3. Restore the data
     // 4. Verify data integrity
-    
+
     return {
       success: false,
       error: 'Restore functionality not yet implemented. Please contact administrator.',

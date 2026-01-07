@@ -12,7 +12,8 @@ export type PagePermissionKey =
   | 'forms-editor'
   | 'yep-portal'
   | 'yep-dashboard'
-  | 'yep-forms';
+  | 'yep-forms'
+  | 'patient-management';
 
 export interface PagePermission {
   key: PagePermissionKey;
@@ -61,6 +62,12 @@ export const PAGE_PERMISSIONS: PagePermission[] = [
     description: 'Manage YEP-specific registration and intake forms',
     route: '/yep-forms',
   },
+  {
+    key: 'patient-management',
+    label: 'Patient Management',
+    description: 'Manage patient records, interactions, and documents',
+    route: '/patients',
+  },
 ];
 
 /**
@@ -73,6 +80,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, PagePermissionKey> = {
   '/youth-empowerment': 'yep-portal',
   '/youth-empowerment/dashboard': 'yep-dashboard',
   '/yep-forms': 'yep-forms',
+  '/patients': 'patient-management',
 };
 
 /**

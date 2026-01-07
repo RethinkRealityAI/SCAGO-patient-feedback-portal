@@ -1,6 +1,5 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
 import { enforceAdminInAction } from '@/lib/server-auth';
 
 export interface AdminActivityItem {
@@ -17,6 +16,7 @@ export async function getAdminActivityFeed(limitCount = 100): Promise<{
 }> {
   try {
     await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     const items: AdminActivityItem[] = [];

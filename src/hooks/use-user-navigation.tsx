@@ -4,13 +4,14 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '@/components/auth/auth-provider';
 import { PAGE_PERMISSIONS, type PagePermissionKey } from '@/lib/permissions';
 import { getPagePermissions } from '@/lib/page-permissions-actions';
-import { 
+import {
   Home,
   ClipboardList,
   FileText,
   GraduationCap,
   Shield,
   User,
+  Users,
   Book,
 } from 'lucide-react';
 
@@ -91,6 +92,12 @@ export function useUserNavigation(): NavItem[] {
         permission: 'forms-dashboard',
       });
       navItems.push({
+        href: '/patients',
+        label: 'Patients',
+        icon: <Users className="h-4 w-4" />,
+        permission: 'patient-management',
+      });
+      navItems.push({
         href: '/editor',
         label: 'Editor',
         icon: <ClipboardList className="h-4 w-4" />,
@@ -115,6 +122,12 @@ export function useUserNavigation(): NavItem[] {
           href: '/dashboard',
           label: 'Dashboard',
           icon: <Home className="h-4 w-4" />,
+          permission: 'forms-dashboard',
+        });
+        navItems.push({
+          href: '/patients',
+          label: 'Patients',
+          icon: <Users className="h-4 w-4" />,
           permission: 'forms-dashboard',
         });
       }

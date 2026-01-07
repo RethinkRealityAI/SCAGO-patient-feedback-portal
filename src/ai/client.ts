@@ -6,7 +6,7 @@
  */
 'use server';
 
-import { ai, geminiModel } from './genkit';
+import { ai, chatModel } from './genkit';
 import { z } from 'zod';
 
 export const virtualAssistant = ai.defineFlow(
@@ -17,7 +17,7 @@ export const virtualAssistant = ai.defineFlow(
   },
   async (prompt: string) => {
     const llmResponse = await ai.generate({
-      model: geminiModel,
+      model: chatModel,
       prompt: `
     You are a virtual assistant for a survey application.
     Your goal is to help users understand their survey data.

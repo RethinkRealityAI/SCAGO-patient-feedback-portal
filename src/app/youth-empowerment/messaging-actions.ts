@@ -1,6 +1,6 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { z } from 'zod';
 import { YEPMessage } from '@/lib/youth-empowerment';
 import { sendMessageNotificationEmail } from '@/lib/email-templates';
@@ -27,6 +27,7 @@ export async function sendMessage(data: z.infer<typeof sendMessageSchema>): Prom
 }> {
   try {
     const validated = sendMessageSchema.parse(data);
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Create message document
@@ -85,6 +86,7 @@ export async function getConversation(
   error?: string;
 }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Get messages where user1 is sender and user2 is recipient, or vice versa
@@ -160,6 +162,7 @@ export async function getInbox(userId: string): Promise<{
   error?: string;
 }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Get messages where user is sender or recipient
@@ -203,7 +206,7 @@ export async function getInbox(userId: string): Promise<{
     sentMessages.docs.forEach((doc) => {
       const data = doc.data();
       const otherUserId = data.recipientId;
-      
+
       if (!conversationMap.has(otherUserId)) {
         conversationMap.set(otherUserId, {
           otherUserId,
@@ -306,6 +309,7 @@ export async function markMessageAsRead(
   error?: string;
 }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const messageDoc = await firestore.collection('yep_messages').doc(messageId).get();
 
@@ -349,6 +353,7 @@ export async function getUnreadCount(userId: string): Promise<{
   error?: string;
 }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const unreadMessages = await firestore
       .collection('yep_messages')
@@ -388,6 +393,7 @@ export async function getMessagingContacts(
   error?: string;
 }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const contacts: any[] = [];
 

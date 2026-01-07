@@ -1,6 +1,6 @@
 'use server';
 
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { enforceAdminInAction } from '@/lib/server-auth';
 
 export type AppRole = 'super-admin' | 'admin' | 'mentor' | 'participant';
@@ -16,9 +16,9 @@ export interface PlatformUser {
   lastLoginAt?: string;
 }
 
-export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }>
-{
+export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }> {
   await enforceAdminInAction();
+  const { getAdminAuth } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
 
   const result = await auth.listUsers(1000);
@@ -47,9 +47,9 @@ export async function createPlatformUser(input: {
   displayName?: string;
   role?: AppRole;
   pagePermissions?: string[]; // route keys
-}): Promise<{ success: true; uid: string } | { success: false; error: string }>
-{
+}): Promise<{ success: true; uid: string } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
   const firestore = getAdminFirestore();
 
@@ -102,9 +102,9 @@ export async function createPlatformUser(input: {
   }
 }
 
-export async function setUserRole(uid: string, role: AppRole): Promise<{ success: true } | { success: false; error: string }>
-{
+export async function setUserRole(uid: string, role: AppRole): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
   try {
     const user = await auth.getUser(uid);
@@ -124,9 +124,9 @@ export async function setUserRole(uid: string, role: AppRole): Promise<{ success
   }
 }
 
-export async function setUserDisabled(uid: string, disabled: boolean): Promise<{ success: true } | { success: false; error: string }>
-{
+export async function setUserDisabled(uid: string, disabled: boolean): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
   try {
     await auth.updateUser(uid, { disabled });
@@ -136,9 +136,9 @@ export async function setUserDisabled(uid: string, disabled: boolean): Promise<{
   }
 }
 
-export async function updateUserPassword(uid: string, newPassword: string): Promise<{ success: true } | { success: false; error: string }>
-{
+export async function updateUserPassword(uid: string, newPassword: string): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
   if (!newPassword || newPassword.length < 6) return { success: false, error: 'Password must be at least 6 characters' };
   try {
@@ -149,9 +149,9 @@ export async function updateUserPassword(uid: string, newPassword: string): Prom
   }
 }
 
-export async function deleteUserById(uid: string): Promise<{ success: true } | { success: false; error: string }>
-{
+export async function deleteUserById(uid: string): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
   try {
     await auth.deleteUser(uid);
@@ -161,9 +161,9 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
   }
 }
 
-export async function setUserPagePermissions(email: string, routes: string[]): Promise<{ success: true } | { success: false; error: string }>
-{
+export async function setUserPagePermissions(email: string, routes: string[]): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
+  const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const auth = getAdminAuth();
 
@@ -195,6 +195,7 @@ export async function setUserPagePermissions(email: string, routes: string[]): P
  */
 export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; error?: string }> {
   await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
 
   try {
@@ -224,6 +225,7 @@ async function logUserActivity(
   details: Record<string, any>
 ): Promise<void> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     await firestore.collection('user_activity').add({
       userId,

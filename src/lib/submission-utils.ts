@@ -8,7 +8,7 @@
  * not Server Actions. Server Actions must be async functions called from client.
  */
 
-import { collection, collectionGroup, getDocs, query, orderBy, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { collection, collectionGroup, getDocs, query, orderBy, QueryDocumentSnapshot, DocumentData, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 // NOTE: firebase-admin is loaded dynamically to prevent client bundling issues
 import type { FeedbackSubmission } from '@/app/dashboard/types';
@@ -47,12 +47,29 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
   const submissions: FeedbackSubmission[] = [];
 
   try {
+    // Note: collectionGroup queries with orderBy require a composite index.
+    // We fetch unsorted and sort in memory to avoid index requirements.
     const submissionsCol = collectionGroup(db, 'submissions');
-    const q = query(submissionsCol, orderBy('submittedAt', 'desc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(submissionsCol);
     const newSubmissions = snapshot.docs.map(docToSubmission);
     submissions.push(...newSubmissions);
   } catch (error) {
+    console.warn("Warning: collectionGroup query failed (likely permissions). Falling back to survey-specific fetch.", error);
+  }
+
+  // Explicitly fetch from the main Hospital Survey (QDl3z7vLa0IQ4JgHBZ2s)
+  // This bypasses collectionGroup permission issues
+  try {
+    const HOSPITAL_SURVEY_ID = 'QDl3z7vLa0IQ4JgHBZ2s';
+    const surveySubmissionsCol = collection(db, 'surveys', HOSPITAL_SURVEY_ID, 'submissions');
+    const snapshot = await getDocs(surveySubmissionsCol);
+    const surveySubmissions = snapshot.docs.map(docToSubmission);
+
+    const seenIds = new Set(submissions.map(s => s.id));
+    const unique = surveySubmissions.filter(s => !seenIds.has(s.id));
+    submissions.push(...unique);
+  } catch (error) {
+    console.error("Error fetching hospital survey submissions:", error);
   }
 
   try {
@@ -60,14 +77,18 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
     const legacyQ = query(feedbackCol, orderBy('submittedAt', 'desc'));
     const legacySnapshot = await getDocs(legacyQ);
     const legacySubmissions = legacySnapshot.docs.map(docToSubmission);
-    
+
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
   } catch (error) {
+    console.error("Error fetching legacy feedback:", error);
   }
 
-  return submissions;
+  // Sort all submissions by date descending
+  return submissions.sort((a, b) => {
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+  });
 }
 
 /**
@@ -107,7 +128,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
         surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
-    
+
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
@@ -168,7 +189,7 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
         surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
-    
+
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueFromGroup = collectionGroupSubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueFromGroup);
@@ -190,7 +211,7 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
         surveyId: data.surveyId || '',
       } as FeedbackSubmission;
     });
-    
+
     const seenIds = new Set(submissions.map(s => s.id));
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
@@ -198,5 +219,23 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
   }
 
   return submissions;
+}
+
+/**
+ * Delete a submission from Firestore
+ * Attempts to delete from both new and legacy paths since we can't be sure where it lives
+ */
+export async function deleteSubmission(id: string, surveyId: string): Promise<void> {
+  // 1. Try deleting from the specific survey subcollection
+  // Use the provided surveyId, or fallback to main hospital survey ID if generic
+  // Note: Firestore delete is idempotent (succeeds even if doc doesn't exist)
+  const targetSurveyId = surveyId || 'QDl3z7vLa0IQ4JgHBZ2s';
+
+  const p1 = deleteDoc(doc(db, 'surveys', targetSurveyId, 'submissions', id));
+
+  // 2. Try deleting from legacy feedback collection
+  const p2 = deleteDoc(doc(db, 'feedback', id));
+
+  await Promise.all([p1, p2]);
 }
 

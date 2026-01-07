@@ -1,6 +1,6 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { getServerSession } from '@/lib/server-auth';
 import { z } from 'zod';
 
@@ -32,6 +32,7 @@ export async function claimYEPProfile(
       return { success: false, error: 'Not authenticated' };
     }
     const validated = claimProfileSchema.parse({ userId: session.uid, email: session.email, inviteCode });
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Try to find participant by email fields first (email, then authEmail)
@@ -207,7 +208,7 @@ export async function claimYEPProfile(
  */
 function serializeFirestoreData(data: any): any {
   const serialized: any = {};
-  
+
   for (const [key, value] of Object.entries(data)) {
     if (value && typeof value === 'object' && '_seconds' in (value as any)) {
       // Firestore Timestamp - convert to ISO string
@@ -218,7 +219,7 @@ function serializeFirestoreData(data: any): any {
       serialized[key] = value.toISOString();
     } else if (Array.isArray(value)) {
       // Array - recursively serialize
-      serialized[key] = value.map(item => 
+      serialized[key] = value.map(item =>
         typeof item === 'object' ? serializeFirestoreData(item) : item
       );
     } else if (value && typeof value === 'object') {
@@ -229,7 +230,7 @@ function serializeFirestoreData(data: any): any {
       serialized[key] = value;
     }
   }
-  
+
   return serialized;
 }
 
@@ -249,6 +250,7 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
     if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== userId) {
       return { success: false, error: 'Unauthorized' };
     }
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Try participant
@@ -262,7 +264,7 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
       const doc = participantQuery.docs[0];
       const data = doc.data();
       const serializedData = serializeFirestoreData(data);
-      
+
       return {
         success: true,
         role: 'participant',
@@ -312,7 +314,7 @@ export async function getYEPProfileByUserId(userId: string): Promise<{
       const doc = mentorQuery.docs[0];
       const data = doc.data();
       const serializedData = serializeFirestoreData(data);
-      
+
       return {
         success: true,
         role: 'mentor',
@@ -374,6 +376,7 @@ export async function updateYEPLastLogin(userId: string): Promise<{ success: boo
     if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== userId) {
       return { success: false, error: 'Unauthorized' };
     }
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Update participant if exists

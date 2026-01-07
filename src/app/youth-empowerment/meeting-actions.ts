@@ -1,6 +1,6 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 import { z } from 'zod';
 import { YEPMeeting } from '@/lib/youth-empowerment';
 import { getServerSession } from '@/lib/server-auth';
@@ -18,12 +18,12 @@ function createESTDate(year: number, month: number, day: number, hours: number, 
   const date = new Date();
   date.setFullYear(year, month - 1, day);
   date.setHours(hours, minutes, 0, 0);
-  
+
   // Convert to UTC for storage (EST is UTC-5, EDT is UTC-4)
   // We'll use EST (UTC-5) as the base timezone
   const estOffset = -5 * 60; // EST is UTC-5
   const utcTime = date.getTime() - (estOffset * 60 * 1000);
-  
+
   return new Date(utcTime);
 }
 
@@ -66,6 +66,7 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
       return { success: false, error: 'Not authenticated' };
     }
     const validated = createMeetingRequestSchema.parse(data);
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Parse proposed date and time in EST timezone
@@ -88,7 +89,7 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
 
     // Check for meeting conflicts (optional - can be enhanced later)
     const endTime = new Date(proposedDate.getTime() + (validated.duration * 60 * 1000));
-    
+
     // Create meeting document
     const meetingData = {
       participantId: validated.participantId,
@@ -113,8 +114,8 @@ export async function createMeetingRequest(data: z.infer<typeof createMeetingReq
     const docRef = await firestore.collection('yep_meetings').add(meetingData);
 
     // Send email notification to the recipient (only if email is provided)
-    const recipientEmail = validated.requestedBy === 'participant' 
-      ? validated.mentorEmail 
+    const recipientEmail = validated.requestedBy === 'participant'
+      ? validated.mentorEmail
       : validated.participantEmail;
     const recipientName = validated.requestedBy === 'participant'
       ? validated.mentorName
@@ -172,6 +173,7 @@ export async function approveMeeting(
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -183,7 +185,7 @@ export async function approveMeeting(
     }
 
     const meetingData = meetingDoc.data()!;
-    
+
     // Verify user is the mentor
     if (meetingData.mentorUserId !== session.uid) {
       return {
@@ -255,6 +257,7 @@ export async function rejectMeeting(
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -266,7 +269,7 @@ export async function rejectMeeting(
     }
 
     const meetingData = meetingDoc.data()!;
-    
+
     // Verify user is the mentor
     if (meetingData.mentorUserId !== session.uid) {
       return {
@@ -338,6 +341,7 @@ export async function cancelMeeting(
   try {
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
     const meetingDoc = await firestore.collection('yep_meetings').doc(meetingId).get();
 
@@ -349,7 +353,7 @@ export async function cancelMeeting(
     }
 
     const meetingData = meetingDoc.data()!;
-    
+
     // Verify user is either participant or mentor
     if (meetingData.participantUserId !== session.uid && meetingData.mentorUserId !== session.uid) {
       return {
@@ -377,7 +381,7 @@ export async function cancelMeeting(
     // Get recipient email for notification
     let recipientEmail = '';
     let recipientName = '';
-    
+
     if (meetingData.participantUserId === session.uid) {
       // Participant cancelled - notify mentor
       const mentorDoc = await firestore.collection('yep_mentors').doc(meetingData.mentorId).get();
@@ -435,6 +439,7 @@ export async function getUserMeetings(userId: string): Promise<{
     const session = await getServerSession();
     if (!session) return { success: false, error: 'Not authenticated' };
     const effectiveUserId = session.role === 'admin' ? userId : session.uid;
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     // Get meetings where user is participant or mentor
@@ -491,6 +496,7 @@ export async function getPendingMeetingRequests(mentorUserId: string): Promise<{
     if (session.role !== 'admin' && session.role !== 'super-admin' && session.uid !== mentorUserId) {
       return { success: false, error: 'Unauthorized' };
     }
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
     const firestore = getAdminFirestore();
 
     const pendingMeetings = await firestore

@@ -1,4 +1,4 @@
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -42,32 +42,9 @@ const nextConfig: NextConfig = {
     'http-proxy-agent',
     'https-proxy-agent',
   ],
-  // Exclude server-only AI modules and Node.js built-ins from client bundle
+  // Exclude server-only modules from client bundle
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      // Externalize AI/Genkit packages and server-only dependencies
-      config.externals = config.externals || [];
-      
-      // Externalize all AI-related packages
-      const serverOnlyPackages = [
-        'genkit',
-        '@genkit-ai/googleai',
-        '@genkit-ai/next',
-        'firebase-admin',
-        '@google-cloud/storage',
-        'google-auth-library',
-        'gcp-metadata',
-        'gtoken',
-        'teeny-request',
-        '@firebase/database-compat',
-      ];
-      
-      serverOnlyPackages.forEach(pkg => {
-        config.externals.push({
-          [pkg]: `commonjs ${pkg}`,
-        });
-      });
-      
       // Exclude Node.js built-in modules from client bundle
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -82,10 +59,20 @@ const nextConfig: NextConfig = {
         os: false,
         util: false,
       };
-      
-      // Add aliases to prevent client-side imports of AI code
+
+      // Add aliases to prevent client-side imports of AI and server-only code
       config.resolve.alias = {
         ...config.resolve.alias,
+        'firebase-admin': false,
+        '@google-cloud/storage': false,
+        'google-auth-library': false,
+        'gcp-metadata': false,
+        'gtoken': false,
+        'teeny-request': false,
+        '@firebase/database-compat': false,
+        'agent-base': false,
+        'http-proxy-agent': false,
+        'https-proxy-agent': false,
         '@/ai/genkit$': false,
         '@/ai/client$': false,
         '@/ai/dev$': false,

@@ -1,7 +1,6 @@
 'use server';
 
-import { getAdminFirestore } from '@/lib/firebase-admin';
-import { getStorage } from 'firebase-admin/storage';
+// Dynamic imports for server-only modules
 
 /**
  * Upload file to Firebase Storage
@@ -15,6 +14,8 @@ export async function uploadProfileDocument(data: {
   documentType?: string; // Optional document type identifier
 }): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const { getStorage } = await import('firebase-admin/storage');
     const firestore = getAdminFirestore();
     const storage = getStorage();
     // Specify bucket explicitly - use project ID + firebasestorage.app
@@ -116,6 +117,8 @@ export async function deleteProfileDocument(data: {
   documentType?: string; // Optional document type identifier
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const { getStorage } = await import('firebase-admin/storage');
     const firestore = getAdminFirestore();
     const storage = getStorage();
     // Specify bucket explicitly

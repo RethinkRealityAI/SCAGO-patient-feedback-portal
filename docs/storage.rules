@@ -81,5 +81,11 @@ service firebase.storage {
       // create/update by authenticated users, delete by admin (request.resource == null)
       allow write: if (isAuthenticated() && request.resource != null) || (isAdmin() && request.resource == null);
     }
+    
+    // Patient Documents - Admin only
+    match /patient-documents/{patientId}/{allPaths=**} {
+      // Only admins can read and write patient documents
+      allow read, write: if isAdmin();
+    }
   }
 }

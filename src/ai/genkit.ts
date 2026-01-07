@@ -5,8 +5,8 @@
  * Do not import this from client components. Server actions should dynamically import flows.
  */
 
-import {genkit} from 'genkit';
-import {googleAI} from '@genkit-ai/googleai';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/googleai';
 
 // Validate API key exists but don't log it
 if (!process.env.GOOGLE_API_KEY) {
@@ -28,7 +28,7 @@ export const ai = genkit({
 
 // Base model identifier to use in prompts
 // Configuration (temperature, topP, etc.) is applied per-prompt via the config object
-export const GEMINI_FLASH_LATEST_MODEL_ID = 'googleai/gemini-2.5-flash-lite';
+export const GEMINI_FLASH_LATEST_MODEL_ID = 'googleai/gemini-1.5-flash';
 
 // Export model configurations for use in prompt config
 // These are passed to definePrompt's config parameter

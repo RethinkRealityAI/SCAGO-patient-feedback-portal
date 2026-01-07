@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdminAuth } from '@/lib/firebase-admin';
+// Dynamic imports for server-only modules
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, skipped: true }, { status: 200 });
     }
 
+    const { getAdminAuth } = await import('@/lib/firebase-admin');
     const auth = getAdminAuth();
 
     // Verify the ID token first
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
     const res = NextResponse.json({ success: true, email });
     const isProd = process.env.NODE_ENV === 'production';
-    
+
     // Set session cookie with explicit domain/path to ensure it's available
     res.cookies.set('__session', sessionCookie, {
       httpOnly: true,
@@ -64,19 +65,19 @@ export async function POST(request: Request) {
     return res;
   } catch (error: any) {
     console.error('[SessionAPI] ❌ Failed to create session:', error.message);
-    
+
     // Check if it's a Firebase Admin initialization error
     if (error.message?.includes('Firebase Admin SDK') || error.message?.includes('Missing Firebase Admin credentials')) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Server configuration error: Firebase Admin credentials not configured',
         details: 'The server is missing Firebase Admin SDK credentials. Please contact the administrator.',
         adminMessage: error.message
       }, { status: 503 });
     }
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       error: 'Failed to create session',
-      details: error.message 
+      details: error.message
     }, { status: 500 });
   }
 }

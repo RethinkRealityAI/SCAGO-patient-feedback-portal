@@ -1,6 +1,5 @@
 'use server';
 
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase-admin';
 import { enforceSuperAdminInAction } from '@/lib/server-auth';
 import type { AppRole } from './user-actions';
 
@@ -42,6 +41,7 @@ export async function backfillRoleClaims(): Promise<BackfillResult> {
   };
 
   try {
+    const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
     const auth = getAdminAuth();
     const firestore = getAdminFirestore();
 

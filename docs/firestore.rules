@@ -205,5 +205,21 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                        request.resource.data.submittedByUserId == request.auth.uid;
     }
+    
+    // Patient Management Collections - Admin only
+    match /patients/{patientId} {
+      // Only admins can read and write patient data
+      allow read, write: if isAdmin();
+    }
+    
+    match /patient_interactions/{interactionId} {
+      // Only admins can read and write patient interactions
+      allow read, write: if isAdmin();
+    }
+    
+    match /patient_documents/{documentId} {
+      // Only admins can read and write patient document metadata
+      allow read, write: if isAdmin();
+    }
   }
 }
