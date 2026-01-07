@@ -67,12 +67,43 @@ import { LogOut } from 'lucide-react'
 
 const SUBMISSIONS_PER_PAGE = 10
 
+// Helper function to safely format date for export (returns ISO string or date only string)
+function safeFormatDateForExport(dateValue: any, dateOnly: boolean = false): string {
+  if (!dateValue) return 'Invalid Date'
+  const date = new Date(dateValue)
+  if (isNaN(date.getTime())) return 'Invalid Date'
+  return dateOnly ? date.toISOString().split('T')[0] : date.toISOString()
+}
+
 // Helper function to detect if submissions are from consent survey
 function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
   if (submissions.length === 0) return false
   const sample = submissions[0] as any
   // Check for consent-specific fields
   return !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
+}
+
+// Helper function to extract hospital/location from a submission
+// Handles multiple possible field name variations for consistent data access
+function getHospitalOrLocation(submission: any, preferLocation: boolean = false): string {
+  if (preferLocation) {
+    // For consent/intake forms, prefer city or primaryHospital
+    return submission.city?.selection ||
+      submission.primaryHospital?.selection ||
+      submission.hospitalName?.selection ||
+      submission.hospitalName ||
+      submission.hospital?.selection ||
+      submission.hospital ||
+      submission['hospital-on']?.selection ||
+      'Unknown Location'
+  }
+  // For feedback forms, prefer hospital fields
+  return submission.hospitalName?.selection ||
+    submission.hospitalName ||
+    submission.hospital?.selection ||
+    submission.hospital ||
+    submission['hospital-on']?.selection ||
+    'Unknown Hospital'
 }
 
 export default function Dashboard() {
@@ -168,12 +199,26 @@ export default function Dashboard() {
   }, [surveyTitleMap])
 
 
+  // Dynamic hospital/location options based on selected survey type
+  // This ensures the filter dropdown only shows locations that exist in the current view
   const hospitalOptions = useMemo(() => {
-    const hospitals = Array.from(new Set(submissions.map(s =>
-      (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
-    )))
-    return ['all', ...hospitals]
-  }, [submissions])
+    // Filter submissions based on the selected survey
+    let relevantSubmissions = submissions
+    if (selectedSurvey !== 'all') {
+      relevantSubmissions = submissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey)
+    }
+
+    // Determine if we're looking at consent/intake form data or hospital feedback
+    const isCurrentlyConsent = selectedSurvey !== 'all' && isConsentSurvey(relevantSubmissions)
+
+    // Extract unique locations/hospitals using the centralized helper function
+    // This ensures consistent field extraction between dropdown and filter
+    const locations = Array.from(new Set(relevantSubmissions.map(s => {
+      return getHospitalOrLocation(s, isCurrentlyConsent)
+    }).filter(loc => loc !== 'Unknown Location' && loc !== 'Unknown Hospital')))
+
+    return ['all', ...locations.sort()]
+  }, [submissions, selectedSurvey, getNormalizedSurveyId])
 
   // Fetch data on mount or when auth state changes
   useEffect(() => {
@@ -228,14 +273,23 @@ export default function Dashboard() {
     }
   }, [selectedSurvey, surveyOptions])
 
+  // Reset hospital/location filter when survey changes (since available options differ per survey)
+  useEffect(() => {
+    // Only reset if the current filter value is not in the new options
+    if (hospitalFilter !== 'all' && !hospitalOptions.includes(hospitalFilter)) {
+      setHospitalFilter('all')
+    }
+  }, [hospitalOptions, hospitalFilter])
+
   // Detect if we're in "All Surveys" overview mode
   const isAllSurveysMode = selectedSurvey === 'all'
 
   // Detect if current filtered data is consent survey
+  // Use getNormalizedSurveyId to match how filtered data is computed
   const isConsent = useMemo(() => {
     if (isAllSurveysMode) return false // Overview mode is neither consent nor feedback
-    return isConsentSurvey(submissions.filter(s => s.surveyId === selectedSurvey))
-  }, [submissions, selectedSurvey, isAllSurveysMode])
+    return isConsentSurvey(submissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey))
+  }, [submissions, selectedSurvey, isAllSurveysMode, getNormalizedSurveyId])
 
   // Ensure the chart selection matches the survey type
   useEffect(() => {
@@ -276,14 +330,14 @@ export default function Dashboard() {
             ((s as any).firstName || '').toLowerCase().includes(query) ||
             ((s as any).lastName || '').toLowerCase().includes(query) ||
             ((s as any).email || '').toLowerCase().includes(query) ||
-            ((s as any).city?.selection || '').toLowerCase().includes(query) ||
+            getHospitalOrLocation(s, true).toLowerCase().includes(query) ||
             (s.surveyId || '').toLowerCase().includes(query)
           )
         } else {
           // Search feedback-specific fields
           return (
             (s.hospitalInteraction || '').toLowerCase().includes(query) ||
-            ((s as any).hospital || '').toLowerCase().includes(query) ||
+            getHospitalOrLocation(s, false).toLowerCase().includes(query) ||
             (s.surveyId || '').toLowerCase().includes(query) ||
             // Also check rating if it's a number
             (s.rating && String(s.rating).includes(query))
@@ -323,14 +377,19 @@ export default function Dashboard() {
       })
     }
 
-    // Filter by hospital (works for both consent and feedback surveys)
+    // Filter by hospital/location (works for both consent and feedback surveys)
+    // CRITICAL: Must use the same field extraction logic as hospitalOptions
+    // This ensures the dropdown values match what the filter looks for
     if (hospitalFilter !== 'all') {
+      // Determine if current view is consent-based (same logic as hospitalOptions)
+      const isCurrentViewConsent = selectedSurvey !== 'all' && isConsentSurvey(
+        submissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey)
+      )
+
       result = result.filter(s => {
-        const hospital = (s as any).hospital ||
-          (s as any)['hospital-on']?.selection ||
-          (s as any).primaryHospital?.selection ||
-          'Unknown Hospital'
-        return hospital === hospitalFilter
+        // Use centralized helper with same preferLocation flag as hospitalOptions
+        const location = getHospitalOrLocation(s, isCurrentViewConsent)
+        return location === hospitalFilter
       })
     }
 
@@ -389,13 +448,12 @@ export default function Dashboard() {
       })
 
       // Geographic distribution (works for both consent and feedback)
+      // Use helper function for consistent field extraction
       const geographicDistribution = new Map<string, number>()
       filtered.forEach(s => {
-        const location = (s as any).city?.selection ||
-          (s as any).primaryHospital?.selection ||
-          (s as any).hospital ||
-          (s as any)['hospital-on']?.selection ||
-          'Unknown'
+        // In overview mode, check each submission's type individually
+        const isSubmissionConsent = isConsentSurvey([s])
+        const location = getHospitalOrLocation(s, isSubmissionConsent)
         geographicDistribution.set(location, (geographicDistribution.get(location) || 0) + 1)
       })
 
@@ -459,11 +517,11 @@ export default function Dashboard() {
         }
       }
 
-      // Geographic distribution
+      // Geographic distribution - use helper with preferLocation=true for consent
       const geographicDistribution = new Map<string, number>()
       for (const s of filtered) {
-        const city = (s as any).city?.selection || 'Unknown'
-        geographicDistribution.set(city, (geographicDistribution.get(city) || 0) + 1)
+        const location = getHospitalOrLocation(s, true) // true = prefer location for consent
+        geographicDistribution.set(location, (geographicDistribution.get(location) || 0) + 1)
       }
 
       return {
@@ -498,10 +556,10 @@ export default function Dashboard() {
         else needsImprovement++
       }
 
-      // Group ratings by hospital
+      // Group ratings by hospital - use helper with preferLocation=false for feedback
       const hospitalRatings = new Map<string, { total: number; sum: number; count: number }>()
       for (const s of validRatings) {
-        const hospital = (s as any).hospital || (s as any)['hospital-on']?.selection || 'Unknown Hospital'
+        const hospital = getHospitalOrLocation(s, false) // false = prefer hospital for feedback
         const current = hospitalRatings.get(hospital) || { total: 0, sum: 0, count: 0 }
         hospitalRatings.set(hospital, {
           total: current.total + 1,
@@ -777,7 +835,7 @@ export default function Dashboard() {
       if (isConsent) {
         const s = sub as any
         return [
-          new Date(sub.submittedAt).toISOString().split('T')[0],
+          safeFormatDateForExport(sub.submittedAt, true),
           `${s.firstName || ''} ${s.lastName || ''}`.trim(),
           s.email || '',
           s.phone || '',
@@ -791,10 +849,12 @@ export default function Dashboard() {
         ]
       } else {
         const s = sub as any
+        // Get hospital from all possible field variations using the centralized helper
+        const hospitalValue = getHospitalOrLocation(sub, false)
         return [
-          new Date(sub.submittedAt).toISOString().split('T')[0],
-          sub.rating || '',
-          s.hospital || s['hospital-on']?.selection || '',
+          safeFormatDateForExport(sub.submittedAt, true),
+          sub.rating ?? '',
+          hospitalValue,
           s.department || '',
           sub.hospitalInteraction || '',
           s.painScore || s.painLevel || '',
@@ -1536,8 +1596,8 @@ export default function Dashboard() {
                           onClick={() => openSubmissionModal(submission)}
                         >
                           {!isConsent ? (
-                            <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${submission.rating >= 8 ? 'bg-green-500' :
-                              submission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
+                            <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${Number(submission.rating) >= 8 ? 'bg-green-500' :
+                              Number(submission.rating) >= 5 ? 'bg-yellow-500' : 'bg-red-500'
                               }`} />
                           ) : (
                             <div className="mt-1 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
@@ -1565,8 +1625,8 @@ export default function Dashboard() {
                               </Badge>
                               <span>•</span>
                               {isConsent
-                                ? `${(submission as any)?.city?.selection || 'Unknown City'}`
-                                : `${(submission as any)?.hospital || 'Unknown'}`}
+                                ? getHospitalOrLocation(submission, true)
+                                : getHospitalOrLocation(submission, false)}
                               <span>•</span>
                               {(() => {
                                 const date = submission.submittedAt ? new Date(submission.submittedAt) : null
@@ -1632,10 +1692,10 @@ export default function Dashboard() {
                       const csv = [
                         ['Date', 'Hospital', 'Rating', 'Experience', 'Survey ID'],
                         ...filtered.map(s => [
-                          new Date(s.submittedAt).toISOString(),
-                          (s as any)?.hospital || 'Unknown',
-                          s.rating,
-                          s.hospitalInteraction.replace(/,/g, ';'),
+                          safeFormatDateForExport(s.submittedAt),
+                          getHospitalOrLocation(s, isConsent),
+                          s.rating ?? '',
+                          (s.hospitalInteraction || '').replace(/,/g, ';'),
                           s.surveyId
                         ])
                       ].map(row => row.join(',')).join('\n')
@@ -2072,12 +2132,15 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          <Card id="submissions-table-section">
-            <CardHeader>
+          <Card id="submissions-table-section" className="border-t-4 border-t-[#C8262A]">
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Recent Submissions</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-[#C8262A]" />
+                    Recent Submissions
+                  </CardTitle>
+                  <CardDescription className="text-sm mt-1">
                     Showing {paginatedSubmissions.length} of {filtered.length} submissions
                   </CardDescription>
                 </div>
@@ -2153,7 +2216,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">City:</span>
-                                  <span className="font-medium">{(submission as any)?.city?.selection || 'N/A'}</span>
+                                  <span className="font-medium">{getHospitalOrLocation(submission, true)}</span>
                                 </div>
                               </div>
                             ) : (
@@ -2177,7 +2240,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Hospital:</span>
-                                  <span className="font-medium">{(submission as any)?.hospital || (submission as any)?.['hospital-on']?.selection || 'N/A'}</span>
+                                  <span className="font-medium">{getHospitalOrLocation(submission, false)}</span>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Experience:</span>
@@ -2193,27 +2256,28 @@ export default function Dashboard() {
                 )}
               </div>
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
+              <div className="hidden md:block">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[800px]">
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="whitespace-nowrap">Date</TableHead>
-                      <TableHead className="whitespace-nowrap">Survey</TableHead>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Date</TableHead>
+                      <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Survey</TableHead>
                       {isConsent ? (
                         <>
-                          <TableHead className="whitespace-nowrap">Name</TableHead>
-                          <TableHead className="whitespace-nowrap">Email</TableHead>
-                          <TableHead className="whitespace-nowrap">City</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Email</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Location</TableHead>
                         </>
                       ) : (
                         <>
-                          <TableHead className="whitespace-nowrap">Name</TableHead>
-                          <TableHead className="whitespace-nowrap">Rating</TableHead>
-                          <TableHead className="whitespace-nowrap">Hospital</TableHead>
-                          <TableHead className="whitespace-nowrap">Experience</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Rating</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Hospital</TableHead>
+                          <TableHead className="whitespace-nowrap text-sm font-semibold py-4 min-w-[200px]">Experience</TableHead>
                         </>
                       )}
-                      <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                      <TableHead className="text-right whitespace-nowrap sticky right-0 bg-background text-sm font-semibold py-4">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2245,8 +2309,8 @@ export default function Dashboard() {
                       </TableRow>
                     ) : (
                       paginatedSubmissions.map(submission => (
-                        <TableRow key={submission.id}>
-                          <TableCell className="whitespace-nowrap">
+                        <TableRow key={submission.id} className="hover:bg-muted/20">
+                          <TableCell className="whitespace-nowrap py-4 text-sm">
                             {(() => {
                               const date = submission.submittedAt ? new Date(submission.submittedAt) : null
                               if (!date || isNaN(date.getTime())) return 'Invalid Date'
@@ -2259,48 +2323,48 @@ export default function Dashboard() {
                               })
                             })()}
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="font-normal">
+                          <TableCell className="py-4">
+                            <Badge variant="outline" className="font-medium text-sm">
                               {getSurveyDisplayName(submission.surveyId)}
                             </Badge>
                           </TableCell>
                           {isConsent ? (
                             <>
-                              <TableCell>
+                              <TableCell className="py-4 text-sm font-medium text-foreground">
                                 {`${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'N/A'}
                               </TableCell>
-                              <TableCell>{(submission as any)?.email || 'N/A'}</TableCell>
-                              <TableCell>{(submission as any)?.city?.selection || 'N/A'}</TableCell>
+                              <TableCell className="py-4 text-sm">{(submission as any)?.email || 'N/A'}</TableCell>
+                              <TableCell className="py-4 text-sm">{getHospitalOrLocation(submission, true)}</TableCell>
                             </>
                           ) : (
                             <>
-                              <TableCell className="font-medium text-muted-foreground">
+                              <TableCell className="py-4 text-sm font-medium text-foreground">
                                 {((submission as any)?.firstName || (submission as any)?.name)
                                   ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || (submission as any)?.name || ''}`.trim()
-                                  : <span className="text-xs italic">Anonymous</span>}
+                                  : <span className="text-sm italic text-muted-foreground">Anonymous</span>}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-4">
                                 <div className="flex items-center gap-2">
                                   {(() => {
                                     const rating = Number(submission.rating)
                                     const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10
                                     return (
                                       <>
-                                        <div className={`h-2 w-2 rounded-full ${isValidRating && rating >= 8 ? 'bg-green-500' :
+                                        <div className={`h-2.5 w-2.5 rounded-full ${isValidRating && rating >= 8 ? 'bg-green-500' :
                                           isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
                                           }`} />
-                                        <span>{isValidRating ? `${rating}/10` : 'N/A'}</span>
+                                        <span className="text-sm font-medium">{isValidRating ? `${rating}/10` : 'N/A'}</span>
                                       </>
                                     )
                                   })()}
                                 </div>
                               </TableCell>
-                              <TableCell>{(submission as any)?.hospital || (submission as any)?.['hospital-on']?.selection || 'N/A'}</TableCell>
-                              <TableCell className="max-w-xs truncate">{submission.hospitalInteraction || 'N/A'}</TableCell>
+                              <TableCell className="py-4 text-sm font-medium">{getHospitalOrLocation(submission, false)}</TableCell>
+                              <TableCell className="max-w-xs truncate py-4 text-sm">{submission.hospitalInteraction || 'N/A'}</TableCell>
                             </>
                           )}
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2 text-right">
+                          <TableCell className="text-right sticky right-0 bg-background py-4">
+                            <div className="flex justify-end gap-2">
                               <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
                               <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSubmissionToDelete(submission); }}>
                                 <Trash2 className="h-4 w-4" />
@@ -2312,507 +2376,173 @@ export default function Dashboard() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </div>
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-white/70 via-white/60 to-blue-50/50 dark:from-gray-900/70 dark:via-gray-900/60 dark:to-indigo-950/50 backdrop-blur-2xl backdrop-saturate-150 border border-white/30 dark:border-white/20 shadow-2xl ring-1 ring-white/20">
-                  <DialogHeader className="flex-shrink-0 border-b border-white/20 pb-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 backdrop-blur-md rounded-t-lg">
+                <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-gray-900 p-0 gap-0">
+                  {/* Red Header with Submission Details */}
+                  <div className="bg-[#C8262A] text-white px-6 py-5">
                     <div className="flex items-start justify-between">
-                      <div>
-                        <DialogTitle className="text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                      <div className="space-y-2">
+                        <h2 className="text-xl font-bold">
                           {isConsent
-                            ? `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || ''}`.trim() || 'Anonymous'
-                            : (activeSubmission as any)?.name || (activeSubmission as any)?.firstName || 'Anonymous'
-                          } - {isConsent ? 'Consent Submission' : 'Feedback Submission'}
-                        </DialogTitle>
-                        <DialogDescription className="mt-2 flex items-center gap-4 text-gray-600 dark:text-gray-400">
-                          <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
-                            <Calendar className="h-3 w-3" />
-                            {activeSubmission && new Date(activeSubmission.submittedAt).toISOString().replace('T', ' ').split('.')[0]}
+                            ? `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || ''}`.trim() || 'Anonymous Submission'
+                            : `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || (activeSubmission as any)?.name || ''}`.trim() || 'Anonymous Submission'
+                          }
+                        </h2>
+                        {/* Subtitle with Hospital/Location info */}
+                        {isConsent ? (
+                          <p className="text-lg font-medium text-white/95">
+                            {activeSubmission ? getHospitalOrLocation(activeSubmission, true) : 'Unknown Location'}
+                          </p>
+                        ) : (
+                          <p className="text-lg font-medium text-white/95">
+                            {activeSubmission ? getHospitalOrLocation(activeSubmission, false) : 'Unknown Hospital'}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-white/90">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="h-4 w-4" />
+                            {activeSubmission && new Date(activeSubmission.submittedAt).toLocaleDateString('en-US', {
+                              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}
                           </span>
-                          <span className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 px-2 py-1 rounded-full text-xs">
-                            <Building2 className="h-3 w-3" />
-                            {isConsent
-                              ? (activeSubmission as any)?.primaryHospital?.selection || (activeSubmission as any)?.city?.selection || 'Unknown Location'
-                              : (activeSubmission as any)?.hospital || (activeSubmission as any)?.['hospital-on']?.selection || 'Unknown Hospital'
-                            }
+                          <span className="flex items-center gap-1.5">
+                            <ClipboardList className="h-4 w-4" />
+                            {getSurveyDisplayName(activeSubmission?.surveyId)}
                           </span>
-                        </DialogDescription>
+                        </div>
                       </div>
-                      {!isConsent && (
-                        <div className={`px-4 py-2 rounded-full text-sm font-medium backdrop-blur-sm shadow-lg ${activeSubmission && activeSubmission.rating >= 8 ? 'bg-green-500/20 text-green-700 dark:text-green-300 border border-green-500/30' :
-                          activeSubmission && activeSubmission.rating >= 5 ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border border-yellow-500/30' :
-                            'bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30'
-                          }`}>
-                          {activeSubmission && activeSubmission.rating >= 8 ? '✨ Excellent' :
-                            activeSubmission && activeSubmission.rating >= 5 ? '👍 Good' : '⚠️ Needs Improvement'}
+                      {!isConsent && activeSubmission?.rating !== undefined && (
+                        <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                          activeSubmission.rating >= 8 ? 'bg-green-500 text-white' :
+                          activeSubmission.rating >= 5 ? 'bg-yellow-500 text-white' :
+                          'bg-white text-[#C8262A]'
+                        }`}>
+                          Rating: {activeSubmission.rating}/10
                         </div>
                       )}
                     </div>
+                  </div>
+                  <DialogHeader className="sr-only">
+                    <DialogTitle>Submission Details</DialogTitle>
+                    <DialogDescription>View submission information</DialogDescription>
                   </DialogHeader>
                   {activeSubmission && (
-                    <div className="flex-1 overflow-y-auto space-y-6 pr-2 bg-gradient-to-b from-transparent via-white/10 to-blue-500/5 dark:from-transparent dark:via-gray-900/10 dark:to-indigo-500/5 rounded-lg">
-                      {/* Quick Stats Section */}
-                      <Card className="border border-white/30 shadow-xl bg-gradient-to-br from-white/50 to-white/30 dark:from-gray-800/50 dark:to-gray-900/30 backdrop-blur-lg backdrop-saturate-150">
-                        <CardHeader className="pb-3 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-t-lg backdrop-blur-sm">
-                          <CardTitle className="text-base flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg shadow-md">
-                              <BarChart3 className="h-4 w-4 text-white" />
-                            </div>
-                            Quick Insights
-                          </CardTitle>
-                          <div className="flex gap-2 mt-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                if (!activeSubmission) return
-                                const csv = [
-                                  ['Field', 'Value'],
-                                  ['Date', new Date(activeSubmission.submittedAt).toISOString()],
-                                  ['Hospital', (activeSubmission as any)?.hospital || 'Unknown'],
-                                  ['Rating', activeSubmission.rating],
-                                  ['Experience', activeSubmission.hospitalInteraction],
-                                  ...Object.entries(activeSubmission)
-                                    .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction'].includes(key))
-                                    .map(([key, value]) => [
-                                      key,
-                                      Array.isArray(value)
-                                        ? value.join('; ')
-                                        : typeof value === 'object'
-                                          ? JSON.stringify(value)
-                                          : String(value)
-                                    ])
-                                ].map(row => row.join(',')).join('\n')
-
-                                const blob = new Blob([csv], { type: 'text/csv' })
-                                const url = URL.createObjectURL(blob)
-                                const a = document.createElement('a')
-                                a.href = url
-                                a.download = `submission-${activeSubmission.id}.csv`
-                                a.click()
-                              }}
-                              title="Export submission as CSV"
-                            >
-                              <FileSpreadsheet className="h-4 w-4 mr-1" />
-                              CSV
-                            </Button>
-                            {singleAnalysis && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={async () => {
-                                  const res = await generateAnalysisPdf({
-                                    title: 'Individual Submission Report',
-                                    surveyId: String(activeSubmission?.surveyId),
-                                    analysisMarkdown: singleAnalysis || ''
-                                  })
-                                  if (res.error || !res.pdfBase64) return
-                                  const link = document.createElement('a')
-                                  link.href = `data:application/pdf;base64,${res.pdfBase64}`
-                                  link.download = `submission-${activeSubmission?.id}.pdf`
-                                  link.click()
-                                }}
-                                title="Download analysis as PDF"
-                              >
-                                <FileText className="h-4 w-4 mr-1" />
-                                PDF
-                              </Button>
-                            )}
+                    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+                      {/* Modernized Submission Details Interface - Clean Q&A Layout */}
+                      <div className="space-y-5 px-6 py-5">
+                        {/* Experience Highlight Box */}
+                        {activeSubmission.hospitalInteraction && (
+                          <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border-l-4 border-[#C8262A]">
+                            <h3 className="text-sm font-semibold text-[#C8262A] mb-2 uppercase tracking-wide">
+                              Patient Experience
+                            </h3>
+                            <p className="text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                              {activeSubmission.hospitalInteraction}
+                            </p>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {/* Visit Reason/Chief Complaint */}
-                            {((activeSubmission as any)?.visitReason || (activeSubmission as any)?.chiefComplaint || (activeSubmission as any)?.reasonForVisit) && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-purple-500/20 to-purple-600/20 backdrop-blur-sm rounded-lg shadow-md border border-purple-500/20">
-                                  <AlertCircle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-600 dark:text-gray-400">Visit Reason</p>
-                                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                                    {(activeSubmission as any)?.visitReason ||
-                                      (activeSubmission as any)?.chiefComplaint ||
-                                      (activeSubmission as any)?.reasonForVisit}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                        )}
 
-                            {/* Time to Analgesia (for pain-related visits) */}
-                            {(activeSubmission as any)?.timeToAnalgesia && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Heart className="h-5 w-5 text-pink-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Time to Pain Relief</p>
-                                  <p className="text-lg font-bold">
-                                    {typeof (activeSubmission as any).timeToAnalgesia === 'object'
-                                      ? `${(activeSubmission as any).timeToAnalgesia.hours || 0}h ${(activeSubmission as any).timeToAnalgesia.minutes || 0}m`
-                                      : (activeSubmission as any).timeToAnalgesia}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                        {/* All Submission Data - Question on top, Answer below */}
+                        {Object.entries(activeSubmission)
+                          .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction', 'userId', 'sessionId'].includes(key))
+                          .sort((a, b) => a[0].localeCompare(b[0]))
+                          .map(([key, value]) => {
+                            const question = getQuestionText(key);
+                            const formattedValue = formatAnswerValue(value);
 
-                            {/* Pain Score if available */}
-                            {((activeSubmission as any)?.painScore !== undefined || (activeSubmission as any)?.painLevel !== undefined) && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Activity className="h-5 w-5 text-orange-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Pain Level</p>
-                                  <p className="text-lg font-bold">
-                                    {(activeSubmission as any)?.painScore || (activeSubmission as any)?.painLevel}/10
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                            // Skip empty values
+                            if (!formattedValue || (Array.isArray(formattedValue) && formattedValue.length === 0)) return null;
+                            if (formattedValue === 'N/A' || formattedValue === '') return null;
 
-                            {/* Wait Time */}
-                            {(activeSubmission as any)?.waitTime && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Clock className="h-5 w-5 text-blue-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Wait Time</p>
-                                  <p className="text-lg font-bold">
-                                    {typeof (activeSubmission as any).waitTime === 'object'
-                                      ? `${(activeSubmission as any).waitTime.hours || 0}h ${(activeSubmission as any).waitTime.minutes || 0}m`
-                                      : (activeSubmission as any).waitTime}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Length of Stay */}
-                            {(activeSubmission as any)?.lengthOfStay && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Activity className="h-5 w-5 text-green-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Length of Stay</p>
-                                  <p className="text-lg font-bold">
-                                    {typeof (activeSubmission as any).lengthOfStay === 'object'
-                                      ? `${(activeSubmission as any).lengthOfStay.days || 0}d ${(activeSubmission as any).lengthOfStay.hours || 0}h`
-                                      : (activeSubmission as any).lengthOfStay}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Department/Service */}
-                            {(activeSubmission as any)?.department && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Heart className="h-5 w-5 text-red-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Department</p>
-                                  <p className="text-sm font-bold truncate max-w-[100px]">
-                                    {(activeSubmission as any).department}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Visit Type */}
-                            {(activeSubmission as any)?.visitType && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <AlertCircle className="h-5 w-5 text-purple-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Visit Type{Array.isArray((activeSubmission as any).visitType) && (activeSubmission as any).visitType.length > 1 ? 's' : ''}</p>
-                                  <p className="text-sm font-bold">
-                                    {Array.isArray((activeSubmission as any).visitType)
-                                      ? (activeSubmission as any).visitType.map((type: string) =>
-                                        type.charAt(0).toUpperCase() + type.slice(1)
-                                      ).join(', ')
-                                      : (activeSubmission as any).visitType}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Staff Rating if available */}
-                            {(activeSubmission as any)?.staffRating && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Users className="h-5 w-5 text-indigo-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Staff Rating</p>
-                                  <p className="text-lg font-bold">{(activeSubmission as any).staffRating}/10</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Cleanliness Rating if available */}
-                            {(activeSubmission as any)?.cleanlinessRating && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Sparkles className="h-5 w-5 text-cyan-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Cleanliness</p>
-                                  <p className="text-lg font-bold">{(activeSubmission as any).cleanlinessRating}/10</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Recommendation Score */}
-                            {(activeSubmission as any)?.wouldRecommend !== undefined && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <ThumbsUp className="h-5 w-5 text-emerald-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Would Recommend</p>
-                                  <p className="text-sm font-bold">
-                                    {(activeSubmission as any).wouldRecommend ? 'Yes' : 'No'}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Time to See Doctor */}
-                            {(activeSubmission as any)?.timeToSeeDoctor && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <Users className="h-5 w-5 text-indigo-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Time to Doctor</p>
-                                  <p className="text-lg font-bold">
-                                    {typeof (activeSubmission as any).timeToSeeDoctor === 'object'
-                                      ? `${(activeSubmission as any).timeToSeeDoctor.hours || 0}h ${(activeSubmission as any).timeToSeeDoctor.minutes || 0}m`
-                                      : (activeSubmission as any).timeToSeeDoctor}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Triage Category if available */}
-                            {(activeSubmission as any)?.triageCategory && (
-                              <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                  <AlertCircle className="h-5 w-5 text-red-500" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Triage Level</p>
-                                  <p className="text-sm font-bold">
-                                    {(activeSubmission as any).triageCategory}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Overall Hospital Rating - Show only if no other metrics available */}
-                            {!((activeSubmission as any)?.waitTime ||
-                              (activeSubmission as any)?.lengthOfStay ||
-                              (activeSubmission as any)?.timeToAnalgesia ||
-                              (activeSubmission as any)?.painScore ||
-                              (activeSubmission as any)?.painLevel ||
-                              (activeSubmission as any)?.timeToSeeDoctor) && (
-                                <div className="flex items-start gap-3">
-                                  <div className="p-2 bg-gradient-to-br from-white/40 to-white/20 dark:from-gray-800/40 dark:to-gray-800/20 backdrop-blur-sm rounded-lg shadow-md border border-white/20">
-                                    <Star className="h-5 w-5 text-yellow-500" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Overall Rating</p>
-                                    <p className="text-lg font-bold">{activeSubmission.rating}/10</p>
-                                  </div>
-                                </div>
-                              )}
-                          </div>
-
-                          {/* Experience Summary Bar - Only for feedback surveys */}
-                          {!isConsent && (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium">Overall Experience</span>
-                                <span className="text-sm text-muted-foreground">{activeSubmission.rating}/10</span>
-                              </div>
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                                <div
-                                  className={`h-2.5 rounded-full transition-all ${activeSubmission.rating >= 8 ? 'bg-green-500' :
-                                    activeSubmission.rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                                    }`}
-                                  style={{ width: `${(activeSubmission.rating / 10) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                      {/* AI Analysis Section - Top Priority */}
-                      {singleAnalysis && (
-                        <Card className="border border-white/30 shadow-xl bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-pink-500/10 backdrop-blur-lg backdrop-saturate-150">
-                          <CardHeader className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-t-lg backdrop-blur-sm">
-                            <CardTitle className="text-lg flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg shadow-md">
-                                <TrendingUp className="h-5 w-5 text-white" />
-                              </div>
-                              AI Analysis Summary
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="bg-gradient-to-b from-white/30 to-white/20 dark:from-gray-800/30 dark:to-gray-900/20 backdrop-blur-sm">
-                            <div className="prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown>{singleAnalysis}</ReactMarkdown>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Analysis Actions - Only show for feedback surveys */}
-                      {!isConsent && (
-                        <div className="flex flex-wrap gap-2 p-4 bg-gradient-to-r from-white/30 via-blue-50/20 to-indigo-50/20 dark:from-gray-800/30 dark:via-blue-950/20 dark:to-indigo-950/20 backdrop-blur-md rounded-lg border border-white/30 shadow-lg">
-                          <Button
-                            onClick={async () => {
-                              if (!activeSubmission) return
-                              setSingleLoading(true)
-                              const { analyzeSingleFeedback } = await import('./actions')
-                              const res = await analyzeSingleFeedback({
-                                rating: activeSubmission.rating,
-                                hospitalInteraction: activeSubmission.hospitalInteraction,
-                                location: (activeSubmission as any).hospital || 'Various Hospitals'
-                              })
-                              if (!res.error) setSingleAnalysis(res.summary || null)
-                              setSingleLoading(false)
-                            }}
-                            disabled={singleLoading}
-                            className={singleAnalysis
-                              ? "bg-white/50 hover:bg-white/70 dark:bg-gray-800/50 dark:hover:bg-gray-800/70 text-gray-800 dark:text-gray-200 border border-white/20 shadow-md"
-                              : "bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white shadow-lg"}
-                          >
-                            {singleLoading ? (
-                              <>
-                                <Loader className="mr-2 h-4 w-4 animate-spin" />
-                                Analyzing...
-                              </>
-                            ) : singleAnalysis ? (
-                              'Re-analyze Response'
-                            ) : (
-                              'Generate AI Analysis'
-                            )}
-                          </Button>
-                          {singleAnalysis && (
-                            <Button
-                              className="bg-white/50 hover:bg-white/70 dark:bg-gray-800/50 dark:hover:bg-gray-800/70 text-gray-800 dark:text-gray-200 border border-white/20 shadow-md"
-                              onClick={async () => {
-                                const { generateAnalysisPdf } = await import('./actions')
-                                const res = await generateAnalysisPdf({
-                                  title: 'Individual Feedback Analysis',
-                                  surveyId: String(activeSubmission.surveyId),
-                                  analysisMarkdown: singleAnalysis || ''
-                                })
-                                if (res.error || !res.pdfBase64) return
-                                const link = document.createElement('a')
-                                link.href = `data:application/pdf;base64,${res.pdfBase64}`
-                                link.download = `analysis-${activeSubmission.id}.pdf`
-                                link.click()
-                              }}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download Report PDF
-                            </Button>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Modernized Submission Details Interface */}
-                      <ScrollArea className="h-[60vh] pr-4 -mr-4">
-                        <div className="space-y-6 pr-4">
-
-                          {/* Experience Highlight Box */}
-                          {activeSubmission.hospitalInteraction && (
-                            <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 dark:from-blue-900/10 dark:to-indigo-900/10 p-5 rounded-xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden group">
-                              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/50 group-hover:bg-blue-500 transition-colors" />
-                              <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-2 uppercase tracking-wide">
-                                <MessageSquare className="h-4 w-4" />
-                                Patient Experience
-                              </h3>
-                              <p className="text-base text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap font-medium">
-                                {activeSubmission.hospitalInteraction}
-                              </p>
-                            </div>
-                          )}
-
-                          <Separator className="bg-gray-100 dark:bg-gray-800" />
-
-                          {/* Data Grid with Mapped Questions */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
-                            {Object.entries(activeSubmission)
-                              .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction', 'userId', 'sessionId'].includes(key))
-                              .sort((a, b) => a[0].localeCompare(b[0]))
-                              .map(([key, value]) => {
-                                const question = getQuestionText(key);
-                                const formattedValue = formatAnswerValue(value);
-
-                                return (
-                                  <div key={key} className="group transition-all duration-200">
-                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5 h-8 leading-tight">
-                                      <Hash className="h-3 w-3 opacity-50 shrink-0" />
-                                      <span>{question}</span>
-                                    </h4>
-                                    <div className="text-sm font-medium min-h-[1.5rem] flex items-center pl-4 border-l-2 border-transparent group-hover:border-primary/20 transition-all">
-                                      {Array.isArray(formattedValue) ? (
-                                        <div className="flex flex-wrap gap-2">
-                                          {formattedValue.map((v, i) => (
-                                            <Badge
-                                              key={i}
-                                              variant="secondary"
-                                              className="font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 border-0 px-2.5 py-0.5 rounded-md"
-                                            >
-                                              {v}
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <span className="text-foreground">
-                                          {formattedValue}
+                            return (
+                              <div key={key} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-b-0">
+                                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                                  {question}
+                                </h4>
+                                <div className="text-base text-gray-900 dark:text-gray-100">
+                                  {Array.isArray(formattedValue) ? (
+                                    <div className="flex flex-wrap gap-2">
+                                      {formattedValue.map((v, i) => (
+                                        <span
+                                          key={i}
+                                          className="inline-block bg-[#C8262A]/10 text-[#C8262A] px-3 py-1 rounded-full text-sm font-medium"
+                                        >
+                                          {v}
                                         </span>
-                                      )}
+                                      ))}
                                     </div>
-                                  </div>
-                                )
-                              })
-                            }
-                          </div>
-                        </div>
-                      </ScrollArea>
+                                  ) : (
+                                    <span>{formattedValue}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })
+                        }
+                      </div>
 
-                      {/* Raw Data Collapsible - Optional for debugging */}
-                      <details className="rounded-lg border border-white/30 bg-gradient-to-br from-white/40 to-gray-50/30 dark:from-gray-800/40 dark:to-gray-900/30 backdrop-blur-md backdrop-saturate-150 p-4 shadow-lg">
-                        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 font-medium hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
-                          ▶ View Raw JSON Data
+                      {/* Raw Data Collapsible */}
+                      <details className="mx-6 mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4">
+                        <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400 font-medium hover:text-gray-700 dark:hover:text-gray-300">
+                          View Raw JSON Data
                         </summary>
-                        <pre className="mt-3 max-h-64 overflow-auto rounded-lg bg-gradient-to-br from-black/5 to-blue-900/5 dark:from-black/20 dark:to-indigo-900/20 backdrop-blur-sm p-4 text-xs font-mono text-gray-700 dark:text-gray-300 border border-white/20">
+                        <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-gray-100 dark:bg-gray-900 p-3 text-xs font-mono text-gray-600 dark:text-gray-400">
                           {JSON.stringify(activeSubmission, null, 2)}
                         </pre>
                       </details>
                     </div>
                   )}
-                  <DialogFooter className="flex-shrink-0 border-t border-white/20 pt-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 backdrop-blur-md rounded-b-lg">
+                  <DialogFooter className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 bg-gray-50 dark:bg-gray-800 flex flex-wrap items-center justify-between gap-3">
                     <Button
                       variant="destructive"
-                      className="mr-auto"
+                      size="sm"
                       onClick={() => setSubmissionToDelete(activeSubmission)}
+                      className="bg-[#C8262A] hover:bg-[#a51f22]"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Submission
+                      Delete
                     </Button>
-                    <Button
-                      className="bg-gray-500 hover:bg-gray-600 text-white"
-                      onClick={closeSubmissionModal}
-                    >
-                      Close
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!activeSubmission) return
+                          const csv = [
+                            ['Field', 'Value'],
+                            ['Date', safeFormatDateForExport(activeSubmission.submittedAt)],
+                            ...Object.entries(activeSubmission)
+                              .filter(([key]) => !['id', 'submittedAt', 'surveyId'].includes(key))
+                              .map(([key, value]) => [
+                                getQuestionText(key),
+                                Array.isArray(value)
+                                  ? value.join('; ')
+                                  : typeof value === 'object'
+                                    ? JSON.stringify(value)
+                                    : String(value)
+                              ])
+                          ].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+
+                          const blob = new Blob([csv], { type: 'text/csv' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `submission-${activeSubmission.id}.csv`
+                          a.click()
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button
+                        onClick={closeSubmissionModal}
+                        className="bg-gray-600 hover:bg-gray-700 text-white"
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>

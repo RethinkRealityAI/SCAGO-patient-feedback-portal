@@ -159,7 +159,7 @@ export default function LoginForm() {
             <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">
-            {resetMode ? 'Reset Password' : 'Youth Empowerment Portal'}
+            {resetMode ? 'Reset Password' : 'SCAGO Portal'}
           </CardTitle>
           <CardDescription>
             {resetMode 
