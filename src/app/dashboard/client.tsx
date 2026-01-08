@@ -83,26 +83,42 @@ function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
   return !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
 }
 
+// Helper function to safely extract a string value from a field
+// The field might be: a string, an object with .selection, or something else entirely
+function extractStringValue(value: any): string | null {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+  if (value && typeof value === 'object') {
+    // Check for .selection property (common pattern in survey data)
+    if (typeof value.selection === 'string' && value.selection.trim()) {
+      return value.selection.trim()
+    }
+    // Check for .value property (another common pattern)
+    if (typeof value.value === 'string' && value.value.trim()) {
+      return value.value.trim()
+    }
+  }
+  return null
+}
+
 // Helper function to extract hospital/location from a submission
 // Handles multiple possible field name variations for consistent data access
+// IMPORTANT: Always returns a string, never an object (fixes React error #31)
 function getHospitalOrLocation(submission: any, preferLocation: boolean = false): string {
   if (preferLocation) {
     // For consent/intake forms, prefer city or primaryHospital
-    return submission.city?.selection ||
-      submission.primaryHospital?.selection ||
-      submission.hospitalName?.selection ||
-      submission.hospitalName ||
-      submission.hospital?.selection ||
-      submission.hospital ||
-      submission['hospital-on']?.selection ||
+    return extractStringValue(submission.city) ||
+      extractStringValue(submission.primaryHospital) ||
+      extractStringValue(submission.hospitalName) ||
+      extractStringValue(submission.hospital) ||
+      extractStringValue(submission['hospital-on']) ||
       'Unknown Location'
   }
   // For feedback forms, prefer hospital fields
-  return submission.hospitalName?.selection ||
-    submission.hospitalName ||
-    submission.hospital?.selection ||
-    submission.hospital ||
-    submission['hospital-on']?.selection ||
+  return extractStringValue(submission.hospitalName) ||
+    extractStringValue(submission.hospital) ||
+    extractStringValue(submission['hospital-on']) ||
     'Unknown Hospital'
 }
 

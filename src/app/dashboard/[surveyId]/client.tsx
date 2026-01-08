@@ -11,6 +11,35 @@ import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
 import Link from 'next/link'
 
+// Helper function to safely extract a string value from a field
+// The field might be: a string, an object with .selection, or something else entirely
+function extractStringValue(value: any): string | null {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+  if (value && typeof value === 'object') {
+    // Check for .selection property (common pattern in survey data)
+    if (typeof value.selection === 'string' && value.selection.trim()) {
+      return value.selection.trim()
+    }
+    // Check for .value property (another common pattern)
+    if (typeof value.value === 'string' && value.value.trim()) {
+      return value.value.trim()
+    }
+  }
+  return null
+}
+
+// Helper function to extract hospital name from a submission
+// Handles multiple possible field name variations for consistent data access
+// IMPORTANT: Always returns a string, never an object (fixes React error #31)
+function getHospitalName(submission: any): string {
+  return extractStringValue(submission.hospitalName) ||
+    extractStringValue(submission.hospital) ||
+    extractStringValue(submission['hospital-on']) ||
+    'Hospital'
+}
+
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [analysis, setAnalysis] = useState<{ summary?: string; error?: string } | null>(null)
@@ -95,9 +124,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const needsImprovement = submissions.filter(s => s.rating < 5).length
   
   // Get hospital breakdown
-  const hospitalName = (submissions[0] as any)?.hospital || 
-                      (submissions[0] as any)?.['hospital-on']?.selection || 
-                      'Hospital'
+  const hospitalName = submissions[0] ? getHospitalName(submissions[0]) : 'Hospital'
 
   return (
     <div className="container mx-auto px-4 py-8">
