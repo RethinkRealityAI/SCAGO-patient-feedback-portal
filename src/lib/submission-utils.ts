@@ -39,12 +39,29 @@ export function docToSubmission(doc: QueryDocumentSnapshot<DocumentData> | { id:
 }
 
 /**
+ * Fetch all survey IDs from the surveys collection
+ * Used to ensure we fetch submissions from all surveys, not just hardcoded ones
+ */
+async function getAllSurveyIds(): Promise<string[]> {
+  try {
+    const surveysCol = collection(db, 'surveys');
+    const snapshot = await getDocs(surveysCol);
+    return snapshot.docs.map(doc => doc.id);
+  } catch (error) {
+    console.error("Error fetching survey IDs:", error);
+    return [];
+  }
+}
+
+/**
  * Fetch all submissions from new organized structure and legacy collection
  * Uses collection group query for new structure: surveys/{surveyId}/submissions
- * Falls back to legacy feedback collection for backward compatibility
+ * Falls back to fetching from each survey individually if collectionGroup fails
+ * Also fetches from legacy feedback collection for backward compatibility
  */
 export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
   const submissions: FeedbackSubmission[] = [];
+  let collectionGroupSucceeded = false;
 
   try {
     // Note: collectionGroup queries with orderBy require a composite index.
@@ -53,23 +70,35 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
     const snapshot = await getDocs(submissionsCol);
     const newSubmissions = snapshot.docs.map(docToSubmission);
     submissions.push(...newSubmissions);
+    collectionGroupSucceeded = true;
   } catch (error) {
     console.warn("Warning: collectionGroup query failed (likely permissions). Falling back to survey-specific fetch.", error);
   }
 
-  // Explicitly fetch from the main Hospital Survey (QDl3z7vLa0IQ4JgHBZ2s)
-  // This bypasses collectionGroup permission issues
-  try {
-    const HOSPITAL_SURVEY_ID = 'QDl3z7vLa0IQ4JgHBZ2s';
-    const surveySubmissionsCol = collection(db, 'surveys', HOSPITAL_SURVEY_ID, 'submissions');
-    const snapshot = await getDocs(surveySubmissionsCol);
-    const surveySubmissions = snapshot.docs.map(docToSubmission);
+  // If collectionGroup failed or returned no results, fetch from all individual surveys
+  // This bypasses collectionGroup permission issues and ensures we get all submissions
+  if (!collectionGroupSucceeded || submissions.length === 0) {
+    try {
+      // Get all survey IDs from the surveys collection
+      const surveyIds = await getAllSurveyIds();
 
-    const seenIds = new Set(submissions.map(s => s.id));
-    const unique = surveySubmissions.filter(s => !seenIds.has(s.id));
-    submissions.push(...unique);
-  } catch (error) {
-    console.error("Error fetching hospital survey submissions:", error);
+      // Fetch submissions from each survey's submissions subcollection
+      for (const surveyId of surveyIds) {
+        try {
+          const surveySubmissionsCol = collection(db, 'surveys', surveyId, 'submissions');
+          const snapshot = await getDocs(surveySubmissionsCol);
+          const surveySubmissions = snapshot.docs.map(docToSubmission);
+
+          const seenIds = new Set(submissions.map(s => s.id));
+          const unique = surveySubmissions.filter(s => !seenIds.has(s.id));
+          submissions.push(...unique);
+        } catch (surveyError) {
+          console.error(`Error fetching submissions for survey ${surveyId}:`, surveyError);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching submissions from all surveys:", error);
+    }
   }
 
   try {
@@ -94,11 +123,13 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
 /**
  * Fetch submissions using Admin SDK (for server-side use)
  * Returns submissions with document IDs properly set
+ * Falls back to fetching from each survey individually if collectionGroup fails
  */
 export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> {
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
+  let collectionGroupSucceeded = false;
 
   try {
     const submissionsSnapshot = await firestore.collectionGroup('submissions').get();
@@ -113,7 +144,48 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
       } as FeedbackSubmission;
     });
     submissions.push(...newSubmissions);
+    collectionGroupSucceeded = true;
   } catch (error) {
+    console.warn("Warning: Admin collectionGroup query failed. Falling back to survey-specific fetch.", error);
+  }
+
+  // If collectionGroup failed or returned no results, fetch from all individual surveys
+  if (!collectionGroupSucceeded || submissions.length === 0) {
+    try {
+      // Get all survey IDs from the surveys collection
+      const surveysSnapshot = await firestore.collection('surveys').get();
+      const surveyIds = surveysSnapshot.docs.map(doc => doc.id);
+
+      // Fetch submissions from each survey's submissions subcollection
+      for (const surveyId of surveyIds) {
+        try {
+          const surveySubmissionsSnapshot = await firestore
+            .collection('surveys')
+            .doc(surveyId)
+            .collection('submissions')
+            .get();
+
+          const surveySubmissions = surveySubmissionsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              rating: Number(data.rating || 0),
+              submittedAt: parseFirestoreDate(data.submittedAt),
+              surveyId: data.surveyId || surveyId,
+            } as FeedbackSubmission;
+          });
+
+          const seenIds = new Set(submissions.map(s => s.id));
+          const unique = surveySubmissions.filter(s => !seenIds.has(s.id));
+          submissions.push(...unique);
+        } catch (surveyError) {
+          console.error(`Error fetching admin submissions for survey ${surveyId}:`, surveyError);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching admin submissions from all surveys:", error);
+    }
   }
 
   try {
@@ -133,6 +205,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
     const uniqueLegacy = legacySubmissions.filter(s => !seenIds.has(s.id));
     submissions.push(...uniqueLegacy);
   } catch (error) {
+    console.error("Error fetching legacy feedback with Admin SDK:", error);
   }
 
   return submissions;
