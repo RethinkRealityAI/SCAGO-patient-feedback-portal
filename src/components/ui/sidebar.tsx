@@ -13,6 +13,7 @@ import {
   Shield,
   Users,
   GraduationCap,
+  BarChart3,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -36,12 +37,14 @@ import { AuthContext } from '@/components/auth/auth-provider';
 import { signOut } from '@/lib/firebase-auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useUserNavigation } from '@/hooks/use-user-navigation';
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isPinned, setIsPinned] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const { user, isAdmin, isYEPManager, userRole } = useContext(AuthContext);
+  const navItems = useUserNavigation();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -53,7 +56,7 @@ export function Sidebar() {
         setIsPinned(pinned);
         setIsCollapsed(!pinned);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const togglePin = () => {
@@ -62,7 +65,7 @@ export function Sidebar() {
     setIsCollapsed(!nextPinned);
     try {
       localStorage.setItem('sidebarPinned', String(nextPinned));
-    } catch {}
+    } catch { }
   };
 
   const handleMouseEnter = () => {
@@ -110,7 +113,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside 
+    <aside
       className={cn(
         "sticky top-0 flex h-screen flex-col border-r bg-background p-4 overflow-y-auto transition-all duration-300 ease-in-out",
         shouldShowExpanded ? "w-64" : "w-fit"
@@ -119,52 +122,15 @@ export function Sidebar() {
       onMouseLeave={handleMouseLeave}
     >
       <div className="flex flex-1 flex-col gap-y-2">
-        <SidebarLink
-          href="/"
-          icon={<FileText />}
-          label="Surveys"
-          isCollapsed={!shouldShowExpanded}
-        />
-        <SidebarLink
-          href="/dashboard"
-          icon={<Home />}
-          label="Dashboard"
-          isCollapsed={!shouldShowExpanded}
-        />
-        <SidebarLink
-          href="/editor"
-          icon={<ClipboardList />}
-          label="Survey Editor"
-          isCollapsed={!shouldShowExpanded}
-        />
-        <SidebarLink
-          href="/resources"
-          icon={<Book />}
-          label="Resources"
-          isCollapsed={!shouldShowExpanded}
-        />
-        {(isAdmin || isYEPManager) && (
+        {navItems.map((item) => (
           <SidebarLink
-            href="/youth-empowerment"
-            icon={<GraduationCap />}
-            label="YEP Dashboard"
+            key={item.href}
+            href={item.href}
+            icon={item.icon}
+            label={item.label}
             isCollapsed={!shouldShowExpanded}
           />
-        )}
-        {isAdmin && (
-          <SidebarLink
-            href="/admin"
-            icon={<Shield />}
-            label="Admin Panel"
-            isCollapsed={!shouldShowExpanded}
-          />
-        )}
-        <SidebarLink
-          href="/profile"
-          icon={<User />}
-          label="Profile"
-          isCollapsed={!shouldShowExpanded}
-        />
+        ))}
       </div>
 
       <div className="mt-auto space-y-2 border-t pt-2">
@@ -248,7 +214,7 @@ export function Sidebar() {
             )}
           </div>
         )}
-        
+
         {/* Logout button below user menu */}
         {user && (
           <div>
@@ -289,7 +255,7 @@ export function Sidebar() {
             isCollapsed={!shouldShowExpanded}
           />
         )}
-        
+
         {shouldShowExpanded && (
           <TooltipProvider>
             <Tooltip delayDuration={0}>
@@ -366,7 +332,7 @@ const SidebarLink = ({
         'w-full justify-start'
       )}
     >
-      {icon} 
+      {icon}
       <span className="ml-4 whitespace-nowrap overflow-hidden transition-opacity duration-200">
         {label}
       </span>

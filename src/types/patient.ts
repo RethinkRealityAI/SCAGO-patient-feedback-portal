@@ -4,10 +4,11 @@ import { z } from 'zod';
 export const REGIONS = ['GTA', 'East', 'West', 'North'] as const;
 export const CLINIC_TYPES = ['adult', 'paediatric'] as const;
 export const COMMUNICATION_METHODS = ['text', 'call', 'email'] as const;
-export const CONSENT_STATUSES = ['on_file', 'not_obtained'] as const;
-export const CASE_STATUSES = ['active', 'inactive', 'closed'] as const;
+export const CONSENT_STATUSES = ['on_file', 'not_obtained', 'withdrawn', 'expired'] as const;
+export const CASE_STATUSES = ['active', 'inactive', 'closed', 'deceased'] as const;
 export const INTERACTION_TYPES = ['phone_call', 'follow_up', 'event_support', 'crisis_support'] as const;
 export const DOCUMENT_TYPES = ['consent_form', 'hospital_card', 'letter', 'referral', 'other'] as const;
+
 export const PATIENT_NEEDS = [
     'housing',
     'school_accommodations',
@@ -21,7 +22,13 @@ export const PATIENT_NEEDS = [
     'advocacy',
     'legal_support',
     'employment_support',
+    'pain_management',
+    'er_support',
+    'odsp_income_support',
+    'food_security',
 ] as const;
+
+export const FREQUENCIES = ['never', 'rarely', 'monthly', 'weekly', 'daily'] as const;
 
 // Emergency Contact Schema
 export const emergencyContactSchema = z.object({
@@ -66,6 +73,7 @@ export const patientSchema = z.object({
             email: z.string().email().optional().or(z.literal('')),
             phone: z.string().optional(),
         }).optional(),
+        isAdult: z.boolean().default(true), // To track if patient is adult or child
     }).optional(),
     emergencyContacts: z.array(emergencyContactSchema).default([]),
     preferredCommunication: z.enum(COMMUNICATION_METHODS),
@@ -80,6 +88,8 @@ export const patientSchema = z.object({
     }).optional(),
     caseStatus: z.enum(CASE_STATUSES).default('active'),
     needs: z.array(z.string()).default([]),
+    painCrisisFrequency: z.string().optional(), // Could use FREQUENCIES enum
+    erUsageFrequency: z.string().optional(),   // Could use FREQUENCIES enum
     notes: z.string().optional(),
     lastInteraction: z.object({
         date: z.date(),
@@ -106,7 +116,7 @@ export const interactionSchema = z.object({
     type: z.enum(INTERACTION_TYPES),
     notes: z.string().min(1, 'Notes are required'),
     outcome: z.string().optional(),
-    createdBy: z.string().optional(), // Optional because it's set server-side usually, or client doesn't set it
+    createdBy: z.string().optional(),
     createdAt: z.date().optional(),
 });
 

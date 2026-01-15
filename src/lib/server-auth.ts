@@ -58,16 +58,16 @@ export async function getServerSession(): Promise<ServerSession | null> {
     try {
       const user = await auth.getUser(decoded.uid);
       const currentRole = (user.customClaims?.role || '') as AppRole;
-      
+
       // If there's a mismatch, prefer the current role from Firebase (source of truth)
       // This allows role updates to take effect immediately without requiring re-login
       if (currentRole && claimRole !== currentRole) {
         console.log(`[ServerAuth] ⚠️ Role mismatch detected! Session has "${claimRole}" but Firebase has "${currentRole}". Using current role from Firebase.`);
       }
-      
+
       // Use current role from Firebase (preferred) or fall back to session cookie role
       const effectiveRole = currentRole || claimRole;
-      
+
       // Validate role exists and is valid
       if (!effectiveRole || !['super-admin', 'admin', 'mentor', 'participant'].includes(effectiveRole)) {
         console.log('[ServerAuth] ⚠️ Invalid or missing role claim:', effectiveRole);
@@ -184,6 +184,38 @@ export async function enforcePagePermission(permissionKey: PagePermissionKey): P
   console.log(`[ServerAuth] User ${session.email} with role ${session.role} denied access to ${permissionKey}`);
   redirect('/unauthorized');
   throw new Error('Unreachable'); // For TypeScript - redirect() doesn't return
+}
+
+/**
+ * Enforce any of the specified page permissions.
+ * Useful for parent layouts that cover multiple sub-sections.
+ */
+export async function enforceAnyPagePermission(permissionKeys: PagePermissionKey[]): Promise<ServerSession> {
+  const session = await getServerSession();
+  if (!session) {
+    redirect('/login');
+    throw new Error('Unreachable');
+  }
+
+  if (session.role === 'super-admin') return session;
+
+  if (session.role === 'admin') {
+    const { getAdminFirestore } = await getFirebaseAdmin();
+    const firestore = getAdminFirestore();
+    const permsDoc = await firestore.collection('config').doc('page_permissions').get();
+    const routesByEmail = permsDoc.exists ? ((permsDoc.data() as any)?.routesByEmail || {}) : {};
+    const allowed: string[] = routesByEmail[session.email] || [];
+
+    if (permissionKeys.some(key => allowed.includes(key))) {
+      return session;
+    }
+
+    redirect('/unauthorized');
+    throw new Error('Unreachable');
+  }
+
+  redirect('/unauthorized');
+  throw new Error('Unreachable');
 }
 
 /**

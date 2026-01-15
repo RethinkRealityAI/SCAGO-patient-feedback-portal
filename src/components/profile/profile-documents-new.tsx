@@ -102,7 +102,7 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
       'image/jpg',
       'image/png',
     ];
-    
+
     if (!allowedTypes.includes(file.type)) {
       toast({
         title: 'Invalid File Type',
@@ -127,17 +127,17 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
     try {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      
+
       await new Promise((resolve, reject) => {
         reader.onload = async () => {
           try {
             const base64Data = reader.result as string;
-            
+
             // Create a document-specific filename
             const doc = requiredDocs.find(d => d.id === docId);
             const timestamp = Date.now();
             const fileName = docId === 'additional' ? `${timestamp}_${file.name}` : `${docId}_${timestamp}_${file.name}`;
-            
+
             const result = await uploadProfileDocument({
               recordId: profile.id,
               collection: role === 'participant' ? 'yep_participants' : 'yep_mentors',
@@ -150,7 +150,7 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
             if (result.success) {
               toast({
                 title: 'Upload Successful',
-                description: docId === 'additional' 
+                description: docId === 'additional'
                   ? 'Document has been uploaded'
                   : `${doc?.name || 'Document'} has been uploaded`,
               });
@@ -285,260 +285,259 @@ export function ProfileDocumentsNew({ profile, role, onUpdate }: ProfileDocument
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Please upload clear, readable copies of all required documents. 
-            Accepted formats: PDF, DOC, DOCX, JPG, PNG (max 10MB)
-          </AlertDescription>
-        </Alert>
-
-        <div className="space-y-4">
-          {requiredDocs.map((doc) => {
-            const status = getDocumentStatus(doc);
-            const isUploading = uploadingDoc === doc.id;
-            const isDeleting = deletingDoc === doc.id;
-
-            return (
-              <div
-                key={doc.id}
-                className={`p-4 border rounded-lg ${
-                  status.uploaded ? 'bg-green-50 border-green-200' : 'bg-muted/50'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      {status.uploaded ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : doc.required ? (
-                        <Clock className="h-5 w-5 text-orange-500" />
-                      ) : (
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <h3 className="font-medium">
-                        {doc.name}
-                        {doc.required && (
-                          <span className="text-red-500 ml-1">*</span>
-                        )}
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {doc.description}
-                    </p>
-                    {status.uploaded && (
-                      <p className="text-sm text-green-600 mt-1 font-medium">
-                        ✓ Uploaded: {status.fileName}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {status.uploaded ? (
-                      <>
-                        {status.fileUrl ? (
-                          // User uploaded document - can view and delete
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(status.fileUrl, '_blank')}
-                              className="gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              View
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleFileDelete(doc.id, status.fileUrl)}
-                              disabled={isDeleting}
-                              className="gap-2"
-                            >
-                              {isDeleting ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                              Delete
-                            </Button>
-                          </>
-                        ) : status.adminProvided ? (
-                          // Admin verified - show as complete but allow user to upload their own
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => document.getElementById(`file-upload-${doc.id}`)?.click()}
-                            disabled={isUploading}
-                            className="gap-2"
-                          >
-                            {isUploading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Uploading...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="h-4 w-4" />
-                                Upload Your Copy
-                              </>
-                            )}
-                          </Button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => document.getElementById(`file-upload-${doc.id}`)?.click()}
-                        disabled={isUploading}
-                        className="gap-2"
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4" />
-                            Upload
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    <input
-                      id={`file-upload-${doc.id}`}
-                      type="file"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={(e) => handleFileUpload(doc.id, e)}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="pt-4 border-t">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Document Completion</span>
-            <span className="font-medium">
-              {requiredDocs.filter(doc => getDocumentStatus(doc).uploaded).length} / {requiredDocs.length}
-            </span>
-          </div>
-          <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-500"
-              style={{
-                width: `${(requiredDocs.filter(doc => getDocumentStatus(doc).uploaded).length / requiredDocs.length) * 100}%`,
-              }}
-            />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-
-    {/* Additional Documents Section - Participants Only */}
-    {role === 'participant' && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Additional Documents
-          </CardTitle>
-          <CardDescription>
-            Upload any additional documents you'd like to share (optional)
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              You can upload any documents here that you'd like admins to see. This is completely optional.
+              Please upload clear, readable copies of all required documents.
+              Accepted formats: PDF, DOC, DOCX, JPG, PNG (max 10MB)
             </AlertDescription>
           </Alert>
 
-          {/* List of Additional Documents */}
-          {profile.additionalDocuments && profile.additionalDocuments.length > 0 && (
-            <div className="space-y-3">
-              {profile.additionalDocuments.map((doc, index) => (
+          <div className="space-y-4">
+            {requiredDocs.map((doc) => {
+              const status = getDocumentStatus(doc);
+              const isUploading = uploadingDoc === doc.id;
+              const isDeleting = deletingDoc === doc.id;
+
+              return (
                 <div
-                  key={index}
-                  className="flex items-center justify-between p-4 border rounded-lg bg-muted/50"
+                  key={doc.id}
+                  className={`p-4 border rounded-lg ${status.uploaded ? 'bg-green-50 border-green-200' : 'bg-muted/50'
+                    }`}
                 >
-                  <div className="flex items-center gap-3 flex-1">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <p className="font-medium">{doc.fileName}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        {status.uploaded ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        ) : doc.required ? (
+                          <Clock className="h-5 w-5 text-orange-500" />
+                        ) : (
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <h3 className="font-medium">
+                          {doc.name}
+                          {doc.required && (
+                            <span className="text-red-500 ml-1">*</span>
+                          )}
+                        </h3>
+                      </div>
                       <p className="text-sm text-muted-foreground">
-                        Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                        {doc.description}
                       </p>
+                      {status.uploaded && (
+                        <p className="text-sm text-green-600 mt-1 font-medium">
+                          ✓ Uploaded: {status.fileName}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {status.uploaded ? (
+                        <>
+                          {status.fileUrl ? (
+                            // User uploaded document - can view and delete
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(status.fileUrl, '_blank')}
+                                className="gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                View
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleFileDelete(doc.id, status.fileUrl!)}
+                                disabled={isDeleting}
+                                className="gap-2"
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                                Delete
+                              </Button>
+                            </>
+                          ) : status.adminProvided ? (
+                            // Admin verified - show as complete but allow user to upload their own
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => document.getElementById(`file-upload-${doc.id}`)?.click()}
+                              disabled={isUploading}
+                              className="gap-2"
+                            >
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4" />
+                                  Upload Your Copy
+                                </>
+                              )}
+                            </Button>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => document.getElementById(`file-upload-${doc.id}`)?.click()}
+                          disabled={isUploading}
+                          className="gap-2"
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" />
+                              Upload
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <input
+                        id={`file-upload-${doc.id}`}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(doc.id, e)}
+                      />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(doc.url, '_blank')}
-                      className="gap-2"
-                    >
-                      <Download className="h-4 w-4" />
-                      View
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleFileDelete('additional', doc.url)}
-                      disabled={deletingDoc === `additional-${doc.url}`}
-                      className="gap-2"
-                    >
-                      {deletingDoc === `additional-${doc.url}` ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                      Delete
-                    </Button>
-                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
 
-          {/* Upload New Additional Document */}
           <div className="pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => document.getElementById('additional-file-upload')?.click()}
-              disabled={uploadingDoc === 'additional'}
-              className="w-full gap-2"
-            >
-              {uploadingDoc === 'additional' ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  Upload Additional Document
-                </>
-              )}
-            </Button>
-            <input
-              id="additional-file-upload"
-              type="file"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={(e) => handleFileUpload('additional', e)}
-            />
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Document Completion</span>
+              <span className="font-medium">
+                {requiredDocs.filter(doc => getDocumentStatus(doc).uploaded).length} / {requiredDocs.length}
+              </span>
+            </div>
+            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-500"
+                style={{
+                  width: `${(requiredDocs.filter(doc => getDocumentStatus(doc).uploaded).length / requiredDocs.length) * 100}%`,
+                }}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
-    )}
-  </div>
+
+      {/* Additional Documents Section - Participants Only */}
+      {role === 'participant' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Additional Documents
+            </CardTitle>
+            <CardDescription>
+              Upload any additional documents you'd like to share (optional)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                You can upload any documents here that you'd like admins to see. This is completely optional.
+              </AlertDescription>
+            </Alert>
+
+            {/* List of Additional Documents */}
+            {(profile as YEPParticipant).additionalDocuments && (profile as YEPParticipant).additionalDocuments!.length > 0 && (
+              <div className="space-y-3">
+                {(profile as YEPParticipant).additionalDocuments!.map((doc, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-4 border rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="font-medium">{doc.fileName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(doc.url, '_blank')}
+                        className="gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        View
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleFileDelete('additional', doc.url)}
+                        disabled={deletingDoc === `additional-${doc.url}`}
+                        className="gap-2"
+                      >
+                        {deletingDoc === `additional-${doc.url}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload New Additional Document */}
+            <div className="pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => document.getElementById('additional-file-upload')?.click()}
+                disabled={uploadingDoc === 'additional'}
+                className="w-full gap-2"
+              >
+                {uploadingDoc === 'additional' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Upload Additional Document
+                  </>
+                )}
+              </Button>
+              <input
+                id="additional-file-upload"
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                className="hidden"
+                onChange={(e) => handleFileUpload('additional', e)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

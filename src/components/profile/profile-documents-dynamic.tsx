@@ -332,9 +332,8 @@ export function ProfileDocumentsDynamic({ profile, role, onUpdate }: ProfileDocu
               return (
                 <div
                   key={doc.id}
-                  className={`p-4 border rounded-lg ${
-                    status.uploaded ? 'bg-green-50 border-green-200' : 'bg-muted/50'
-                  }`}
+                  className={`p-4 border rounded-lg ${status.uploaded ? 'bg-green-50 border-green-200' : 'bg-muted/50'
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -492,9 +491,9 @@ export function ProfileDocumentsDynamic({ profile, role, onUpdate }: ProfileDocu
             </Alert>
 
             {/* List of Additional Documents */}
-            {profile.additionalDocuments && profile.additionalDocuments.length > 0 && (
+            {(profile as YEPParticipant).additionalDocuments && (profile as YEPParticipant).additionalDocuments!.length > 0 && (
               <div className="space-y-3">
-                {profile.additionalDocuments.map((doc, index) => (
+                {(profile as YEPParticipant).additionalDocuments!.map((doc, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-4 border rounded-lg bg-muted/50"

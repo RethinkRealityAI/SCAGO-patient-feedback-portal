@@ -10,6 +10,7 @@ interface WebhookConfig {
 interface SubmissionData {
   submissionId: string;
   surveyId: string;
+  sessionId?: string;
   submittedAt: Date | string;
   fields: Record<string, any>;
 }
@@ -21,14 +22,14 @@ export async function sendWebhook(submissionData: SubmissionData): Promise<void>
   try {
     // Get webhook configuration
     const configDoc = await getDoc(doc(db, 'config', 'webhooks'));
-    
+
     if (!configDoc.exists()) {
       // No webhook configured, skip
       return;
     }
 
     const config = configDoc.data() as WebhookConfig;
-    
+
     if (!config.enabled || !config.url) {
       // Webhook not enabled or no URL configured
       return;
@@ -67,7 +68,7 @@ export async function sendWebhook(submissionData: SubmissionData): Promise<void>
     }).catch((error) => {
       // Log error but don't throw - webhook failures shouldn't block submissions
       console.error('Webhook delivery failed:', error);
-      
+
       // Optionally update webhook config with error (would need admin permissions)
       // For now, just log it
     });

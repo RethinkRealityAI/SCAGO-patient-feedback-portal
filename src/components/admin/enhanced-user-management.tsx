@@ -11,9 +11,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
   UserPlus, Trash2, Shield, Eye, Clock, Activity,
-  Search, Mail, Calendar, LogIn, AlertTriangle, 
+  Search, Mail, Calendar, LogIn, AlertTriangle,
   Info, CheckCircle, XCircle, Loader2, Crown, Users, GraduationCap, User
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -62,7 +62,7 @@ export function EnhancedUserManagement() {
 
   const loadData = async () => {
     setLoading(true);
-    
+
     // Load users from Admin SDK
     const usersResult = await listPlatformUsers();
     setUsers(usersResult.users || []);
@@ -90,7 +90,7 @@ export function EnhancedUserManagement() {
     } else {
       setEditRoutes([]);
     }
-    
+
     // Load user's login history
     const result = await getUserLoginHistory(user.email);
     if (result.logins) {
@@ -165,9 +165,9 @@ export function EnhancedUserManagement() {
     const hasLower = /[a-z]/.test(createPassword);
     const hasNumber = /[0-9]/.test(createPassword);
     const hasSpecial = /[^A-Za-z0-9]/.test(createPassword);
-    
+
     const score = [length >= 8, hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
-    
+
     if (score >= 4) setPasswordStrength('strong');
     else if (score >= 2) setPasswordStrength('medium');
     else setPasswordStrength('weak');
@@ -313,7 +313,7 @@ export function EnhancedUserManagement() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       <Button
                         variant="ghost"
@@ -398,8 +398,8 @@ export function EnhancedUserManagement() {
                           {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
                             const desc = roleDescriptions[role];
                             return (
-                              <SelectItem 
-                                key={role} 
+                              <SelectItem
+                                key={role}
                                 value={role}
                                 className="py-3 cursor-pointer"
                               >
@@ -449,8 +449,8 @@ export function EnhancedUserManagement() {
                     {selectedUser.role === 'super-admin'
                       ? 'Super admins have access to all pages automatically.'
                       : selectedUser.role === 'admin'
-                      ? 'Select which pages this admin can access. Hover over each option for details.'
-                      : 'Page permissions are only available for admin users.'}
+                        ? 'Select which pages this admin can access. Hover over each option for details.'
+                        : 'Page permissions are only available for admin users.'}
                   </p>
                   <TooltipProvider>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -458,15 +458,13 @@ export function EnhancedUserManagement() {
                         <Tooltip key={permission.key}>
                           <TooltipTrigger asChild>
                             <label
-                              className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                editRoutes.includes(permission.key)
+                              className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${editRoutes.includes(permission.key)
                                   ? 'border-primary bg-primary/5 hover:bg-primary/10'
                                   : 'border-border hover:border-primary/50 hover:bg-accent/30'
-                              } ${
-                                selectedUser.role !== 'admin'
+                                } ${selectedUser.role !== 'admin'
                                   ? 'opacity-60 cursor-not-allowed'
                                   : ''
-                              }`}
+                                }`}
                             >
                               <Checkbox
                                 checked={editRoutes.includes(permission.key)}
@@ -721,20 +719,18 @@ export function EnhancedUserManagement() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                             <div
-                              className={`h-full transition-all ${
-                                passwordStrength === 'strong' ? 'bg-green-500 w-full' :
-                                passwordStrength === 'medium' ? 'bg-yellow-500 w-2/3' :
-                                'bg-red-500 w-1/3'
-                              }`}
+                              className={`h-full transition-all ${passwordStrength === 'strong' ? 'bg-green-500 w-full' :
+                                  passwordStrength === 'medium' ? 'bg-yellow-500 w-2/3' :
+                                    'bg-red-500 w-1/3'
+                                }`}
                             />
                           </div>
-                          <span className={`text-xs ${
-                            passwordStrength === 'strong' ? 'text-green-600' :
-                            passwordStrength === 'medium' ? 'text-yellow-600' :
-                            'text-red-600'
-                          }`}>
+                          <span className={`text-xs ${passwordStrength === 'strong' ? 'text-green-600' :
+                              passwordStrength === 'medium' ? 'text-yellow-600' :
+                                'text-red-600'
+                            }`}>
                             {passwordStrength === 'strong' ? 'Strong' :
-                             passwordStrength === 'medium' ? 'Medium' : 'Weak'}
+                              passwordStrength === 'medium' ? 'Medium' : 'Weak'}
                           </span>
                         </div>
                         {createPassword.length < 6 && (
@@ -792,9 +788,9 @@ export function EnhancedUserManagement() {
                         {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
                           const desc = roleDescriptions[role];
                           return (
-                            <SelectItem 
-                              key={role} 
-                              value={role} 
+                            <SelectItem
+                              key={role}
+                              value={role}
                               className="py-3 cursor-pointer"
                             >
                               <div className="flex items-center gap-3 w-full">
@@ -836,11 +832,10 @@ export function EnhancedUserManagement() {
                             <Tooltip key={permission.key}>
                               <TooltipTrigger asChild>
                                 <label
-                                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                    createRoutes.includes(permission.key)
+                                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${createRoutes.includes(permission.key)
                                       ? 'border-primary bg-primary/5 hover:bg-primary/10'
                                       : 'border-border hover:border-primary/50 hover:bg-accent/30'
-                                  }`}
+                                    }`}
                                 >
                                   <Checkbox
                                     checked={createRoutes.includes(permission.key)}
@@ -897,7 +892,7 @@ export function EnhancedUserManagement() {
 
                     setCreateError(null);
                     setSavingAction(true);
-                    
+
                     try {
                       const res = await createPlatformUser({
                         email: createEmail,
@@ -906,7 +901,7 @@ export function EnhancedUserManagement() {
                         role: createRole,
                         pagePermissions: createRoutes,
                       });
-                      
+
                       if ((res as any).success) {
                         toast({
                           title: 'User Created Successfully',
@@ -916,7 +911,7 @@ export function EnhancedUserManagement() {
                         setCreateEmail('');
                         setCreatePassword('');
                         setCreateDisplayName('');
-                        setCreateRole('user');
+                        setCreateRole('participant');
                         setCreateRoutes([]);
                         setCreateError(null);
                         // Reload user list

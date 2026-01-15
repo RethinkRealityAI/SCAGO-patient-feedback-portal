@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import {
     User, Calendar, MapPin, Phone, Mail, FileText, Activity,
-    AlertCircle, CheckCircle2, Clock, Edit, ArrowLeft
+    AlertCircle, CheckCircle2, Clock, Edit, ArrowLeft, HeartPulse, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -104,6 +104,25 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
         }
     };
 
+    const getLastInteractionAlert = () => {
+        if (!interactions.length) return null;
+        const lastDate = new Date(interactions[0].date);
+        const daysSince = differenceInDays(new Date(), lastDate);
+
+        if (daysSince > 30) {
+            return (
+                <Alert variant="destructive">
+                    <Clock className="h-4 w-4" />
+                    <AlertTitle>Follow-up Overdue</AlertTitle>
+                    <AlertDescription>
+                        Last interaction was {daysSince} days ago. Patient interaction is overdue.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="space-y-6 p-6">
             {/* Header */}
@@ -114,12 +133,18 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                     </Button>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">{patient.fullName}</h1>
-                        <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                        <div className="flex items-center gap-2 text-muted-foreground mt-1 text-sm flex-wrap">
                             <Badge variant="outline" className="capitalize">{patient.hospital}</Badge>
                             <span>•</span>
                             <span>MRN: {patient.mrn || 'N/A'}</span>
                             <span>•</span>
                             <span className="capitalize">{patient.region}</span>
+                            {patient.referral?.name && (
+                                <>
+                                    <span>•</span>
+                                    <span>Referred by: {patient.referral.name}</span>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -134,15 +159,18 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
             </div>
 
             {/* Alerts Section */}
-            {patient.consentStatus === 'not_obtained' && (
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Action Required</AlertTitle>
-                    <AlertDescription>
-                        Patient consent has not been obtained. Please upload a consent form or update the status.
-                    </AlertDescription>
-                </Alert>
-            )}
+            <div className="space-y-2">
+                {patient.consentStatus === 'not_obtained' && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Action Required</AlertTitle>
+                        <AlertDescription>
+                            Patient consent has not been obtained. Please upload a consent form or update the status.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {getLastInteractionAlert()}
+            </div>
 
             <Tabs defaultValue="overview" className="space-y-4">
                 <TabsList>
@@ -211,6 +239,18 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                                         )}
                                     </div>
                                 </div>
+
+                                {patient.referral && (
+                                    <div className="space-y-1 md:col-span-2">
+                                        <div className="text-sm font-medium text-muted-foreground">Referral Details</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                            {patient.referral.name && <div><span className="text-muted-foreground">By:</span> {patient.referral.name}</div>}
+                                            {patient.referral.hospital && <div><span className="text-muted-foreground">From:</span> {patient.referral.hospital}</div>}
+                                            {patient.referral.date && <div><span className="text-muted-foreground">Date:</span> {format(new Date(patient.referral.date), 'MMM d, yyyy')}</div>}
+                                            {patient.referral.notes && <div className="md:col-span-2"><span className="text-muted-foreground">Notes:</span> {patient.referral.notes}</div>}
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -233,12 +273,26 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                                 </div>
                                 <Separator />
                                 <div>
+                                    <div className="text-sm font-medium text-muted-foreground mb-1">Health Metrics</div>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span>Pain Crisis:</span>
+                                            <span className="font-medium capitalize">{patient.painCrisisFrequency || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>ER Usage:</span>
+                                            <span className="font-medium capitalize">{patient.erUsageFrequency || 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Separator />
+                                <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">Identified Needs</div>
                                     <div className="flex flex-wrap gap-2">
                                         {patient.needs && patient.needs.length > 0 ? (
                                             patient.needs.map(need => (
                                                 <Badge key={need} variant="secondary" className="capitalize">
-                                                    {need.replace('_', ' ')}
+                                                    {need.replace(/_/g, ' ')}
                                                 </Badge>
                                             ))
                                         ) : (
@@ -248,6 +302,51 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {/* Emergency Contacts Card */}
+                        {patient.emergencyContacts && patient.emergencyContacts.length > 0 && (
+                            <Card className="md:col-span-1">
+                                <CardHeader>
+                                    <CardTitle>Emergency Contacts</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {patient.emergencyContacts.map((contact, idx) => (
+                                        <div key={idx} className="text-sm">
+                                            <div className="font-medium flex items-center gap-2">
+                                                {contact.name}
+                                                {contact.isPrimary && <Badge variant="outline" className="text-xs py-0 h-4">Primary</Badge>}
+                                            </div>
+                                            <div className="text-muted-foreground">{contact.relationship}</div>
+                                            <div>{contact.phone}</div>
+                                            {idx < patient.emergencyContacts!.length - 1 && <Separator className="my-2" />}
+                                        </div>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {/* Guardian Info (if child) */}
+                        {patient.guardianContact && !patient.guardianContact.isAdult && (
+                            <Card className="md:col-span-1">
+                                <CardHeader>
+                                    <CardTitle>Guardian Information</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                    <div className="font-medium">{patient.guardianContact.name}</div>
+                                    <div className="text-muted-foreground">{patient.guardianContact.relation}</div>
+                                    {patient.guardianContact.contactInfo?.phone && (
+                                        <div className="flex items-center gap-2">
+                                            <Phone className="h-3 w-3" /> {patient.guardianContact.contactInfo.phone}
+                                        </div>
+                                    )}
+                                    {patient.guardianContact.contactInfo?.email && (
+                                        <div className="flex items-center gap-2">
+                                            <Mail className="h-3 w-3" /> {patient.guardianContact.contactInfo.email}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
 
                         {/* Notes Card */}
                         <Card className="md:col-span-3">

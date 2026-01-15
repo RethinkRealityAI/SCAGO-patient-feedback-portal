@@ -35,7 +35,7 @@ export function PatientInteractions({ patientId, interactions, onUpdate }: Patie
         defaultValues: {
             patientId: patientId,
             date: new Date(),
-            type: 'phone',
+            type: 'phone_call',
             notes: '',
             outcome: '',
         },
@@ -58,7 +58,7 @@ export function PatientInteractions({ patientId, interactions, onUpdate }: Patie
                 form.reset({
                     patientId: patientId,
                     date: new Date(),
-                    type: 'phone',
+                    type: 'phone_call',
                     notes: '',
                     outcome: '',
                 });

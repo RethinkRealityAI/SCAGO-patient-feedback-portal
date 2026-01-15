@@ -33,7 +33,7 @@ export async function createFullBackup(): Promise<{ success: boolean; error?: st
     const { fetchAllSubmissionsAdmin } = await import('@/lib/submission-utils');
     const submissionsArray = await fetchAllSubmissionsAdmin();
     const submissions = submissionsArray.map(sub => ({
-      id: sub.id,
+
       ...sub,
       submittedAt: sub.submittedAt instanceof Date ? sub.submittedAt.toISOString() : sub.submittedAt,
     }));
@@ -89,7 +89,7 @@ export async function exportDataAsJSON(): Promise<{ success: boolean; data?: str
     const { fetchAllSubmissionsAdmin } = await import('@/lib/submission-utils');
     const submissionsArray = await fetchAllSubmissionsAdmin();
     const submissions = submissionsArray.map(sub => ({
-      id: sub.id,
+
       ...sub,
       submittedAt: sub.submittedAt instanceof Date ? sub.submittedAt.toISOString() : sub.submittedAt,
     }));

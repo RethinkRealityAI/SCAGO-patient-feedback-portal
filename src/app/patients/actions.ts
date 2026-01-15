@@ -123,6 +123,10 @@ export async function getPatient(id: string) {
                     } : undefined,
                     createdAt: data.createdAt?.toDate(),
                     updatedAt: data.updatedAt?.toDate(),
+                    lastInteraction: data.lastInteraction ? {
+                        ...data.lastInteraction,
+                        date: data.lastInteraction.date?.toDate(),
+                    } : undefined,
                 } as Patient
             };
         }
@@ -176,6 +180,10 @@ export async function getPatients(filters?: {
                 } : undefined,
                 createdAt: data.createdAt?.toDate(),
                 updatedAt: data.updatedAt?.toDate(),
+                lastInteraction: data.lastInteraction ? {
+                    ...data.lastInteraction,
+                    date: data.lastInteraction.date?.toDate(),
+                } : undefined,
             } as Patient;
         });
 
@@ -378,6 +386,10 @@ export async function searchPatients(searchTerm: string) {
                 } : undefined,
                 createdAt: data.createdAt?.toDate(),
                 updatedAt: data.updatedAt?.toDate(),
+                lastInteraction: data.lastInteraction ? {
+                    ...data.lastInteraction,
+                    date: data.lastInteraction.date?.toDate(),
+                } : undefined,
             } as Patient;
         });
 

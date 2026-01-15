@@ -99,9 +99,9 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
           <AlertTitle>Error Loading Dashboard</AlertTitle>
           <AlertDescription>
             <p className="mb-2">{error}</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => window.location.reload()}
               className="mt-2"
             >
@@ -116,13 +116,13 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
   // Calculate metrics
   const totalSubmissions = submissions.length
-  const avgRating = totalSubmissions > 0 
+  const avgRating = totalSubmissions > 0
     ? (submissions.reduce((acc, s) => acc + Number(s.rating || 0), 0) / totalSubmissions).toFixed(1)
     : '0.0'
-  const excellent = submissions.filter(s => s.rating >= 8).length
-  const good = submissions.filter(s => s.rating >= 5 && s.rating < 8).length
-  const needsImprovement = submissions.filter(s => s.rating < 5).length
-  
+  const excellent = submissions.filter(s => (Number(s.rating) || 0) >= 8).length
+  const good = submissions.filter(s => (Number(s.rating) || 0) >= 5 && (Number(s.rating) || 0) < 8).length
+  const needsImprovement = submissions.filter(s => (Number(s.rating) || 0) < 5).length
+
   // Get hospital breakdown
   const hospitalName = submissions[0] ? getHospitalName(submissions[0]) : 'Hospital'
 
@@ -247,23 +247,21 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
                               <span className="text-sm font-medium">{submission.rating}/10</span>
-                              <div className={`h-2 w-2 rounded-full ${
-                                submission.rating >= 9 ? 'bg-green-500' :
-                                submission.rating >= 7 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`} />
+                              <div className={`h-2 w-2 rounded-full ${(Number(submission.rating) || 0) >= 9 ? 'bg-green-500' :
+                                  (Number(submission.rating) || 0) >= 7 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`} />
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm max-w-md">
                             <p className="line-clamp-2">{submission.hospitalInteraction}</p>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                              submission.rating >= 8 ? 'bg-green-100 text-green-700' :
-                              submission.rating >= 5 ? 'bg-yellow-100 text-yellow-700' : 
-                              'bg-red-100 text-red-700'
-                            }`}>
-                              {submission.rating >= 8 ? 'Excellent' :
-                               submission.rating >= 5 ? 'Good' : 'Needs Improvement'}
+                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${(Number(submission.rating) || 0) >= 8 ? 'bg-green-100 text-green-700' :
+                                (Number(submission.rating) || 0) >= 5 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                              }`}>
+                              {(Number(submission.rating) || 0) >= 8 ? 'Excellent' :
+                                (Number(submission.rating) || 0) >= 5 ? 'Good' : 'Needs Improvement'}
                             </span>
                           </td>
                         </tr>

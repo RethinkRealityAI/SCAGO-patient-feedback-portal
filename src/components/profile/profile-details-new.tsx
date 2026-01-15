@@ -53,7 +53,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
 
   const loadMentorInfo = async () => {
     if (role !== 'participant' || !('assignedMentor' in profile)) return;
-    
+
     setLoadingRelationships(true);
     try {
       const result = await getMentorDetails(profile.assignedMentor!);
@@ -80,7 +80,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
 
   const loadParticipantsInfo = async () => {
     if (role !== 'mentor' || !('name' in profile)) return;
-    
+
     setLoadingRelationships(true);
     try {
       // getMentorParticipants now handles both name and ID
@@ -126,14 +126,14 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
         if (data.postalCode !== undefined) updates.postalCode = data.postalCode;
         if (data.availability !== undefined) updates.availability = data.availability;
         if (data.notes !== undefined) updates.notes = data.notes;
-        
+
         result = await updateParticipant(profile.id, updates);
       } else {
         const updates: Partial<YEPMentor> = {};
         const data = editedData as Partial<YEPMentor>;
         if (data.phone !== undefined) updates.phone = data.phone;
         if (data.availability !== undefined) updates.availability = data.availability;
-        
+
         result = await updateMentor(profile.id, updates);
       }
 
@@ -211,7 +211,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
             <div className="space-y-2">
               <Label>Name</Label>
               <Input
-                value={role === 'participant' ? data.youthParticipant || '' : data.name || ''}
+                value={(role === 'participant' ? (data as YEPParticipant).youthParticipant : (data as YEPMentor).name) || ''}
                 disabled
                 className="bg-muted"
               />
@@ -229,18 +229,24 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
             <div className="space-y-2">
               <Label>Phone Number</Label>
               <Input
-                value={data[role === 'participant' ? 'phoneNumber' : 'phone'] || ''}
-                onChange={(e) => setEditedData({ ...editedData, [role === 'participant' ? 'phoneNumber' : 'phone']: e.target.value })}
+                value={(role === 'participant' ? (data as YEPParticipant).phoneNumber : (data as YEPMentor).phone) || ''}
+                onChange={(e) => {
+                  if (role === 'participant') {
+                    setEditedData({ ...editedData, phoneNumber: e.target.value });
+                  } else {
+                    setEditedData({ ...editedData, phone: e.target.value });
+                  }
+                }}
                 disabled={!isEditing}
                 placeholder="Enter your phone number"
               />
             </div>
 
-            {role === 'participant' && data.region && (
+            {role === 'participant' && (data as YEPParticipant).region && (
               <div className="space-y-2">
                 <Label>Region</Label>
                 <Input
-                  value={data.region || ''}
+                  value={(data as YEPParticipant).region || ''}
                   disabled
                   className="bg-muted"
                 />
@@ -264,7 +270,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                 <div className="space-y-2">
                   <Label>Relationship</Label>
                   <Input
-                    value={data.emergencyContactRelationship || ''}
+                    value={(data as YEPParticipant).emergencyContactRelationship || ''}
                     onChange={(e) => setEditedData({ ...editedData, emergencyContactRelationship: e.target.value })}
                     disabled={!isEditing}
                     placeholder="e.g., Parent, Spouse, Sibling"
@@ -274,7 +280,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                 <div className="space-y-2">
                   <Label>Emergency Contact Phone</Label>
                   <Input
-                    value={data.emergencyContactNumber || ''}
+                    value={(data as YEPParticipant).emergencyContactNumber || ''}
                     onChange={(e) => setEditedData({ ...editedData, emergencyContactNumber: e.target.value })}
                     disabled={!isEditing}
                     placeholder="Emergency contact phone number"
@@ -294,7 +300,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
               <div className="space-y-2">
                 <Label>Street Address</Label>
                 <Input
-                  value={data.streetAddress || ''}
+                  value={(data as YEPParticipant).streetAddress || ''}
                   onChange={(e) => setEditedData({ ...editedData, streetAddress: e.target.value })}
                   disabled={!isEditing}
                   placeholder="123 Main Street"
@@ -305,7 +311,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                 <div className="space-y-2">
                   <Label>City</Label>
                   <Input
-                    value={data.city || ''}
+                    value={(data as YEPParticipant).city || ''}
                     onChange={(e) => setEditedData({ ...editedData, city: e.target.value })}
                     disabled={!isEditing}
                     placeholder="City"
@@ -315,7 +321,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                 <div className="space-y-2">
                   <Label>Province</Label>
                   <Input
-                    value={data.province || ''}
+                    value={(data as YEPParticipant).province || ''}
                     onChange={(e) => setEditedData({ ...editedData, province: e.target.value })}
                     disabled={!isEditing}
                     placeholder="Province"
@@ -325,7 +331,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                 <div className="space-y-2">
                   <Label>Postal Code</Label>
                   <Input
-                    value={data.postalCode || ''}
+                    value={(data as YEPParticipant).postalCode || ''}
                     onChange={(e) => setEditedData({ ...editedData, postalCode: e.target.value })}
                     disabled={!isEditing}
                     placeholder="A1A 1A1"
@@ -336,7 +342,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
           </Card>
 
           {/* Assigned Mentor */}
-          {data.assignedMentor && (
+          {(data as YEPParticipant).assignedMentor && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -357,11 +363,11 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                         <User className="h-6 w-6 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium text-lg">{mentorInfo?.name || data.assignedMentor || 'Unknown Mentor'}</p>
+                        <p className="font-medium text-lg">{mentorInfo?.name || (data as YEPParticipant).assignedMentor || 'Unknown Mentor'}</p>
                         <p className="text-sm text-muted-foreground">Program Mentor</p>
                       </div>
                     </div>
-                    
+
                     {mentorInfo && (
                       <div className="space-y-2 pt-2 border-t">
                         {mentorInfo.email && (
@@ -408,8 +414,8 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
               {loadingRelationships
                 ? 'Loading participants...'
                 : participantsInfo.length === 0
-                ? 'No participants assigned yet'
-                : `${participantsInfo.length} participant${participantsInfo.length !== 1 ? 's' : ''} assigned`}
+                  ? 'No participants assigned yet'
+                  : `${participantsInfo.length} participant${participantsInfo.length !== 1 ? 's' : ''} assigned`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -434,7 +440,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
                         <p className="text-sm text-muted-foreground">Participant</p>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-1 pl-13">
                       {participant.email && (
                         <div className="flex items-center gap-2 text-sm">
@@ -493,7 +499,7 @@ export function ProfileDetailsNew({ profile, role, onUpdate }: ProfileDetailsNew
           </CardHeader>
           <CardContent>
             <Textarea
-              value={data.notes || ''}
+              value={(data as YEPParticipant).notes || ''}
               onChange={(e) => setEditedData({ ...editedData, notes: e.target.value })}
               disabled={!isEditing}
               placeholder="Any additional notes..."

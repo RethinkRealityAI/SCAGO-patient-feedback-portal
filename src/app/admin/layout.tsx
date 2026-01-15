@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Require 'user-management' permission (super admins always have access)
-  const { enforcePagePermission } = await import('@/lib/server-auth');
-  await enforcePagePermission('user-management');
+  // Require general admin role (super admins also pass this)
+  const { enforceAdminOrRedirect } = await import('@/lib/server-auth');
+  await enforceAdminOrRedirect();
   return <>{children}</>;
 }
 

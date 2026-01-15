@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function YEPLayout({ children }: { children: React.ReactNode }) {
-  // Require 'yep-portal' permission
-  const { enforcePagePermission } = await import('@/lib/server-auth');
-  await enforcePagePermission('yep-portal');
+  // Require any YEP-related permission
+  const { enforceAnyPagePermission } = await import('@/lib/server-auth');
+  await enforceAnyPagePermission(['yep-portal', 'yep-dashboard', 'yep-forms']);
   return <>{children}</>;
 }
 

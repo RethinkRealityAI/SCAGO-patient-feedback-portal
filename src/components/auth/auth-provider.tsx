@@ -12,7 +12,9 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isYEPManager: boolean;
   userRole: 'super-admin' | 'admin' | 'mentor' | 'participant' | null;
+  permissions: import('@/lib/permissions').PagePermissionKey[];
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -20,7 +22,9 @@ export const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   isSuperAdmin: false,
+  isYEPManager: false,
   userRole: null,
+  permissions: [],
 });
 
 interface AuthProviderProps {
@@ -46,7 +50,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isYEPManager, setIsYEPManager] = useState(false);
   const [userRole, setUserRole] = useState<'super-admin' | 'admin' | 'mentor' | 'participant' | null>(null);
+  const [permissions, setPermissions] = useState<import('@/lib/permissions').PagePermissionKey[]>([]);
   const router = useRouter();
   const pathname = usePathname();
   const sessionPostedRef = useRef(false);
@@ -55,7 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const unsubscribe = onAuthChange(async (authUser) => {
       try {
         setUser(authUser);
-        
+
         if (authUser) {
           // Ensure server-side session cookie is set (deduped)
           try {
@@ -80,49 +86,71 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
           setIsAdmin(adminStatus);
           setIsSuperAdmin(superAdminStatus);
+          setIsYEPManager(userRole === 'admin' || userRole === 'super-admin' || userRole === 'mentor'); // Consider mentors as part of YEP management for UI purposes or define more strictly
           setUserRole(userRole);
-          
-        // Track login (optional - will fail if Firestore rules don't allow)
-        if (authUser.email && authUser.uid) {
-          try {
-            // Use client-side Firestore operations for login tracking
-            const { doc, setDoc, updateDoc, getDoc, Timestamp } = await import('firebase/firestore');
-            const { db } = await import('@/lib/firebase');
-            
-            const userRef = doc(db, 'users', authUser.email);
-            const userDoc = await getDoc(userRef);
 
-            if (userDoc.exists()) {
-              await updateDoc(userRef, {
-                lastLoginAt: Timestamp.now(),
-                'metadata.lastSignInTime': new Date().toISOString(),
-              });
-            } else {
-              await setDoc(userRef, {
-                email: authUser.email,
-                uid: authUser.uid,
-                createdAt: Timestamp.now(),
-                lastLoginAt: Timestamp.now(),
-                disabled: false,
-                emailVerified: false,
-                metadata: {
-                  creationTime: new Date().toISOString(),
-                  lastSignInTime: new Date().toISOString(),
-                },
-              });
+          // Fetch granular page permissions for admin users
+          if (adminStatus && !superAdminStatus && authUser.email) {
+            try {
+              const { getPagePermissions } = await import('@/lib/page-permissions-actions');
+              const permsData = await getPagePermissions();
+              const userPerms = permsData.routesByEmail[authUser.email.toLowerCase()] || [];
+              setPermissions(userPerms as import('@/lib/permissions').PagePermissionKey[]);
+            } catch (err) {
+              console.error('Error fetching granular permissions:', err);
+              setPermissions([]);
             }
-          } catch (error) {
-            // Silently fail - login tracking is optional
-            console.log('Login tracking skipped (requires Firestore write permissions)');
+          } else if (superAdminStatus) {
+            // Super admins conceptually have all permissions, but the UI might checks specific keys
+            // We'll define them as needed or leave empty if the UI handles super-admin separately
+            setPermissions([]);
+          } else {
+            setPermissions([]);
           }
-        }
-          
+
+          // Track login (optional - will fail if Firestore rules don't allow)
+          if (authUser.email && authUser.uid) {
+            try {
+              // Use client-side Firestore operations for login tracking
+              const { doc, setDoc, updateDoc, getDoc, Timestamp } = await import('firebase/firestore');
+              const { db } = await import('@/lib/firebase');
+
+              const userRef = doc(db, 'users', authUser.email);
+              const userDoc = await getDoc(userRef);
+
+              if (userDoc.exists()) {
+                await updateDoc(userRef, {
+                  lastLoginAt: Timestamp.now(),
+                  'metadata.lastSignInTime': new Date().toISOString(),
+                });
+              } else {
+                await setDoc(userRef, {
+                  email: authUser.email,
+                  uid: authUser.uid,
+                  createdAt: Timestamp.now(),
+                  lastLoginAt: Timestamp.now(),
+                  disabled: false,
+                  emailVerified: false,
+                  metadata: {
+                    creationTime: new Date().toISOString(),
+                    lastSignInTime: new Date().toISOString(),
+                  },
+                });
+              }
+            } catch (error) {
+              // Silently fail - login tracking is optional
+              console.log('Login tracking skipped (requires Firestore write permissions)');
+            }
+          }
+
           // Route access is enforced on the server via layouts. Avoid client-side false negatives.
         } else {
           setIsAdmin(false);
           setIsSuperAdmin(false);
+          setIsYEPManager(false);
           setUserRole(null);
-          
+          setPermissions([]);
+
           // Clear server session cookie
           try {
             await fetch('/api/auth/logout', { method: 'POST' });
@@ -150,7 +178,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [router, pathname]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, userRole }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, isYEPManager, userRole, permissions }}>
       {children}
     </AuthContext.Provider>
   );

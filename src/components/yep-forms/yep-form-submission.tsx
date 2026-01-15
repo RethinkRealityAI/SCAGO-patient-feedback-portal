@@ -5,7 +5,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { YEPFormTemplate, yepFormTemplateSchema } from '@/lib/yep-forms-types';
+import { YEPFormTemplate, type YEPFormSubmission as YEPFormSubmissionType, yepFormTemplateSchema } from '@/lib/yep-forms-types';
 import { useToast } from '@/hooks/use-toast';
 import { YEPFormRenderer } from './yep-form-renderer';
 import { submitYEPForm } from '@/app/yep-forms/actions';
@@ -41,7 +41,7 @@ export default function YEPFormSubmission({ formTemplate, onSubmissionSuccess }:
       try {
         // First, create the submission record via server action
         const submitResult = await submitYEPForm(formTemplate.id!, data);
-        
+
         if (!submitResult.success || !submitResult.data) {
           toast({
             title: 'Error',
@@ -51,9 +51,15 @@ export default function YEPFormSubmission({ formTemplate, onSubmissionSuccess }:
           return;
         }
 
+        const submissionData = {
+          ...submitResult.data,
+          submittedAt: new Date(submitResult.data.submittedAt)
+        } as YEPFormSubmissionType;
+
         // Then process the submission to create/update entities
-        const processResult = await processYEPFormSubmission(submitResult.data, formTemplate);
-        
+        const processResult = await processYEPFormSubmission(submissionData, formTemplate);
+
+
         if (processResult.success) {
           toast({
             title: 'Success',

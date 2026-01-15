@@ -13,7 +13,8 @@ export type PagePermissionKey =
   | 'yep-portal'
   | 'yep-dashboard'
   | 'yep-forms'
-  | 'patient-management';
+  | 'patient-management'
+  | 'program-reports';
 
 export interface PagePermission {
   key: PagePermissionKey;
@@ -68,6 +69,12 @@ export const PAGE_PERMISSIONS: PagePermission[] = [
     description: 'Manage patient records, interactions, and documents',
     route: '/patients',
   },
+  {
+    key: 'program-reports',
+    label: 'Program Reports',
+    description: 'View and generate detailed program-wide analytics reports',
+    route: '/admin/reports',
+  },
 ];
 
 /**
@@ -81,6 +88,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, PagePermissionKey> = {
   '/youth-empowerment/dashboard': 'yep-dashboard',
   '/yep-forms': 'yep-forms',
   '/patients': 'patient-management',
+  '/admin/reports': 'program-reports',
 };
 
 /**
@@ -113,10 +121,13 @@ export function getRequiredPermission(route: string): PagePermissionKey | null {
     return ROUTE_PERMISSION_MAP[route];
   }
 
+  // Sort routes by length (descending) to match the most specific route first
+  const sortedRoutes = Object.keys(ROUTE_PERMISSION_MAP).sort((a, b) => b.length - a.length);
+
   // Check for route prefixes
-  for (const [mappedRoute, permission] of Object.entries(ROUTE_PERMISSION_MAP)) {
+  for (const mappedRoute of sortedRoutes) {
     if (route.startsWith(mappedRoute)) {
-      return permission;
+      return ROUTE_PERMISSION_MAP[mappedRoute];
     }
   }
 

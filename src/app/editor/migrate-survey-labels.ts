@@ -12,22 +12,25 @@ export async function migrateSurveyLabels(surveyId: string) {
     const firestore = getAdminFirestore();
     const surveyRef = firestore.collection('surveys').doc(surveyId);
     const surveySnap = await surveyRef.get();
-    
-    if (!surveySnap.exists()) {
+
+    if (!surveySnap.exists) {
       return { error: 'Survey not found' };
     }
 
     const survey = surveySnap.data();
-    
+    if (!survey) {
+      return { error: 'Survey data is empty' };
+    }
+
     // Update submitButtonLabel to undefined so translation system takes over
     survey.submitButtonLabel = undefined;
-    
+
     // Update saveProgressEnabled to false for public surveys
     survey.saveProgressEnabled = false;
-    
+
     // Save back to database
     await surveyRef.set(survey as any, { merge: true });
-    
+
     return { success: true, message: 'Survey labels migrated successfully' };
   } catch (error) {
     console.error('Error migrating survey labels:', error);

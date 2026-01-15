@@ -22,6 +22,7 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuCheckboxItem
 } from '@/components/ui/dropdown-menu';
 import {
     MoreHorizontal,
@@ -31,12 +32,14 @@ import {
     User,
     FileText,
     Calendar,
-    AlertCircle
+    AlertCircle,
+    ChevronDown,
+    Download
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getPatients } from '@/app/patients/actions';
-import { Patient, REGIONS, CASE_STATUSES } from '@/types/patient';
-import { format } from 'date-fns';
+import { Patient, REGIONS, CASE_STATUSES, PATIENT_NEEDS } from '@/types/patient';
+import { format, differenceInDays, subDays } from 'date-fns';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export function PatientList() {
@@ -51,6 +54,9 @@ export function PatientList() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [regionFilter, setRegionFilter] = useState<string>('all');
     const [hospitalFilter, setHospitalFilter] = useState<string>('all');
+    const [needsFilter, setNeedsFilter] = useState<string>('all');
+    const [timeFilter, setTimeFilter] = useState<string>('all'); // all, new_7_days, overdue_30_days
+    const [ageFilter, setAgeFilter] = useState<string>('all'); // all, pediatric, adult
 
     useEffect(() => {
         loadPatients();
@@ -58,7 +64,7 @@ export function PatientList() {
 
     useEffect(() => {
         filterPatients();
-    }, [patients, searchTerm, statusFilter, regionFilter, hospitalFilter]);
+    }, [patients, searchTerm, statusFilter, regionFilter, hospitalFilter, needsFilter, timeFilter, ageFilter]);
 
     const loadPatients = async () => {
         setIsLoading(true);
@@ -114,8 +120,34 @@ export function PatientList() {
             filtered = filtered.filter(p => p.hospital === hospitalFilter);
         }
 
+        // Needs filter
+        if (needsFilter !== 'all') {
+            filtered = filtered.filter(p => p.needs && p.needs.includes(needsFilter));
+        }
+
+        // Time filter (New / Overdue)
+        if (timeFilter === 'new_7_days') {
+            const sevenDaysAgo = subDays(new Date(), 7);
+            filtered = filtered.filter(p => p.createdAt && new Date(p.createdAt) >= sevenDaysAgo);
+        } else if (timeFilter === 'overdue_30_days') {
+            filtered = filtered.filter(p => {
+                if (!p.lastInteraction) return true; // Never interacted matches overdue logic
+                return differenceInDays(new Date(), p.lastInteraction.date) > 30;
+            });
+        }
+
+        // Age filter (Pediatric < 18, Adult >= 18)
+        if (ageFilter !== 'all') {
+            filtered = filtered.filter(p => {
+                const age = differenceInDays(new Date(), new Date(p.dateOfBirth)) / 365.25;
+                if (ageFilter === 'pediatric') return age < 18;
+                if (ageFilter === 'adult') return age >= 18;
+                return true;
+            });
+        }
+
         setFilteredPatients(filtered);
-    }, [patients, searchTerm, statusFilter, regionFilter, hospitalFilter]);
+    }, [patients, searchTerm, statusFilter, regionFilter, hospitalFilter, needsFilter, timeFilter, ageFilter]);
 
     const handleViewProfile = (patientId: string) => {
         router.push(`/patients/${patientId}`);
@@ -127,6 +159,57 @@ export function PatientList() {
     const handleDeleteClick = (patientId: string) => {
         setPatientToDelete(patientId);
         setDeleteDialogOpen(true);
+    };
+
+    const handleExportCSV = async () => {
+        try {
+            const { exportPatientsToCSV } = await import('@/app/patients/actions');
+            // Filter by current search/filter criteria if needed, or just export visible patients
+            // For now, let's export all visible patients by passing their IDs
+            const patientIds = filteredPatients.map(p => p.id).filter(id => id !== undefined) as string[];
+
+            if (patientIds.length === 0) {
+                toast({
+                    title: 'No Patients',
+                    description: 'No patients to export based on current filters.',
+                    variant: 'default',
+                });
+                return;
+            }
+
+            const result = await exportPatientsToCSV(patientIds);
+
+            if (result.success && result.data) {
+                // Create a blob and download
+                const blob = new Blob([result.data], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `patients_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                toast({
+                    title: 'Export Successful',
+                    description: `Exported ${patientIds.length} patient records.`,
+                });
+            } else {
+                toast({
+                    title: 'Error',
+                    description: result.error || 'Failed to export patients',
+                    variant: 'destructive',
+                });
+            }
+        } catch (error) {
+            console.error('Error export patients:', error);
+            toast({
+                title: 'Error',
+                description: 'An unexpected error occurred during export',
+                variant: 'destructive',
+            });
+        }
     };
 
     const handleDeleteConfirm = async () => {
@@ -182,6 +265,12 @@ export function PatientList() {
         return <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">Missing Consent</Badge>;
     };
 
+    const isOverdue = (patient: Patient) => {
+        if (!patient.lastInteraction) return false;
+        // date is guaranteed to be a Date object now due to actions.ts update
+        return differenceInDays(new Date(), patient.lastInteraction.date) > 30;
+    };
+
     // Extract unique hospitals for filter
     const hospitals = Array.from(new Set(patients.map(p => p.hospital))).sort();
 
@@ -198,17 +287,23 @@ export function PatientList() {
                             Manage patient records and interactions
                         </CardDescription>
                     </div>
-                    <Button onClick={() => router.push('/patients/new')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Patient
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleExportCSV}>
+                            <Download className="h-4 w-4 mr-2" />
+                            Export
+                        </Button>
+                        <Button onClick={() => router.push('/patients/new')}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Patient
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>
                 {/* Filters */}
                 <div className="space-y-4 mb-6">
-                    <div className="flex flex-col md:flex-row gap-4">
-                        <div className="flex-1 relative">
+                    <div className="flex flex-col md:flex-row gap-4 flex-wrap">
+                        <div className="flex-1 relative min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder="Search by name, hospital, MRN..."
@@ -217,57 +312,93 @@ export function PatientList() {
                                 className="pl-10"
                             />
                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    {CASE_STATUSES.map(status => (
-                                        <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
 
-                            <Select value={regionFilter} onValueChange={setRegionFilter}>
-                                <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Region" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Regions</SelectItem>
-                                    {REGIONS.map(region => (
-                                        <SelectItem key={region} value={region}>{region}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <Select value={timeFilter} onValueChange={setTimeFilter}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="Time Period" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Time</SelectItem>
+                                <SelectItem value="new_7_days">New (Last 7 Days)</SelectItem>
+                                <SelectItem value="overdue_30_days">Overdue (&gt;30 Days)</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                            <Select value={hospitalFilter} onValueChange={setHospitalFilter}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Hospital" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Hospitals</SelectItem>
-                                    {hospitals.map(hospital => (
-                                        <SelectItem key={hospital} value={hospital}>{hospital}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <Select value={ageFilter} onValueChange={setAgeFilter}>
+                            <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Age Group" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Ages</SelectItem>
+                                <SelectItem value="pediatric">Pediatric (&lt;18)</SelectItem>
+                                <SelectItem value="adult">Adult (18+)</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                    setSearchTerm('');
-                                    setStatusFilter('all');
-                                    setRegionFilter('all');
-                                    setHospitalFilter('all');
-                                }}
-                                title="Clear Filters"
-                            >
-                                <Filter className="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                {CASE_STATUSES.map(status => (
+                                    <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={regionFilter} onValueChange={setRegionFilter}>
+                            <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Region" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Regions</SelectItem>
+                                {REGIONS.map(region => (
+                                    <SelectItem key={region} value={region}>{region}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={hospitalFilter} onValueChange={setHospitalFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Hospital" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Hospitals</SelectItem>
+                                {hospitals.map(hospital => (
+                                    <SelectItem key={hospital} value={hospital}>{hospital}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={needsFilter} onValueChange={setNeedsFilter}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="Needs" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Needs</SelectItem>
+                                {PATIENT_NEEDS.map(need => (
+                                    <SelectItem key={need} value={need}>{need.replace(/_/g, ' ')}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                                setSearchTerm('');
+                                setStatusFilter('all');
+                                setRegionFilter('all');
+                                setHospitalFilter('all');
+                                setNeedsFilter('all');
+                                setTimeFilter('all');
+                                setAgeFilter('all');
+                            }}
+                            title="Clear Filters"
+                        >
+                            <Filter className="h-4 w-4" />
+                        </Button>
                     </div>
                 </div>
 
@@ -311,16 +442,13 @@ export function PatientList() {
                                         <TableCell>{getStatusBadge(patient.caseStatus)}</TableCell>
                                         <TableCell>{getConsentBadge(patient.consentStatus)}</TableCell>
                                         <TableCell>
-                                            {/* Note: lastInteraction is not in the main schema type but added dynamically in actions. 
-                          Ideally we update the type definition or handle it here. 
-                          For now assuming it might be missing from type but present in data. 
-                          Let's cast or check safely. 
-                      */}
-                                            {(patient as any).lastInteraction ? (
+                                            {patient.lastInteraction ? (
                                                 <div className="text-sm">
-                                                    <div>{format((patient as any).lastInteraction.date.toDate(), 'MMM d, yyyy')}</div>
+                                                    <div className={cn(isOverdue(patient) ? "text-red-500 font-medium" : "")}>
+                                                        {format(patient.lastInteraction.date, 'MMM d, yyyy')}
+                                                    </div>
                                                     <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                                                        {(patient as any).lastInteraction.summary}
+                                                        {patient.lastInteraction.summary}
                                                     </div>
                                                 </div>
                                             ) : (
@@ -379,4 +507,12 @@ export function PatientList() {
             />
         </Card>
     );
+}
+
+// Add simple import for cn if not available
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
 }
