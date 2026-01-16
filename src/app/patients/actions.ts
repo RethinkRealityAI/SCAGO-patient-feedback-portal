@@ -1,24 +1,7 @@
 'use server';
 
-import { db, storage } from '@/lib/firebase';
-import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    setDoc,
-    updateDoc,
-    deleteDoc,
-    query,
-    where,
-    orderBy,
-    serverTimestamp,
-    addDoc,
-    limit,
-    startAfter,
-    QueryDocumentSnapshot,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getAdminFirestore, getAdminStorage } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import {
     patientSchema,
     Patient,
@@ -32,7 +15,10 @@ const PATIENTS_COLLECTION = 'patients';
 const INTERACTIONS_COLLECTION = 'patient_interactions';
 const DOCUMENTS_COLLECTION = 'patient_documents';
 
-// Helper to get current user from server session
+/**
+ * Helper to get current user and enforce admin privileges.
+ * This runs on the server, so we use server-side auth utilities.
+ */
 async function getCurrentUser() {
     const session = await getServerSession();
     if (!session) {
@@ -44,20 +30,34 @@ async function getCurrentUser() {
     return session;
 }
 
+// Helper to convert Firestore dates to JS Dates (Admin SDK version)
+function convertDates(data: any): any {
+    if (!data) return data;
+    const result = { ...data };
+    for (const key in result) {
+        if (result[key] && typeof result[key].toDate === 'function') {
+            result[key] = result[key].toDate();
+        } else if (result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+            result[key] = convertDates(result[key]);
+        }
+    }
+    return result;
+}
+
 // --- Patient Actions ---
 
 export async function createPatient(data: Patient) {
     try {
-        // Auth check
         const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
 
         const validatedData = patientSchema.parse(data);
-        const docRef = doc(collection(db, PATIENTS_COLLECTION));
+        const docRef = firestore.collection(PATIENTS_COLLECTION).doc();
 
         const patientData = {
             ...validatedData,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             createdBy: user.email,
         };
 
@@ -68,7 +68,7 @@ export async function createPatient(data: Patient) {
             }
         });
 
-        await setDoc(docRef, patientData);
+        await docRef.set(patientData);
         return { success: true, id: docRef.id };
     } catch (error) {
         console.error('Error creating patient:', error);
@@ -78,12 +78,12 @@ export async function createPatient(data: Patient) {
 
 export async function updatePatient(id: string, data: Partial<Patient>) {
     try {
-        // Auth check
         const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
 
         const updateData = {
             ...data,
-            updatedAt: serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             updatedBy: user.email,
         };
 
@@ -94,7 +94,7 @@ export async function updatePatient(id: string, data: Partial<Patient>) {
             }
         });
 
-        await updateDoc(doc(db, PATIENTS_COLLECTION, id), updateData);
+        await firestore.collection(PATIENTS_COLLECTION).doc(id).update(updateData);
         return { success: true };
     } catch (error) {
         console.error('Error updating patient:', error);
@@ -104,29 +104,17 @@ export async function updatePatient(id: string, data: Partial<Patient>) {
 
 export async function getPatient(id: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        const docSnap = await getDoc(doc(db, PATIENTS_COLLECTION, id));
-        if (docSnap.exists()) {
+        const docSnap = await firestore.collection(PATIENTS_COLLECTION).doc(id).get();
+        if (docSnap.exists) {
             const data = docSnap.data();
             return {
                 success: true,
                 data: {
                     id: docSnap.id,
-                    ...data,
-                    dateOfBirth: data.dateOfBirth?.toDate(),
-                    consentDate: data.consentDate?.toDate(),
-                    referral: data.referral ? {
-                        ...data.referral,
-                        date: data.referral.date?.toDate(),
-                    } : undefined,
-                    createdAt: data.createdAt?.toDate(),
-                    updatedAt: data.updatedAt?.toDate(),
-                    lastInteraction: data.lastInteraction ? {
-                        ...data.lastInteraction,
-                        date: data.lastInteraction.date?.toDate(),
-                    } : undefined,
+                    ...convertDates(data),
                 } as Patient
             };
         }
@@ -142,53 +130,49 @@ export async function getPatients(filters?: {
     status?: string;
     region?: string;
     pageSize?: number;
-    lastDoc?: any;
+    lastDocId?: string;
 }) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        const pageSize = filters?.pageSize || 50; // Default page size
-        let q = query(collection(db, PATIENTS_COLLECTION), orderBy('createdAt', 'desc'), limit(pageSize));
+        const pageSize = filters?.pageSize || 50;
+        let query = firestore.collection(PATIENTS_COLLECTION).orderBy('createdAt', 'desc').limit(pageSize);
 
         if (filters?.hospital) {
-            q = query(q, where('hospital', '==', filters.hospital));
+            query = query.where('hospital', '==', filters.hospital);
         }
         if (filters?.status) {
-            q = query(q, where('caseStatus', '==', filters.status));
+            query = query.where('caseStatus', '==', filters.status);
         }
         if (filters?.region) {
-            q = query(q, where('region', '==', filters.region));
+            query = query.where('region', '==', filters.region);
         }
 
-        // Pagination support
-        if (filters?.lastDoc) {
-            q = query(q, startAfter(filters.lastDoc));
+        // Pagination support for Admin SDK (using doc ID if needed)
+        if (filters?.lastDocId) {
+            const lastDoc = await firestore.collection(PATIENTS_COLLECTION).doc(filters.lastDocId).get();
+            if (lastDoc.exists) {
+                query = query.startAfter(lastDoc);
+            }
         }
 
-        const snapshot = await getDocs(q);
+        const snapshot = await query.get();
         const patients = snapshot.docs.map((doc) => {
             const data = doc.data();
             return {
                 id: doc.id,
-                ...data,
-                dateOfBirth: data.dateOfBirth?.toDate(),
-                consentDate: data.consentDate?.toDate(),
-                referral: data.referral ? {
-                    ...data.referral,
-                    date: data.referral.date?.toDate(),
-                } : undefined,
-                createdAt: data.createdAt?.toDate(),
-                updatedAt: data.updatedAt?.toDate(),
-                lastInteraction: data.lastInteraction ? {
-                    ...data.lastInteraction,
-                    date: data.lastInteraction.date?.toDate(),
-                } : undefined,
+                ...convertDates(data),
             } as Patient;
         });
 
         const lastVisible = snapshot.docs[snapshot.docs.length - 1];
-        return { success: true, data: patients, lastDoc: lastVisible, hasMore: patients.length === pageSize };
+        return {
+            success: true,
+            data: patients,
+            lastDocId: lastVisible?.id,
+            hasMore: patients.length === pageSize
+        };
     } catch (error) {
         console.error('Error fetching patients:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch patients', data: [], hasMore: false };
@@ -199,8 +183,8 @@ export async function getPatients(filters?: {
 
 export async function addInteraction(data: PatientInteraction) {
     try {
-        // Auth check
         const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
 
         const interactionData = {
             patientId: data.patientId,
@@ -209,19 +193,19 @@ export async function addInteraction(data: PatientInteraction) {
             notes: data.notes,
             outcome: data.outcome || '',
             createdBy: user.email,
-            createdAt: serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
         };
 
-        await addDoc(collection(db, INTERACTIONS_COLLECTION), interactionData);
+        await firestore.collection(INTERACTIONS_COLLECTION).add(interactionData);
 
         // Update last interaction on patient record
-        await updateDoc(doc(db, PATIENTS_COLLECTION, data.patientId), {
+        await firestore.collection(PATIENTS_COLLECTION).doc(data.patientId).update({
             lastInteraction: {
-                date: serverTimestamp(),
+                date: FieldValue.serverTimestamp(),
                 type: data.type,
                 summary: data.notes.substring(0, 100),
             },
-            updatedAt: serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
         });
 
         return { success: true };
@@ -233,23 +217,19 @@ export async function addInteraction(data: PatientInteraction) {
 
 export async function getPatientInteractions(patientId: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        const q = query(
-            collection(db, INTERACTIONS_COLLECTION),
-            where('patientId', '==', patientId),
-            orderBy('date', 'desc')
-        );
+        const snapshot = await firestore.collection(INTERACTIONS_COLLECTION)
+            .where('patientId', '==', patientId)
+            .orderBy('date', 'desc')
+            .get();
 
-        const snapshot = await getDocs(q);
         const interactions = snapshot.docs.map((doc) => {
             const data = doc.data();
             return {
                 id: doc.id,
-                ...data,
-                date: data.date?.toDate(),
-                createdAt: data.createdAt?.toDate(),
+                ...convertDates(data),
             } as PatientInteraction;
         });
         return { success: true, data: interactions };
@@ -263,8 +243,9 @@ export async function getPatientInteractions(patientId: string) {
 
 export async function uploadDocument(formData: FormData) {
     try {
-        // Auth check
         const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
+        const bucket = getAdminStorage().bucket();
 
         const file = formData.get('file') as File;
         const patientId = formData.get('patientId') as string;
@@ -275,22 +256,37 @@ export async function uploadDocument(formData: FormData) {
             return { success: false, error: 'Missing required fields' };
         }
 
-        const storageRef = ref(storage, `patient-documents/${patientId}/${Date.now()}-${file.name}`);
-        const snapshot = await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(snapshot.ref);
-        const path = snapshot.ref.fullPath;
+        const fileName = `${Date.now()}-${file.name}`;
+        const filePath = `patient-documents/${patientId}/${fileName}`;
+        const fileRef = bucket.file(filePath);
+
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        await fileRef.save(buffer, {
+            metadata: {
+                contentType: file.type,
+            },
+        });
+
+        // Make the file publicly accessible if needed, or get a signed URL
+        // Here we get a public URL if the bucket allows, otherwise signed
+        const [url] = await fileRef.getSignedUrl({
+            action: 'read',
+            expires: '03-01-2500', // Far future
+        });
 
         const docData = {
             patientId,
             type,
             url,
-            path,
+            path: filePath,
             fileName: name || file.name,
-            uploadedAt: serverTimestamp(),
+            uploadedAt: FieldValue.serverTimestamp(),
             uploadedBy: user.email,
         };
 
-        await addDoc(collection(db, DOCUMENTS_COLLECTION), docData);
+        await firestore.collection(DOCUMENTS_COLLECTION).add(docData);
 
         return { success: true, url };
     } catch (error) {
@@ -301,22 +297,19 @@ export async function uploadDocument(formData: FormData) {
 
 export async function getPatientDocuments(patientId: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        const q = query(
-            collection(db, DOCUMENTS_COLLECTION),
-            where('patientId', '==', patientId),
-            orderBy('uploadedAt', 'desc')
-        );
+        const snapshot = await firestore.collection(DOCUMENTS_COLLECTION)
+            .where('patientId', '==', patientId)
+            .orderBy('uploadedAt', 'desc')
+            .get();
 
-        const snapshot = await getDocs(q);
         const documents = snapshot.docs.map((doc) => {
             const data = doc.data();
             return {
                 id: doc.id,
-                ...data,
-                uploadedAt: data.uploadedAt?.toDate(),
+                ...convertDates(data),
             } as PatientDocument;
         });
         return { success: true, data: documents };
@@ -328,15 +321,19 @@ export async function getPatientDocuments(patientId: string) {
 
 export async function deleteDocument(patientId: string, docId: string, path: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
+        const bucket = getAdminStorage().bucket();
 
         // Delete from Storage
-        const storageRef = ref(storage, path);
-        await deleteObject(storageRef);
+        try {
+            await bucket.file(path).delete();
+        } catch (e) {
+            console.warn('File already deleted in storage or path invalid');
+        }
 
         // Delete from Firestore
-        await deleteDoc(doc(db, DOCUMENTS_COLLECTION, docId));
+        await firestore.collection(DOCUMENTS_COLLECTION).doc(docId).delete();
 
         return { success: true };
     } catch (error) {
@@ -347,14 +344,14 @@ export async function deleteDocument(patientId: string, docId: string, path: str
 
 export async function deletePatient(id: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
         // Delete patient document
-        await deleteDoc(doc(db, PATIENTS_COLLECTION, id));
+        await firestore.collection(PATIENTS_COLLECTION).doc(id).delete();
 
-        // TODO: Also delete related interactions and documents
-        // This should be done in a transaction or cloud function
+        // Note: Related interactions and documents should ideally be deleted as well
+        // We can do this in the background or here if the list isn't too huge
 
         return { success: true };
     } catch (error) {
@@ -365,31 +362,15 @@ export async function deletePatient(id: string) {
 
 export async function searchPatients(searchTerm: string) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        // Note: Firestore doesn't support full-text search natively
-        // This is a simple implementation that filters on the client side
-        // For production, consider using Algolia or similar service
-
-        const snapshot = await getDocs(collection(db, PATIENTS_COLLECTION));
+        const snapshot = await firestore.collection(PATIENTS_COLLECTION).get();
         const patients = snapshot.docs.map((doc) => {
             const data = doc.data();
             return {
                 id: doc.id,
-                ...data,
-                dateOfBirth: data.dateOfBirth?.toDate(),
-                consentDate: data.consentDate?.toDate(),
-                referral: data.referral ? {
-                    ...data.referral,
-                    date: data.referral.date?.toDate(),
-                } : undefined,
-                createdAt: data.createdAt?.toDate(),
-                updatedAt: data.updatedAt?.toDate(),
-                lastInteraction: data.lastInteraction ? {
-                    ...data.lastInteraction,
-                    date: data.lastInteraction.date?.toDate(),
-                } : undefined,
+                ...convertDates(data),
             } as Patient;
         });
 
@@ -410,12 +391,12 @@ export async function searchPatients(searchTerm: string) {
 
 export async function bulkUpdatePatients(patientIds: string[], updates: Partial<Patient>) {
     try {
-        // Auth check
         const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
 
         const updateData = {
             ...updates,
-            updatedAt: serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
             updatedBy: user.email,
         };
 
@@ -426,13 +407,13 @@ export async function bulkUpdatePatients(patientIds: string[], updates: Partial<
             }
         });
 
-        // Update all patients
-        const promises = patientIds.map(id =>
-            updateDoc(doc(db, PATIENTS_COLLECTION, id), updateData)
-        );
+        const batch = firestore.batch();
+        patientIds.forEach(id => {
+            const ref = firestore.collection(PATIENTS_COLLECTION).doc(id);
+            batch.update(ref, updateData);
+        });
 
-        await Promise.all(promises);
-
+        await batch.commit();
         return { success: true, count: patientIds.length };
     } catch (error) {
         console.error('Error bulk updating patients:', error);
@@ -442,19 +423,16 @@ export async function bulkUpdatePatients(patientIds: string[], updates: Partial<
 
 export async function bulkDeletePatients(patientIds: string[]) {
     try {
-        // Auth check
         await getCurrentUser();
+        const firestore = getAdminFirestore();
 
-        // Delete all patients
-        const promises = patientIds.map(id =>
-            deleteDoc(doc(db, PATIENTS_COLLECTION, id))
-        );
+        const batch = firestore.batch();
+        patientIds.forEach(id => {
+            const ref = firestore.collection(PATIENTS_COLLECTION).doc(id);
+            batch.delete(ref);
+        });
 
-        await Promise.all(promises);
-
-        // TODO: Also delete related interactions and documents
-        // This should be done in a transaction or cloud function
-
+        await batch.commit();
         return { success: true, count: patientIds.length };
     } catch (error) {
         console.error('Error bulk deleting patients:', error);
@@ -466,28 +444,23 @@ export async function bulkDeletePatients(patientIds: string[]) {
 
 export async function exportPatientsToCSV(patientIds?: string[]) {
     try {
-        // Auth check
         await getCurrentUser();
-
         let patients: Patient[];
 
         if (patientIds && patientIds.length > 0) {
-            // Export specific patients
             const promises = patientIds.map(id => getPatient(id));
             const results = await Promise.all(promises);
             patients = results
                 .filter(r => r.success && r.data)
                 .map(r => r.data!) as Patient[];
         } else {
-            // Export all patients
-            const result = await getPatients();
+            const result = await getPatients({ pageSize: 1000 });
             if (!result.success || !result.data) {
                 return { success: false, error: 'Failed to fetch patients' };
             }
             patients = result.data;
         }
 
-        // Convert to CSV
         const headers = [
             'ID', 'Full Name', 'Date of Birth', 'Hospital', 'Region',
             'MRN', 'Diagnosis', 'Case Status', 'Consent Status',

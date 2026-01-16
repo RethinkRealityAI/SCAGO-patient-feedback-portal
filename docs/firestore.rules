@@ -221,5 +221,10 @@ service cloud.firestore {
       // Only admins can read and write patient document metadata
       allow read, write: if isAdmin();
     }
+
+    match /program_reports/{reportId} {
+      // Only admins can read and write program reports
+      allow read, write: if isAdmin();
+    }
   }
 }

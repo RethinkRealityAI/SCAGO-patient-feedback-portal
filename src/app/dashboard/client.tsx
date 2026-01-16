@@ -65,7 +65,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { signOut } from '@/lib/firebase-auth'
 import { LogOut } from 'lucide-react'
 
-const SUBMISSIONS_PER_PAGE = 10
+const SUBMISSIONS_PER_PAGE = 20
 
 // Helper function to safely format date for export (returns ISO string or date only string)
 function safeFormatDateForExport(dateValue: any, dateOnly: boolean = false): string {
@@ -77,10 +77,11 @@ function safeFormatDateForExport(dateValue: any, dateOnly: boolean = false): str
 
 // Helper function to detect if submissions are from consent survey
 function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
-  if (submissions.length === 0) return false
-  const sample = submissions[0]
-  // Check for consent-specific fields
-  return !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
+  if (!submissions || submissions.length === 0) return false
+  // Check multiple samples to be more robust
+  return submissions.some(sample =>
+    !!(sample.digitalSignature || sample.ageConfirmation || sample.scdConnection || sample.primaryHospital)
+  )
 }
 
 // Helper function to safely extract a string value from a field
@@ -412,6 +413,53 @@ export default function Dashboard() {
     return result
   }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, getNormalizedSurveyId])
 
+  // Improved trend calculation for ratings and submissions
+  const ratingTrend = useMemo(() => {
+    if (dateRange === 'all' || isConsent || isAllSurveysMode) return null
+
+    const now = new Date()
+    const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
+    const currentCutoff = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000))
+    const previousCutoff = new Date(now.getTime() - (2 * days * 24 * 60 * 60 * 1000))
+
+    // Current period is already in 'filtered' (filtered also applies search and rating filters)
+    const currentPeriod = filtered
+
+    // We need a previous period that matches the same filters if possible
+    const previousPeriod = submissions.filter(s => {
+      if (!s.submittedAt) return false
+      const d = new Date(s.submittedAt)
+      if (isNaN(d.getTime())) return false
+
+      // Basic time filter
+      const inTime = d >= previousCutoff && d < currentCutoff
+      if (!inTime) return false
+
+      // Apply same survey filter
+      if (selectedSurvey !== 'all' && getNormalizedSurveyId(s.surveyId) !== selectedSurvey) return false
+
+      return true
+    })
+
+    if (currentPeriod.length === 0 || previousPeriod.length === 0) return null
+
+    const currentRatings = currentPeriod.filter(s => s.rating != null && !isNaN(Number(s.rating)))
+    const prevRatings = previousPeriod.filter(s => s.rating != null && !isNaN(Number(s.rating)))
+
+    if (currentRatings.length === 0 || prevRatings.length === 0) return null
+
+    const currentAvg = currentRatings.reduce((a, b) => a + Number(b.rating), 0) / currentRatings.length
+    const prevAvg = prevRatings.reduce((a, b) => a + Number(b.rating), 0) / prevRatings.length
+
+    const change = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg) * 100 : 0
+
+    return {
+      direction: change > 0 ? 'up' : change < 0 ? 'down' : 'neutral',
+      change: Math.abs(change).toFixed(1),
+      label: `Vs. previous ${days} days`
+    }
+  }, [filtered, submissions, dateRange, isConsent, isAllSurveysMode, selectedSurvey, getNormalizedSurveyId])
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE))
 
   // Reset to page 1 if current page is out of bounds
@@ -462,7 +510,7 @@ export default function Dashboard() {
         bySurvey.set(s.surveyId, (bySurvey.get(s.surveyId) || 0) + 1)
       })
 
-      // Geographic distribution & Active Locations
+      // Geographic distribution for overview mode
       const geographicDistribution = new Map<string, number>()
       filtered.forEach(s => {
         // In overview mode, check each submission's type individually
@@ -471,7 +519,9 @@ export default function Dashboard() {
         geographicDistribution.set(location, (geographicDistribution.get(location) || 0) + 1)
       })
 
-      const activeLocations = geographicDistribution.size
+      const activeLocations = Array.from(geographicDistribution.keys()).filter(loc =>
+        loc !== 'Unknown Location' && loc !== 'Unknown Hospital'
+      ).length
 
       // Time-based analysis for Trend
       const now = new Date()
@@ -713,16 +763,29 @@ export default function Dashboard() {
 
     const departmentSatisfaction = new Map<string, { total: number; sum: number }>()
 
+    const getSelectionValue = (val: any) => {
+      if (val === undefined || val === null) return undefined
+      if (typeof val === 'object' && 'selection' in val) return val.selection
+      return val
+    }
+
     for (const s of filtered) {
-      const pain = (s as any).painScore || (s as any).painLevel
+      // Pain Score extraction
+      const painRaw = (s as any).painScore ?? (s as any).painLevel ?? (s as any).emergencyPainLevel
+      const pain = getSelectionValue(painRaw)
       if (pain !== undefined) {
-        painScores.set(Number(pain), (painScores.get(Number(pain)) || 0) + 1)
+        const painNum = Number(pain)
+        if (!isNaN(painNum)) {
+          painScores.set(painNum, (painScores.get(painNum) || 0) + 1)
+        }
       }
 
-      const wait = (s as any).waitTime
+      // Wait Time extraction
+      const waitRaw = (s as any).waitTime ?? (s as any).emergencyWaitTime
+      const wait = waitRaw
       if (wait) {
-        let category = '< 30min'
-        if (typeof wait === 'object') {
+        let category = ''
+        if (typeof wait === 'object' && ('hours' in wait || 'minutes' in wait)) {
           const totalMinutes = (wait.hours || 0) * 60 + (wait.minutes || 0)
           if (totalMinutes < 30) category = '< 30min'
           else if (totalMinutes <= 60) category = '30-60min'
@@ -730,25 +793,78 @@ export default function Dashboard() {
           else if (totalMinutes <= 240) category = '2-4hr'
           else if (totalMinutes <= 480) category = '4-8hr'
           else category = '> 8hr'
+        } else {
+          // It's likely a selection string or object
+          const val = getSelectionValue(wait)
+          if (typeof val === 'string') {
+            // Check if it matches a category directly
+            if (waitCategories.includes(val)) category = val
+            // Fallback: try to approximate if it's a number string
+            else {
+              const numMatch = val.match(/\d+/)
+              if (numMatch) {
+                const num = parseInt(numMatch[0])
+                if (val.toLowerCase().includes('hr') || val.toLowerCase().includes('hour')) {
+                  if (num < 1) category = '< 30min'
+                  else if (num < 2) category = '1-2hr'
+                  else if (num < 4) category = '2-4hr'
+                  else if (num < 8) category = '4-8hr'
+                  else category = '> 8hr'
+                } else {
+                  if (num < 30) category = '< 30min'
+                  else if (num < 60) category = '30-60min'
+                  else category = '1-2hr'
+                }
+              }
+            }
+          }
         }
-        waitTimes.set(category, (waitTimes.get(category) || 0) + 1)
+        if (category && waitTimes.has(category)) {
+          waitTimes.set(category, (waitTimes.get(category) || 0) + 1)
+        }
       }
 
-      const stay = (s as any).lengthOfStay
+      // Length of Stay extraction
+      const stayRaw = (s as any).lengthOfStay ?? (s as any).stayDuration
+      const stay = stayRaw
       if (stay) {
-        let category = '< 1 day'
-        if (typeof stay === 'object') {
+        let category = ''
+        if (typeof stay === 'object' && ('days' in stay || 'hours' in stay)) {
           const totalDays = (stay.days || 0) + (stay.hours || 0) / 24
           if (totalDays < 1) category = '< 1 day'
           else if (totalDays <= 2) category = '1-2 days'
           else if (totalDays <= 5) category = '3-5 days'
           else if (totalDays <= 7) category = '1 week'
           else category = '> 1 week'
+        } else {
+          const val = getSelectionValue(stay)
+          if (typeof val === 'string') {
+            if (stayCategories.includes(val)) category = val
+            else {
+              const numMatch = val.match(/\d+/)
+              if (numMatch) {
+                const num = parseInt(numMatch[0])
+                if (val.toLowerCase().includes('week')) {
+                  if (num < 1) category = '3-5 days'
+                  else if (num === 1) category = '1 week'
+                  else category = '> 1 week'
+                } else {
+                  if (num < 1) category = '< 1 day'
+                  else if (num <= 2) category = '1-2 days'
+                  else if (num <= 5) category = '3-5 days'
+                  else if (num <= 7) category = '1 week'
+                  else category = '> 1 week'
+                }
+              }
+            }
+          }
         }
-        stayLength.set(category, (stayLength.get(category) || 0) + 1)
+        if (category && stayLength.has(category)) {
+          stayLength.set(category, (stayLength.get(category) || 0) + 1)
+        }
       }
 
-      const dept = (s as any).department || 'Unknown'
+      const dept = getSelectionValue((s as any).department) || 'Unknown'
       const current = departmentSatisfaction.get(dept) || { total: 0, sum: 0 }
       departmentSatisfaction.set(dept, {
         total: current.total + 1,
@@ -1013,7 +1129,7 @@ export default function Dashboard() {
     })
   }, [submissions, dateRange])
 
-  const trend = useMemo(() => calculateTrend(metrics, previousPeriodSubmissions), [calculateTrend, metrics, previousPeriodSubmissions])
+  // Removed duplicate trend calculation - using ratingTrend from above
 
   const activeFiltersCount = [
     searchQuery.trim() ? 1 : 0,
@@ -1368,11 +1484,11 @@ export default function Dashboard() {
                 <CardContent className="pt-0">
                   <div className="flex items-end justify-between">
                     <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">{(metrics as any).avg || 0}/10</div>
-                    {trend && trend.direction !== 'neutral' && dateRange !== 'all' && (
-                      <div className={`flex items-center gap-1 text-xs font-medium ${trend.direction === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    {ratingTrend && ratingTrend.direction !== 'neutral' && (
+                      <div className={`flex items-center gap-1 text-xs font-medium ${ratingTrend.direction === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                        {trend.direction === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {Math.abs(Number(trend.change))}%
+                        {ratingTrend.direction === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {ratingTrend.change}%
                       </div>
                     )}
                   </div>
@@ -1440,34 +1556,6 @@ export default function Dashboard() {
               </UCard>
             )}
 
-            {/* Card 4: Different for overview */}
-            {isAllSurveysMode ? (
-              <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="month-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="month-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
-                    <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                    Last 30 Days
-                  </CardTitle>
-                  <CardDescription>Monthly submissions</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{(metrics as any).last30Days || 0}</div>
-                </CardContent>
-              </UCard>
-            ) : (
-              <UCard className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 backdrop-blur-sm border-amber-200/50 dark:border-amber-800/50" role="article" aria-labelledby="surveys-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="surveys-title" className="text-base flex items-center gap-2 text-amber-900 dark:text-amber-100">
-                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                    Surveys
-                  </CardTitle>
-                  <CardDescription>Unique surveys</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300" aria-live="polite">{selectedSurvey === 'all' ? metrics.surveysCount : 1}</div>
-                </CardContent>
-              </UCard>
-            )}
           </div>
 
           {/* Advanced Insights Section - Now Always Visible */}
@@ -2458,6 +2546,61 @@ export default function Dashboard() {
                   </Table>
                 </div>
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-6 border-t">
+                  <p className="text-sm text-muted-foreground order-2 sm:order-1">
+                    Showing <span className="font-medium">{(currentPage - 1) * SUBMISSIONS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * SUBMISSIONS_PER_PAGE, filtered.length)}</span> of <span className="font-medium">{filtered.length}</span> submissions
+                  </p>
+                  <Pagination className="justify-end order-1 sm:order-2">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (currentPage > 1) handlePageChange(currentPage - 1); }}
+                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+
+                      {/* Page numbers */}
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+
+                        return (
+                          <PaginationItem key={pageNum}>
+                            <PaginationLink
+                              href="#"
+                              isActive={currentPage === pageNum}
+                              onClick={(e) => { e.preventDefault(); handlePageChange(pageNum); }}
+                              className="cursor-pointer"
+                            >
+                              {pageNum}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => { e.preventDefault(); if (currentPage < totalPages) handlePageChange(currentPage + 1); }}
+                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-gray-900 p-0 gap-0">
                   {/* Red Header with Submission Details */}
@@ -2630,7 +2773,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Floating AI Chat Button */}
+      {/* Floating AI Chat Button hidden for now */}
+      {/* 
       <FloatingChatButton
         onSendQuery={async (query: string) => {
           const { chatWithFeedbackData } = await import('./actions');
@@ -2643,6 +2787,7 @@ export default function Dashboard() {
         surveyId={selectedSurvey}
         surveyType={(isAllSurveysMode ? 'overview' : (isConsent ? 'consent' : 'feedback')) as 'overview' | 'consent' | 'feedback'}
       />
+      */}
       <ConfirmDialog
         open={!!submissionToDelete}
         onOpenChange={(open) => !open && setSubmissionToDelete(null)}

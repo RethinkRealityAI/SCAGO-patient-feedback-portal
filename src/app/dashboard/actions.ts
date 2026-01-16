@@ -81,12 +81,22 @@ export async function analyzeFeedback() {
     const avgPrev7 = prev7.length ? prev7.reduce((a, [, v]) => a + v.sum, 0) / prev7.reduce((a, [, v]) => a + v.count, 0) : 0;
     const trend = avgPrev7 ? (avgLast7 - avgPrev7) : 0;
 
-    // Build AI context text and run analysis
+    // Build AI context text and run analysis - Limit to 100 entries to prevent token limits
     const feedbackText = feedbackList
+      .slice(0, 100)
       .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
       .join('\n');
+
+    // Scale rating from 0-10 to 1-5 to match AI schema requirements
+    const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2)));
+    const normalizedRating = scaleRating(averageRating);
+
     const runAnalysisFlow = await getAIAnalysis();
-    const ai: AIAnalysisResult = await runAnalysisFlow({ location: 'Various Hospitals', rating: Math.round(averageRating), feedbackText });
+    const ai: AIAnalysisResult = await runAnalysisFlow({
+      location: 'Various Hospitals',
+      rating: normalizedRating,
+      feedbackText
+    });
 
     // Compose a rich markdown report
     const report = [
@@ -160,7 +170,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       const cities = feedbackList.map(s => (s as any).city?.selection).filter(Boolean);
       const hospitals = feedbackList.map(s => (s as any).primaryHospital?.selection).filter(Boolean);
 
-      feedbackText = feedbackList.map(f => {
+      feedbackText = feedbackList.slice(0, 75).map(f => {
         const firstName = (f as any).firstName || '';
         const lastName = (f as any).lastName || '';
         const city = (f as any).city?.selection || '';
@@ -201,6 +211,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       }
 
       feedbackText = feedbackList
+        .slice(0, 75)
         .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
         .join('\n');
 
@@ -217,10 +228,16 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     const contextPrompt = getAnalysisPrompt(surveyContext, feedbackList.length);
 
     // Run AI analysis with survey-specific context
+    // Scale rating from 0-10 to 1-5 to match AI schema requirements
+    const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2)));
+    const normalizedRating = surveyContext.type === 'feedback'
+      ? scaleRating(Number(metrics.averageRating || 0))
+      : 4; // Default to 4 for non-feedback surveys to avoid schema errors
+
     const aiInput = {
       location: surveyContext.type === 'consent' ? 'SCAGO Community' : 'Various Hospitals',
-      rating: surveyContext.type === 'feedback' ? Math.round(Number(metrics.averageRating)) : 8,
-      feedbackText: `${contextPrompt}\n\nData:\n${feedbackText}`
+      rating: normalizedRating,
+      feedbackText: `${contextPrompt}\n\nData (Submissions 1-${Math.min(feedbackList.length, 75)}):\n${feedbackText}`
     };
 
     const runAnalysisFlow = await getAIAnalysis();
@@ -447,9 +464,13 @@ export async function generateAnalysisPdf(params: {
 
 export async function analyzeSingleFeedback(input: { rating: number; hospitalInteraction: string; location?: string }): Promise<{ error?: string; summary?: string }> {
   try {
+    // Scale rating from 0-10 to 1-5 to match AI schema requirements
+    const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2)));
+    const normalizedRating = scaleRating(input.rating || 0);
+
     const analysisInput = {
       location: input.location || 'Various Hospitals',
-      rating: Math.round(Number(input.rating || 0)),
+      rating: normalizedRating,
       feedbackText: input.hospitalInteraction || '',
     };
     const runAnalysisFlow = await getAIAnalysis();
