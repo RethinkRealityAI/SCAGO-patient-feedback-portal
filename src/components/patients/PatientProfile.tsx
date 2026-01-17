@@ -77,11 +77,38 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
     }, [patientId]);
 
     if (isLoading) {
-        return <div className="flex items-center justify-center h-screen">Loading...</div>;
+        return (
+            <div className="space-y-6 p-6">
+                {/* Loading skeleton */}
+                <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 bg-muted rounded animate-pulse" />
+                    <div className="space-y-2">
+                        <div className="h-8 w-64 bg-muted rounded animate-pulse" />
+                        <div className="h-4 w-48 bg-muted rounded animate-pulse" />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2 h-64 bg-muted rounded-lg animate-pulse" />
+                    <div className="h-64 bg-muted rounded-lg animate-pulse" />
+                </div>
+            </div>
+        );
     }
 
     if (!patient) {
-        return <div className="flex items-center justify-center h-screen">Patient not found</div>;
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+                <AlertCircle className="h-16 w-16 text-muted-foreground" />
+                <h2 className="text-2xl font-bold">Patient Not Found</h2>
+                <p className="text-muted-foreground">
+                    The patient record you're looking for doesn't exist or may have been deleted.
+                </p>
+                <Button onClick={() => router.push('/patients')} variant="outline">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Patient List
+                </Button>
+            </div>
+        );
     }
 
     const getStatusColor = (status: string) => {
