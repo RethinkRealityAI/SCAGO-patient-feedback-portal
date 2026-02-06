@@ -14,6 +14,7 @@ export interface PlatformUser {
   role: AppRole;
   createdAt?: string;
   lastLoginAt?: string;
+  allowedForms?: string[];
 }
 
 export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }> {
@@ -47,6 +48,7 @@ export async function createPlatformUser(input: {
   displayName?: string;
   role?: AppRole;
   pagePermissions?: string[]; // route keys
+  allowedForms?: string[]; // form slugs/ids
 }): Promise<{ success: true; uid: string } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
@@ -84,12 +86,19 @@ export async function createPlatformUser(input: {
     await auth.setCustomUserClaims(user.uid, { ...existing, role });
 
     // Set page permissions if provided (for admin role)
-    if (input.pagePermissions && input.pagePermissions.length > 0) {
+    if ((input.pagePermissions && input.pagePermissions.length > 0) || (input.allowedForms && input.allowedForms.length > 0)) {
       const permsRef = firestore.collection('config').doc('page_permissions');
       const snap = await permsRef.get();
-      const current = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
-      const updated = { ...current, [email]: input.pagePermissions };
-      await permsRef.set({ routesByEmail: updated }, { merge: true });
+      const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
+      const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
+
+      const updatedRoutes = { ...currentRoutes, [email]: input.pagePermissions || [] };
+      const updatedForms = { ...currentForms, [email]: input.allowedForms || [] };
+
+      await permsRef.set({
+        routesByEmail: updatedRoutes,
+        formsByEmail: updatedForms
+      }, { merge: true });
     }
 
     // Log user creation
@@ -161,7 +170,7 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
   }
 }
 
-export async function setUserPagePermissions(email: string, routes: string[]): Promise<{ success: true } | { success: false; error: string }> {
+export async function setUserPagePermissions(email: string, routes: string[], allowedForms?: string[]): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
@@ -170,15 +179,26 @@ export async function setUserPagePermissions(email: string, routes: string[]): P
   try {
     const permsRef = firestore.collection('config').doc('page_permissions');
     const snap = await permsRef.get();
-    const current = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
-    const updated = { ...current, [email.toLowerCase()]: routes };
-    await permsRef.set({ routesByEmail: updated }, { merge: true });
+
+    const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
+    const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
+
+    const updatedRoutes = { ...currentRoutes, [email.toLowerCase()]: routes };
+    const updatedForms = allowedForms !== undefined
+      ? { ...currentForms, [email.toLowerCase()]: allowedForms }
+      : currentForms;
+
+    await permsRef.set({
+      routesByEmail: updatedRoutes,
+      formsByEmail: updatedForms
+    }, { merge: true });
 
     // Log permission change
     try {
       const user = await auth.getUserByEmail(email);
       await logUserActivity(user.uid, email, 'permissions_changed', {
-        permissions: routes
+        permissions: routes,
+        allowedForms: allowedForms || []
       });
     } catch (err) {
       console.error('Failed to log permission change:', err);
@@ -191,9 +211,9 @@ export async function setUserPagePermissions(email: string, routes: string[]): P
 }
 
 /**
- * Get page permissions for a user by email
+ * Get page and form permissions for a user by email
  */
-export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; error?: string }> {
+export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; allowedForms?: string[]; error?: string }> {
   await enforceAdminInAction();
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
@@ -206,10 +226,14 @@ export async function getUserPagePermissions(email: string): Promise<{ permissio
       return { permissions: [] };
     }
 
-    const routesByEmail = (snap.data() as any)?.routesByEmail || {};
-    const permissions = routesByEmail[email.toLowerCase()] || [];
+    const data = snap.data() as any;
+    const routesByEmail = data?.routesByEmail || {};
+    const formsByEmail = data?.formsByEmail || {};
 
-    return { permissions };
+    const permissions = routesByEmail[email.toLowerCase()] || [];
+    const allowedForms = formsByEmail[email.toLowerCase()] || [];
+
+    return { permissions, allowedForms };
   } catch (err: any) {
     return { error: err?.message || 'Failed to get permissions' };
   }

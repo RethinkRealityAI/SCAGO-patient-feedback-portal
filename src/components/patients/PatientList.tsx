@@ -41,6 +41,7 @@ import { getPatients } from '@/app/patients/actions';
 import { Patient, REGIONS, CASE_STATUSES, PATIENT_NEEDS } from '@/types/patient';
 import { format, differenceInDays, subDays } from 'date-fns';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { cn } from '@/lib/utils';
 
 export function PatientList() {
     const router = useRouter();
@@ -512,12 +513,4 @@ export function PatientList() {
             />
         </Card>
     );
-}
-
-// Add simple import for cn if not available
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
 }

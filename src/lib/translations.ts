@@ -21,7 +21,7 @@ export interface Translation {
   thankYou: string;
   submissionReceived: string;
   submitAnother: string;
-  
+
   // Form Field Labels and Common Terms
   required: string;
   optional: string;
@@ -30,7 +30,7 @@ export interface Translation {
   yes: string;
   no: string;
   anonymous: string;
-  
+
   // Hospital/Medical Terms
   hospital: string;
   department: string;
@@ -54,7 +54,7 @@ export interface Translation {
   good: string;
   fair: string;
   poor: string;
-  
+
   // Time/Date Terms
   today: string;
   yesterday: string;
@@ -68,12 +68,12 @@ export interface Translation {
   hours: string;
   minutes: string;
   days: string;
-  
+
   // Location Terms
   province: string;
   city: string;
   ontario: string;
-  
+
   // Common Form Questions (can be extended)
   howWasYourExperience: string;
   wouldYouRecommend: string;
@@ -85,7 +85,7 @@ export interface Translation {
   phone: string;
   age: string;
   gender: string;
-  
+
   // Extended form fields
   visitMonth: string;
   visitYear: string;
@@ -98,7 +98,7 @@ export interface Translation {
   selectACity: string;
   selectAnOption: string;
   selectAHospital: string;
-  
+
   // Hospital Engagement and Experience
   hospitalExperienceInDetail: string;
   dateOfInteraction: string;
@@ -137,7 +137,7 @@ export interface Translation {
   nameOfPhysician: string;
   pleaseElaborate: string;
   experiencedEffectsQuestion: string;
-  
+
   // Consent and Information Collection Terms
   scagoDigitalConsent: string;
   aboutScago: string;
@@ -211,14 +211,14 @@ export interface Translation {
   date2: string;
   thankYouForJoiningScagoCommunity: string;
   memberOfOurTeamWillBeInTouchShortly: string;
-  
+
   // Title options
   mr: string;
   mrs: string;
   ms: string;
   mx: string;
   dr: string;
-  
+
   // Placeholder texts
   pickADate: string;
   enterEmail: string;
@@ -229,12 +229,12 @@ export interface Translation {
   typeYourSignatureHere: string;
   signHere: string;
   digitalSignature: string;
-  
+
   // Visit types
   outpatientClinicVisit: string;
   emergencyDepartment: string;
   inpatientAdmission: string;
-  
+
   // Common options used in engagement
   notApplicable: string;
   veryFamiliar: string;
@@ -244,7 +244,7 @@ export interface Translation {
   somewhatRespectful: string;
   neutral: string;
   notRespectful: string;
-  
+
   // Experience options
   stigmatizationOrStereotyping: string;
   anxiety: string;
@@ -254,11 +254,11 @@ export interface Translation {
   attentiveness: string;
   compassionEmpathy: string;
   understanding: string;
-  
+
   // Patient types
   patientOption: string;
   caregiverOption: string;
-  
+
   // Months
   january: string;
   february: string;
@@ -272,6 +272,49 @@ export interface Translation {
   october: string;
   november: string;
   december: string;
+
+  // Board Recruitment
+  boardMemberApplication: string;
+  commitmentAndUnderstanding: string;
+  backgroundAndExperience: string;
+  references: string;
+  supportingDocuments: string;
+  organizationLogo: string;
+  boardRecruitmentIntro: string;
+  fullName: string;
+  primaryPhoneNumber: string;
+  emailAddress: string;
+  termCommitmentQuestion: string;
+  confidentialityAgreementQuestion: string;
+  appendixYHeader: string;
+  committeeSupportQuestion: string;
+  preferredCommitteesQuestion: string;
+  boardExperienceDesc: string;
+  uploadExperienceDocument: string;
+  experienceUploadHelper: string;
+  otherOrganizationsQuestion: string;
+  provideReferencesQuestion: string;
+  reference1: string;
+  reference2: string;
+  resumeUploadLabel: string;
+  advocacy: string;
+  fundraising: string;
+  programsAndServices: string;
+  governance: string;
+  enterYourFullName: string;
+  phonePlaceholder: string;
+  emailPlaceholder: string;
+  boardExperiencePlaceholder: string;
+  otherOrgsPlaceholder: string;
+
+  // Advanced Fields
+  clickToUpload: string;
+  orDragAndDrop: string;
+  max: string;
+  fileSingular: string;
+  filePlural: string;
+  filesParenthesis: string;
+  mbEach: string;
 }
 
 export const translations: Record<'en' | 'fr', Translation> = {
@@ -296,7 +339,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     thankYou: 'Thank you for your feedback!',
     submissionReceived: 'Your submission has been received and will help improve healthcare services.',
     submitAnother: 'Submit Another Response',
-    
+
     // Form Field Labels and Common Terms
     required: 'Required',
     optional: 'Optional',
@@ -305,7 +348,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     yes: 'Yes',
     no: 'No',
     anonymous: 'Anonymous',
-    
+
     // Hospital/Medical Terms
     hospital: 'Hospital',
     department: 'Department',
@@ -329,7 +372,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     good: 'Good',
     fair: 'Fair',
     poor: 'Poor',
-    
+
     // Time/Date Terms
     today: 'Today',
     yesterday: 'Yesterday',
@@ -343,12 +386,12 @@ export const translations: Record<'en' | 'fr', Translation> = {
     hours: 'Hours',
     minutes: 'Minutes',
     days: 'Days',
-    
+
     // Location Terms
     province: 'Province',
     city: 'City',
     ontario: 'Ontario',
-    
+
     // Common Form Questions
     howWasYourExperience: 'How was your experience?',
     wouldYouRecommend: 'Would you recommend this to others?',
@@ -360,7 +403,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     phone: 'Phone',
     age: 'Age',
     gender: 'Gender',
-    
+
     // Extended form fields
     visitMonth: 'Visit Month',
     visitYear: 'Visit Year',
@@ -373,75 +416,75 @@ export const translations: Record<'en' | 'fr', Translation> = {
     selectACity: 'Select a city',
     selectAnOption: 'Select an option',
     selectAHospital: 'Select a hospital...',
-  
-  // Hospital Engagement and Experience
-  hospitalExperienceInDetail: 'Section 2: Hospital Experience in Detail',
-  dateOfInteraction: 'Date of Interaction',
-  hospitalNameLabel: 'Hospital Name',
-  departmentOrService: 'Department or Service',
-  clinicianNamesDetails: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
-  yourExperienceLabel: 'Your Experience',
-  timelyMedicationsQuestion: 'Did you receive timely medications while in the hospital?',
-  rightInvestigationsQuestion: 'Did you feel the right investigation/tests were conducted?',
-  pleaseProvideDetails: 'Please provide details:',
-  timelyMannerQuestion: 'Did you feel you were attended to in a timely manner?',
-  pleaseProvideRationale: 'Please provide rationale:',
-  concernsAddressedQuestion: 'Did you feel your concerns were well addressed?',
-  optimalTimeQuestion: 'Did you feel that you had an optimal amount of time?',
-  reportedToHospitalQuestion: 'Did you report this situation to the hospital?',
-  reportOutcomeQuestion: 'If “Yes”, what was the outcome of your report?',
-  reportNotDoneReasonQuestion: 'If “No”, why not?',
-  notAwareOfComplaintProcess: 'Not aware of complaint process',
-  notComfortable: 'Not comfortable',
-  ifOtherPleaseSpecify: 'If other, please specify:',
-  anythingElseHospitalInteraction: 'Is there anything else you would like us to know about this hospital interaction?',
-  npsRatingQuestion: 'On a scale of 1-10, what would you rate the quality of care you received?',
-  receptionFirstPerson: 'Reception with the first person encountered',
-  reasonForVisit: 'Reason for this visit (e.g., pain, fever, surgery, regular visit)',
-  hcpFamiliarityQuestion: 'How familiar were the health care providers (HCP) with your condition?',
-  hcpRespectfulnessQuestion: 'How respectful were the HCPs of your needs and concerns?',
-  wasVisitForPainCrisis: 'Was this visit for a pain crisis?',
-  timeToAnalgesiaQuestion: 'If pain crisis, how long before the first analgesia was administered?',
-  howLongWasHospitalStay: 'How long was your hospital stay?',
-  howLongWasEdStay: 'How long was your emergency department stay?',
-  unitDepartment: 'Unit/department',
-  beforeDischargeFollowUpPlan: 'Before being discharged, were you provided with any follow-up plan?',
-  advisedFollowUpWithScago: 'Were you advised to follow up with SCAGO after being discharged?',
-  additionalFeedbackPrompt: 'Anything else you might want to add in your own words?',
-  nameOfTriageNurse: 'Name of Triage Nurse',
-  nameOfPhysician: 'Name of Physician',
-  pleaseElaborate: 'Please elaborate:',
+
+    // Hospital Engagement and Experience
+    hospitalExperienceInDetail: 'Section 2: Hospital Experience in Detail',
+    dateOfInteraction: 'Date of Interaction',
+    hospitalNameLabel: 'Hospital Name',
+    departmentOrService: 'Department or Service',
+    clinicianNamesDetails: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
+    yourExperienceLabel: 'Your Experience',
+    timelyMedicationsQuestion: 'Did you receive timely medications while in the hospital?',
+    rightInvestigationsQuestion: 'Did you feel the right investigation/tests were conducted?',
+    pleaseProvideDetails: 'Please provide details:',
+    timelyMannerQuestion: 'Did you feel you were attended to in a timely manner?',
+    pleaseProvideRationale: 'Please provide rationale:',
+    concernsAddressedQuestion: 'Did you feel your concerns were well addressed?',
+    optimalTimeQuestion: 'Did you feel that you had an optimal amount of time?',
+    reportedToHospitalQuestion: 'Did you report this situation to the hospital?',
+    reportOutcomeQuestion: 'If “Yes”, what was the outcome of your report?',
+    reportNotDoneReasonQuestion: 'If “No”, why not?',
+    notAwareOfComplaintProcess: 'Not aware of complaint process',
+    notComfortable: 'Not comfortable',
+    ifOtherPleaseSpecify: 'If other, please specify:',
+    anythingElseHospitalInteraction: 'Is there anything else you would like us to know about this hospital interaction?',
+    npsRatingQuestion: 'On a scale of 1-10, what would you rate the quality of care you received?',
+    receptionFirstPerson: 'Reception with the first person encountered',
+    reasonForVisit: 'Reason for this visit (e.g., pain, fever, surgery, regular visit)',
+    hcpFamiliarityQuestion: 'How familiar were the health care providers (HCP) with your condition?',
+    hcpRespectfulnessQuestion: 'How respectful were the HCPs of your needs and concerns?',
+    wasVisitForPainCrisis: 'Was this visit for a pain crisis?',
+    timeToAnalgesiaQuestion: 'If pain crisis, how long before the first analgesia was administered?',
+    howLongWasHospitalStay: 'How long was your hospital stay?',
+    howLongWasEdStay: 'How long was your emergency department stay?',
+    unitDepartment: 'Unit/department',
+    beforeDischargeFollowUpPlan: 'Before being discharged, were you provided with any follow-up plan?',
+    advisedFollowUpWithScago: 'Were you advised to follow up with SCAGO after being discharged?',
+    additionalFeedbackPrompt: 'Anything else you might want to add in your own words?',
+    nameOfTriageNurse: 'Name of Triage Nurse',
+    nameOfPhysician: 'Name of Physician',
+    pleaseElaborate: 'Please elaborate:',
     experiencedEffectsQuestion: 'Did you experience any of the following as a result of seeking treatment during this interaction? (Select all that apply)',
-    
+
     // Visit types
     outpatientClinicVisit: 'Outpatient clinic visit (in person or virtual)',
     emergencyDepartment: 'Emergency department (in person or virtual)',
     inpatientAdmission: 'Inpatient admission',
-  
-  // Common options used in engagement
-  notApplicable: 'Not Applicable',
-  veryFamiliar: 'Very Familiar',
-  somewhatFamiliar: 'Somewhat Familiar',
-  notAtAllFamiliar: 'Not at all Familiar',
-  veryRespectful: 'Very respectful',
-  somewhatRespectful: 'Somewhat respectful',
-  neutral: 'Neutral',
-  notRespectful: 'Not respectful',
-  
-  // Experience options
-  stigmatizationOrStereotyping: 'Stigmatization or stereotyping',
-  anxiety: 'Anxiety',
-  helplessnessOrIsolation: 'Helplessness or Isolation',
-  disrespect: 'Disrespect',
-  bullying: 'Bullying',
-  attentiveness: 'Attentiveness',
-  compassionEmpathy: 'Compassion/empathy',
-  understanding: 'Understanding',
-    
+
+    // Common options used in engagement
+    notApplicable: 'Not Applicable',
+    veryFamiliar: 'Very Familiar',
+    somewhatFamiliar: 'Somewhat Familiar',
+    notAtAllFamiliar: 'Not at all Familiar',
+    veryRespectful: 'Very respectful',
+    somewhatRespectful: 'Somewhat respectful',
+    neutral: 'Neutral',
+    notRespectful: 'Not respectful',
+
+    // Experience options
+    stigmatizationOrStereotyping: 'Stigmatization or stereotyping',
+    anxiety: 'Anxiety',
+    helplessnessOrIsolation: 'Helplessness or Isolation',
+    disrespect: 'Disrespect',
+    bullying: 'Bullying',
+    attentiveness: 'Attentiveness',
+    compassionEmpathy: 'Compassion/empathy',
+    understanding: 'Understanding',
+
     // Patient types
     patientOption: 'Patient',
     caregiverOption: 'Caregiver',
-    
+
     // Months
     january: 'January',
     february: 'February',
@@ -455,7 +498,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     october: 'October',
     november: 'November',
     december: 'December',
-    
+
     // Consent and Information Collection Terms
     scagoDigitalConsent: 'SCAGO Digital Consent & Information Collection',
     aboutScago: 'About SCAGO',
@@ -529,14 +572,14 @@ export const translations: Record<'en' | 'fr', Translation> = {
     date2: 'Date',
     thankYouForJoiningScagoCommunity: 'Thank you for joining the SCAGO community!',
     memberOfOurTeamWillBeInTouchShortly: 'A member of our team will be in touch shortly.',
-    
+
     // Title options
     mr: 'Mr',
     mrs: 'Mrs',
     ms: 'Ms',
     mx: 'Mx',
     dr: 'Dr',
-    
+
     // Placeholder texts
     pickADate: 'Pick a date',
     enterEmail: 'Enter email address',
@@ -546,9 +589,52 @@ export const translations: Record<'en' | 'fr', Translation> = {
     enterYourName: 'Enter your name',
     typeYourSignatureHere: 'Type your signature here',
     signHere: 'Sign here',
-    digitalSignature: 'Digital Signature'
+    digitalSignature: 'Digital Signature',
+
+    // Board Recruitment
+    boardMemberApplication: 'Board Member Application',
+    commitmentAndUnderstanding: 'Commitment and Understanding',
+    backgroundAndExperience: 'Background and Experience',
+    references: 'References',
+    supportingDocuments: 'Supporting Documents',
+    organizationLogo: 'Organization Logo',
+    boardRecruitmentIntro: "Thank you for your interest in the Sickle Cell Awareness Group of Ontario (SCAGO). We are looking for individuals who are passionate about our mission and willing to contribute their skills and experience to our board. Please complete this form to apply for a position on our Board of Directors.",
+    fullName: 'Full Name',
+    primaryPhoneNumber: 'Primary Phone Number',
+    emailAddress: 'Email Address',
+    termCommitmentQuestion: 'The Term is for 3 years and there are approximately 4 meetings per year. Are you able to make this commitment?',
+    confidentialityAgreementQuestion: 'Successful candidates will be asked to sign a Confidentiality Agreement and a Conflict of Interest statement. Are you willing to do this?',
+    appendixYHeader: 'Appendix Y - Committee Support',
+    committeeSupportQuestion: 'Are you interested in supporting a specific SCAGO committee if not selected for the board?',
+    preferredCommitteesQuestion: 'If yes, which committees are you interested in?',
+    boardExperienceDesc: 'Please describe your board experience or attach a separate sheet:',
+    uploadExperienceDocument: 'Upload Experience Document (Optional)',
+    experienceUploadHelper: 'You can upload a separate sheet describing your experience.',
+    otherOrganizationsQuestion: 'What other organizations do you currently serve on?',
+    provideReferencesQuestion: 'Please provide two references we may contact:',
+    reference1: 'Reference 1',
+    reference2: 'Reference 2',
+    resumeUploadLabel: 'Please forward your resume to recruitment@sicklecellanemia.ca or upload it here:',
+    advocacy: 'Advocacy',
+    fundraising: 'Fundraising',
+    programsAndServices: 'Programs & Services',
+    governance: 'Governance',
+    enterYourFullName: 'Enter your full name',
+    phonePlaceholder: '(555) 555-5555',
+    emailPlaceholder: 'name@example.com',
+    boardExperiencePlaceholder: 'Describe your previous experience serving on boards...',
+    otherOrgsPlaceholder: 'List other organizations...',
+
+    // Advanced Fields
+    clickToUpload: 'Click to upload',
+    orDragAndDrop: 'or drag and drop',
+    max: 'Max',
+    fileSingular: 'file',
+    filePlural: 'files',
+    filesParenthesis: 'files)',
+    mbEach: 'MB each'
   },
-  
+
   fr: {
     // UI Elements
     share: 'Partager',
@@ -570,7 +656,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     thankYou: 'Merci pour vos commentaires!',
     submissionReceived: 'Votre soumission a été reçue et aidera à améliorer les services de santé.',
     submitAnother: 'Soumettre une Autre Réponse',
-    
+
     // Form Field Labels and Common Terms
     required: 'Obligatoire',
     optional: 'Optionnel',
@@ -579,7 +665,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     yes: 'Oui',
     no: 'Non',
     anonymous: 'Anonyme',
-    
+
     // Hospital/Medical Terms
     hospital: 'Hôpital',
     department: 'Département',
@@ -603,7 +689,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     good: 'Bon',
     fair: 'Acceptable',
     poor: 'Médiocre',
-    
+
     // Time/Date Terms
     today: 'Aujourd\'hui',
     yesterday: 'Hier',
@@ -617,12 +703,12 @@ export const translations: Record<'en' | 'fr', Translation> = {
     hours: 'Heures',
     minutes: 'Minutes',
     days: 'Jours',
-    
+
     // Location Terms
     province: 'Province',
     city: 'Ville',
     ontario: 'Ontario',
-    
+
     // Common Form Questions
     howWasYourExperience: 'Comment était votre expérience?',
     wouldYouRecommend: 'Recommanderiez-vous ceci à d\'autres?',
@@ -634,7 +720,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     phone: 'Téléphone',
     age: 'Âge',
     gender: 'Genre',
-    
+
     // Extended form fields
     visitMonth: 'Mois de la visite',
     visitYear: 'Année de la visite',
@@ -647,7 +733,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     selectACity: 'Sélectionnez une ville',
     selectAnOption: 'Sélectionnez une option',
     selectAHospital: 'Sélectionnez un hôpital...',
-    
+
     // Hospital Engagement and Experience
     hospitalExperienceInDetail: 'Section 2 : Expérience hospitalière en détail',
     dateOfInteraction: 'Date de l’interaction',
@@ -686,12 +772,12 @@ export const translations: Record<'en' | 'fr', Translation> = {
     nameOfPhysician: 'Nom du médecin',
     pleaseElaborate: 'Veuillez préciser :',
     experiencedEffectsQuestion: 'Avez-vous vécu l’un des éléments suivants à la suite de cette interaction pour obtenir des soins? (Sélectionnez tout ce qui s’applique)',
-    
+
     // Visit types
     outpatientClinicVisit: 'Visite de clinique externe (en personne ou virtuelle)',
     emergencyDepartment: 'Service d\'urgence (en personne ou virtuel)',
     inpatientAdmission: 'Admission en hospitalisation',
-    
+
     // Common options used in engagement
     notApplicable: 'Non applicable',
     veryFamiliar: 'Très familier',
@@ -701,7 +787,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     somewhatRespectful: 'Assez respectueux',
     neutral: 'Neutre',
     notRespectful: 'Pas respectueux',
-    
+
     // Experience options
     stigmatizationOrStereotyping: 'Stigmatisation ou stéréotypage',
     anxiety: 'Anxiété',
@@ -711,11 +797,11 @@ export const translations: Record<'en' | 'fr', Translation> = {
     attentiveness: 'Attention',
     compassionEmpathy: 'Compassion/empathie',
     understanding: 'Compréhension',
-    
+
     // Patient types
     patientOption: 'Patient',
     caregiverOption: 'Aidant',
-    
+
     // Months
     january: 'Janvier',
     february: 'Février',
@@ -729,7 +815,7 @@ export const translations: Record<'en' | 'fr', Translation> = {
     october: 'Octobre',
     november: 'Novembre',
     december: 'Décembre',
-    
+
     // Consent and Information Collection Terms
     scagoDigitalConsent: 'Consentement Numérique et Collecte d\'Informations SCAGO',
     aboutScago: 'À propos de SCAGO',
@@ -803,14 +889,14 @@ export const translations: Record<'en' | 'fr', Translation> = {
     date2: 'Date',
     thankYouForJoiningScagoCommunity: 'Merci de rejoindre la communauté SCAGO!',
     memberOfOurTeamWillBeInTouchShortly: 'Un membre de notre équipe vous contactera sous peu.',
-    
+
     // Title options
     mr: 'M.',
     mrs: 'Mme',
     ms: 'Mlle',
     mx: 'Mx',
     dr: 'Dr',
-    
+
     // Placeholder texts
     pickADate: 'Choisir une date',
     enterEmail: 'Entrez l\'adresse courriel',
@@ -820,7 +906,50 @@ export const translations: Record<'en' | 'fr', Translation> = {
     enterYourName: 'Entrez votre nom',
     typeYourSignatureHere: 'Tapez votre signature ici',
     signHere: 'Signez ici',
-    digitalSignature: 'Signature Numérique'
+    digitalSignature: 'Signature Numérique',
+
+    // Board Recruitment
+    boardMemberApplication: 'Candidature de Membre du Conseil',
+    commitmentAndUnderstanding: 'Engagement et Compréhension',
+    backgroundAndExperience: 'Antécédents et Expérience',
+    references: 'Références',
+    supportingDocuments: 'Documents Justificatifs',
+    organizationLogo: 'Logo de l\'Organisation',
+    boardRecruitmentIntro: "Merci de votre intérêt pour le Sickle Cell Awareness Group of Ontario (SCAGO). Nous recherchons des personnes passionnées par notre mission et prêtes à mettre leurs compétences et leur expérience au service de notre conseil. Veuillez remplir ce formulaire pour postuler à un poste au sein de notre conseil d'administration.",
+    fullName: 'Nom Complet',
+    primaryPhoneNumber: 'Numéro de Téléphone Principal',
+    emailAddress: 'Adresse Courriel',
+    termCommitmentQuestion: 'Le mandat est de 3 ans et il y a environ 4 réunions par an. Êtes-vous capable de prendre cet engagement?',
+    confidentialityAgreementQuestion: 'Les candidats retenus devront signer une entente de confidentialité et une déclaration de conflit d\'intérêts. Êtes-vous prêt à le faire?',
+    appendixYHeader: 'Annexe Y - Soutien aux Comités',
+    committeeSupportQuestion: 'Êtes-vous intéressé à soutenir un comité spécifique de SCAGO si vous n\'êtes pas sélectionné pour le conseil?',
+    preferredCommitteesQuestion: 'Si oui, quels comités vous intéressent?',
+    boardExperienceDesc: 'Veuillez décrire votre expérience au sein de conseils ou joindre une feuille séparée:',
+    uploadExperienceDocument: 'Télécharger le Document d\'Expérience (Optionnel)',
+    experienceUploadHelper: 'Vous pouvez télécharger une feuille séparée décrivant votre expérience.',
+    otherOrganizationsQuestion: 'Dans quelles autres organisations servez-vous actuellement?',
+    provideReferencesQuestion: 'Veuillez fournir deux références que nous pouvons contacter:',
+    reference1: 'Référence 1',
+    reference2: 'Référence 2',
+    resumeUploadLabel: 'Veuillez envoyer votre CV à recruitment@sicklecellanemia.ca ou le télécharger ici:',
+    advocacy: 'Plaidoyer',
+    fundraising: 'Collecte de Fonds',
+    programsAndServices: 'Programmes et Services',
+    governance: 'Gouvernance',
+    enterYourFullName: 'Entrez votre nom complet',
+    phonePlaceholder: '(555) 555-5555',
+    emailPlaceholder: 'nom@exemple.com',
+    boardExperiencePlaceholder: 'Décrivez votre expérience antérieure au sein de conseils...',
+    otherOrgsPlaceholder: 'Listez les autres organisations...',
+
+    // Advanced Fields
+    clickToUpload: 'Cliquez pour télécharger',
+    orDragAndDrop: 'ou glisser-déposer',
+    max: 'Max',
+    fileSingular: 'fichier',
+    filePlural: 'fichiers',
+    filesParenthesis: 'fichiers)',
+    mbEach: 'Mo chacun'
   }
 };
 
@@ -832,7 +961,7 @@ export function useTranslation(language: 'en' | 'fr' = 'en'): Translation {
 // Helper function to translate field labels dynamically
 export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en'): string {
   const t = translations[language];
-  
+
   // Common field label mappings
   const labelMappings: Record<string, keyof Translation> = {
     'First Name': 'firstName',
@@ -945,13 +1074,42 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
     'Individual 3 - Date of Birth': 'individual3DateOfBirth',
     'How should we contact you about support groups?': 'howShouldWeContactYouAboutSupportGroups',
     // 'Do you consent to a SCAGO staff member or Patient Well-Being Coordinator advocating on your behalf when requested?': 'doYouConsentToScagoStaffAdvocating' // Duplicate removed
+
+    // Board Recruitment
+    'Organization Logo': 'organizationLogo',
+    "Thank you for your interest in the Sickle Cell Awareness Group of Ontario (SCAGO). We are looking for individuals who are passionate about our mission and willing to contribute their skills and experience to our board. Please complete this form to apply for a position on our Board of Directors.": 'boardRecruitmentIntro',
+    'Full Name': 'fullName',
+    'Primary Phone Number': 'primaryPhoneNumber',
+    'Email Address': 'emailAddress',
+    'The Term is for 3 years and there are approximately 4 meetings per year. Are you able to make this commitment?': 'termCommitmentQuestion',
+    'Successful candidates will be asked to sign a Confidentiality Agreement and a Conflict of Interest statement. Are you willing to do this?': 'confidentialityAgreementQuestion',
+    'Appendix Y - Committee Support': 'appendixYHeader',
+    'Are you interested in supporting a specific SCAGO committee if not selected for the board?': 'committeeSupportQuestion',
+    'If yes, which committees are you interested in?': 'preferredCommitteesQuestion',
+    'Please describe your board experience or attach a separate sheet:': 'boardExperienceDesc',
+    'Upload Experience Document (Optional)': 'uploadExperienceDocument',
+    'You can upload a separate sheet describing your experience.': 'experienceUploadHelper',
+    'What other organizations do you currently serve on?': 'otherOrganizationsQuestion',
+    'Please provide two references we may contact:': 'provideReferencesQuestion',
+    'Reference 1': 'reference1',
+    'Reference 2': 'reference2',
+    'Please forward your resume to recruitment@sicklecellanemia.ca or upload it here:': 'resumeUploadLabel',
+
+    // Advanced Fields Strings
+    'Click to upload': 'clickToUpload',
+    'or drag and drop': 'orDragAndDrop',
+    'Max': 'max',
+    'file': 'fileSingular',
+    'files': 'filePlural',
+    'files)': 'filesParenthesis',
+    'MB each': 'mbEach'
   };
-  
+
   const mappedKey = labelMappings[label];
   if (mappedKey && t[mappedKey]) {
     return t[mappedKey];
   }
-  
+
   // If no mapping found, return original label
   return label;
 }
@@ -959,7 +1117,7 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
 // Helper function to translate option values
 export function translateOption(option: string, language: 'en' | 'fr' = 'en'): string {
   const t = translations[language];
-  
+
   const optionMappings: Record<string, keyof Translation> = {
     'Yes': 'yes',
     'No': 'no',
@@ -1034,31 +1192,45 @@ export function translateOption(option: string, language: 'en' | 'fr' = 'en'): s
     'I am a healthcare provider': 'iAmHealthcareProvider',
     'Email': 'email',
     'Phone (Text/Phone call)': 'phoneTextPhonecall',
-    'Either': 'either'
+    'Either': 'either',
+    'Advocacy': 'advocacy',
+    'Fundraising': 'fundraising',
+    'Programs & Services': 'programsAndServices',
+    'Governance': 'governance',
+    'Name': 'individualName', // Reusing individualName for generic 'Name'
+    'Contact Information': 'contactInformation'
   };
-  
+
   const mappedKey = optionMappings[option];
   if (mappedKey && t[mappedKey]) {
     return t[mappedKey];
   }
-  
+
   return option;
 }
 
 // Helper function to translate section titles
 export function translateSectionTitle(title: string, language: 'en' | 'fr' = 'en'): string {
   const t = translations[language];
-  
+
   const sectionMappings: Record<string, keyof Translation> = {
     'Contact Information and Demographics': 'contactInformationAndDemographics',
+    'Contact Information': 'contactInformation', // Added strict match
     'Hospital Engagement': 'hospitalEngagement',
-    'Section 2: Hospital Experience in Detail': 'hospitalExperienceInDetail'
+    'Section 2: Hospital Experience in Detail': 'hospitalExperienceInDetail',
+
+    // Board Recruitment
+    'Board Member Application': 'boardMemberApplication',
+    'Commitment and Understanding': 'commitmentAndUnderstanding',
+    'Background and Experience': 'backgroundAndExperience',
+    'References': 'references',
+    'Supporting Documents': 'supportingDocuments'
   };
-  
+
   const mappedKey = sectionMappings[title];
   if (mappedKey && t[mappedKey]) {
     return t[mappedKey];
   }
-  
+
   return title;
 }

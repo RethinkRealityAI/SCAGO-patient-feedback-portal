@@ -35,7 +35,7 @@ export const PAGE_PERMISSIONS: PagePermission[] = [
   },
   {
     key: 'forms-dashboard',
-    label: 'Forms Dashboard',
+    label: 'SCAGO Portal Forms Dashboard',
     description: 'View survey responses, analytics, and export data',
     route: '/dashboard',
   },

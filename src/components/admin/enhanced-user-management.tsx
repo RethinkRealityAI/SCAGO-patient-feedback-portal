@@ -34,6 +34,9 @@ import {
 } from '@/app/admin/user-actions';
 import { backfillRoleClaims } from '@/app/admin/backfill-role-claims';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getSurveys } from '@/app/actions';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 export function EnhancedUserManagement() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
@@ -54,6 +57,9 @@ export function EnhancedUserManagement() {
   const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong'>('weak');
   const [editRole, setEditRole] = useState<AppRole | null>(null);
   const [editRoutes, setEditRoutes] = useState<string[]>([]);
+  const [editForms, setEditForms] = useState<string[]>([]);
+  const [createForms, setCreateForms] = useState<string[]>([]);
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string }>>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -74,6 +80,10 @@ export function EnhancedUserManagement() {
     }
 
     setLoading(false);
+
+    // Load surveys for form access control
+    const surveysResult = await getSurveys();
+    setSurveys(surveysResult || []);
   };
 
   const handleViewUser = async (user: PlatformUser) => {
@@ -84,11 +94,14 @@ export function EnhancedUserManagement() {
       try {
         const res = await getUserPagePermissions(user.email);
         setEditRoutes(res.permissions || []);
+        setEditForms(res.allowedForms || []);
       } catch {
         setEditRoutes([]);
+        setEditForms([]);
       }
     } else {
       setEditRoutes([]);
+      setEditForms([]);
     }
 
     // Load user's login history
@@ -459,8 +472,8 @@ export function EnhancedUserManagement() {
                           <TooltipTrigger asChild>
                             <label
                               className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${editRoutes.includes(permission.key)
-                                  ? 'border-primary bg-primary/5 hover:bg-primary/10'
-                                  : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                                ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                                : 'border-border hover:border-primary/50 hover:bg-accent/30'
                                 } ${selectedUser.role !== 'admin'
                                   ? 'opacity-60 cursor-not-allowed'
                                   : ''
@@ -502,7 +515,7 @@ export function EnhancedUserManagement() {
                       variant="outline"
                       onClick={async () => {
                         setSavingAction(true);
-                        const res = await setUserPagePermissions(selectedUser.email, editRoutes);
+                        const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms);
                         setSavingAction(false);
                         if ((res as any).success) {
                           toast({ title: 'Permissions saved', description: `Updated permissions for ${selectedUser.email}` });
@@ -516,6 +529,100 @@ export function EnhancedUserManagement() {
                       {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       Save Permissions
                     </Button>
+                  )}
+                </div>
+
+                {/* Form-Specific Access Control */}
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Form Access Control</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedUser.role === 'super-admin'
+                          ? 'Super admins have access to all forms automatically.'
+                          : selectedUser.role === 'admin'
+                            ? 'Restrict access to specific forms. If no forms are selected, the admin will see ALL forms by default.'
+                            : 'Form permissions are only available for admin users.'}
+                      </p>
+                    </div>
+                    {selectedUser.role === 'admin' && editForms.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditForms([])}
+                        className="h-8 text-xs hovr:text-primary transition-colors"
+                      >
+                        Reset to All
+                      </Button>
+                    )}
+                  </div>
+
+                  {selectedUser.role === 'admin' && (
+                    <div className="space-y-3">
+                      <ScrollArea className="h-[200px] rounded-md border p-4 bg-accent/5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {surveys.map((survey) => (
+                            <label
+                              key={survey.id}
+                              className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${editForms.includes(survey.id)
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/30 hover:bg-background'
+                                }`}
+                            >
+                              <Checkbox
+                                checked={editForms.includes(survey.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setEditForms((prev) => [...prev, survey.id]);
+                                  } else {
+                                    setEditForms((prev) => prev.filter(id => id !== survey.id));
+                                  }
+                                }}
+                                className="h-4 w-4"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{survey.title}</p>
+                                <p className="text-[10px] text-muted-foreground font-mono truncate">{survey.id}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        {surveys.length === 0 && (
+                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground italic text-sm">
+                            <Info className="h-8 w-8 mb-2 opacity-20" />
+                            No surveys found
+                          </div>
+                        )}
+                      </ScrollArea>
+
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-[10px] text-muted-foreground bg-accent/30 px-2 py-1 rounded">
+                          {editForms.length === 0
+                            ? "Current: Accessing ALL forms"
+                            : `Current: Limited to ${editForms.length} selected form${editForms.length === 1 ? '' : 's'}`
+                          }
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            setSavingAction(true);
+                            const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms);
+                            setSavingAction(false);
+                            if ((res as any).success) {
+                              toast({ title: 'Permissions saved', description: `Updated form access for ${selectedUser.email}` });
+                            } else {
+                              toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
+                            }
+                          }}
+                          disabled={savingAction}
+                          className="h-8"
+                        >
+                          {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                          Save Access
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -720,14 +827,14 @@ export function EnhancedUserManagement() {
                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                             <div
                               className={`h-full transition-all ${passwordStrength === 'strong' ? 'bg-green-500 w-full' :
-                                  passwordStrength === 'medium' ? 'bg-yellow-500 w-2/3' :
-                                    'bg-red-500 w-1/3'
+                                passwordStrength === 'medium' ? 'bg-yellow-500 w-2/3' :
+                                  'bg-red-500 w-1/3'
                                 }`}
                             />
                           </div>
                           <span className={`text-xs ${passwordStrength === 'strong' ? 'text-green-600' :
-                              passwordStrength === 'medium' ? 'text-yellow-600' :
-                                'text-red-600'
+                            passwordStrength === 'medium' ? 'text-yellow-600' :
+                              'text-red-600'
                             }`}>
                             {passwordStrength === 'strong' ? 'Strong' :
                               passwordStrength === 'medium' ? 'Medium' : 'Weak'}
@@ -833,8 +940,8 @@ export function EnhancedUserManagement() {
                               <TooltipTrigger asChild>
                                 <label
                                   className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${createRoutes.includes(permission.key)
-                                      ? 'border-primary bg-primary/5 hover:bg-primary/10'
-                                      : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                                    ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                                    : 'border-border hover:border-primary/50 hover:bg-accent/30'
                                     }`}
                                 >
                                   <Checkbox
@@ -872,7 +979,51 @@ export function EnhancedUserManagement() {
                 </div>
               )}
 
-              {/* Action Buttons */}
+              {/* Form Access Control (for Create User) */}
+              {createRole === 'admin' && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <Label>Form Access Control</Label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Restrict access to specific forms. If no forms are selected, the admin will see ALL forms by default.
+                    </p>
+                    <ScrollArea className="h-[150px] rounded-md border p-4 bg-accent/5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {surveys.map((survey) => (
+                          <label
+                            key={survey.id}
+                            className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${createForms.includes(survey.id)
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/30 hover:bg-background'
+                              }`}
+                          >
+                            <Checkbox
+                              checked={createForms.includes(survey.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setCreateForms((prev) => [...prev, survey.id]);
+                                } else {
+                                  setCreateForms((prev) => prev.filter(id => id !== survey.id));
+                                }
+                              }}
+                              className="h-4 w-4"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{survey.title}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      {createForms.length === 0
+                        ? "Currently set to: Access ALL forms"
+                        : `Currently set to: Access to ${createForms.length} selected form${createForms.length === 1 ? '' : 's'}`
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between border-t pt-4">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Info className="h-3 w-3" />
@@ -900,6 +1051,7 @@ export function EnhancedUserManagement() {
                         displayName: createDisplayName || undefined,
                         role: createRole,
                         pagePermissions: createRoutes,
+                        allowedForms: createForms,
                       });
 
                       if ((res as any).success) {
@@ -913,6 +1065,7 @@ export function EnhancedUserManagement() {
                         setCreateDisplayName('');
                         setCreateRole('participant');
                         setCreateRoutes([]);
+                        setCreateForms([]);
                         setCreateError(null);
                         // Reload user list
                         loadData();

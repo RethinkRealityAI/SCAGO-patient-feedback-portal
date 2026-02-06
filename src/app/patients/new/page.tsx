@@ -24,6 +24,7 @@ import {
     CASE_STATUSES,
     FREQUENCIES
 } from '@/types/patient';
+import { ontarioHospitals } from '@/lib/hospital-names';
 import { NeedsSelector } from '@/components/patients/NeedsSelector';
 import { EmergencyContactsForm } from '@/components/patients/EmergencyContactsForm';
 
@@ -190,9 +191,20 @@ export default function NewPatientPage() {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Hospital *</FormLabel>
-                                                <FormControl>
-                                                    <Input {...field} placeholder="Hospital Name" />
-                                                </FormControl>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select hospital" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="max-h-[300px]">
+                                                        {ontarioHospitals.map((h) => (
+                                                            <SelectItem key={h.value} value={h.label}>
+                                                                {h.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                                 <FormMessage />
                                             </FormItem>
                                         )}

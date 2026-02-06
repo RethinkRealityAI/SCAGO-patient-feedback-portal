@@ -509,8 +509,9 @@ export const yepFormTemplates: YEPFormTemplate[] = [
               { id: 'ref2', label: 'Reference 2', value: 'ref2' }
             ],
             columns: [
-              { id: 'ref-name', label: 'Name', value: 'name' },
-              { id: 'ref-contact', label: 'Contact Information', value: 'contact' }
+              { id: 'ref-name', label: 'Name', value: 'name', type: 'text' },
+              { id: 'ref-email', label: 'Email', value: 'email', type: 'email' },
+              { id: 'ref-phone', label: 'Phone', value: 'phone', type: 'phone' }
             ]
           }
         ]

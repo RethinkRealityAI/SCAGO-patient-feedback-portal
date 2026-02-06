@@ -222,7 +222,30 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         fieldSchema = z.record(z.array(z.string())).optional();
         break;
       case 'matrix-text':
-        fieldSchema = z.record(z.record(z.string())).optional();
+        if (field.columns) {
+          // If columns have types, validate them individually
+          const columnValidators: Record<string, z.ZodTypeAny> = {};
+
+          field.columns.forEach(col => {
+            const translatedLabel = translateFieldLabel(col.label, 'en'); // Use base language for error messages
+
+            if (col.type === 'email') {
+              columnValidators[col.value] = z.string().email(`${translatedLabel}: Invalid email format`).or(z.literal(''));
+            } else if (col.type === 'phone') {
+              // Use proper regex for phone validation? For now just ensure it's not empty if we want
+              // Since they are inside a matrix, often optional unless row is filled.
+              // matrix validation is tricky because rows are dynamic.
+              // We will use a loose phone regex if provided, or rely on input type="tel"
+              columnValidators[col.value] = z.string().optional(); // We can make it strict if we want regex
+            } else {
+              columnValidators[col.value] = z.string().optional();
+            }
+          });
+
+          fieldSchema = z.record(z.object(columnValidators)).optional();
+        } else {
+          fieldSchema = z.record(z.record(z.string())).optional();
+        }
         break;
       case 'likert-scale':
         fieldSchema = z.string().optional();
@@ -863,26 +886,58 @@ export default function FeedbackForm({ survey }: { survey: any }) {
   }
 
   if (isSubmitted) {
+    const thankYou = (survey as any).thankYouSettings || {
+      icon: 'checkmark',
+      title: t.thankYou,
+      description: t.submissionReceived,
+      showButton: true,
+      buttonText: t.submitAnother,
+      themeColor: '#22c55e'
+    };
+
+    const Icon = thankYou.icon === 'party' ? PartyPopper :
+      thankYou.icon === 'star' ? Star :
+        thankYou.icon === 'checkmark' ? Check : null;
+
     return (
       <Card className="w-full max-w-4xl mx-auto shadow-lg">
         <CardHeader className="text-center py-12">
-          <PartyPopper className="w-16 h-16 mx-auto text-green-500 mb-4" />
-          <CardTitle className="text-2xl lg:text-3xl">{t.thankYou}</CardTitle>
-          <CardDescription className="text-base lg:text-lg mt-2">{t.submissionReceived}</CardDescription>
+          {Icon && (
+            <div className="mx-auto flex items-center justify-center w-20 h-20 rounded-full bg-opacity-10 mb-6" style={{ backgroundColor: `${thankYou.themeColor || '#22c55e'}1A` }}>
+              <Icon className="w-10 h-10" style={{ color: thankYou.themeColor || '#22c55e' }} />
+            </div>
+          )}
+          <CardTitle className="text-2xl lg:text-3xl" style={{ color: thankYou.themeColor && thankYou.icon === 'none' ? thankYou.themeColor : undefined }}>
+            {thankYou.title || t.thankYou}
+          </CardTitle>
+          <CardDescription className="text-base lg:text-lg mt-2 whitespace-pre-wrap">
+            {thankYou.description || t.submissionReceived}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex justify-center pb-8">
-          <Button
-            type="button"
-            onClick={() => {
-              clearDraft();
-              setIsSubmitted(false);
-              try { (form as any)?.reset({}); } catch { }
-            }}
-            size="lg"
-          >
-            {t.submitAnother}
-          </Button>
-        </CardContent>
+        {thankYou.showButton !== false && (
+          <CardContent className="flex justify-center pb-12">
+            <Button
+              type="button"
+              onClick={() => {
+                if (thankYou.buttonLink) {
+                  window.location.href = thankYou.buttonLink;
+                } else {
+                  clearDraft();
+                  setIsSubmitted(false);
+                  try { (form as any)?.reset({}); } catch { }
+                }
+              }}
+              size="lg"
+              className="px-8"
+              style={{
+                backgroundColor: thankYou.themeColor || undefined,
+                color: thankYou.themeColor ? '#fff' : undefined
+              }}
+            >
+              {thankYou.buttonText || t.submitAnother}
+            </Button>
+          </CardContent>
+        )}
       </Card>
     );
   }
@@ -946,13 +1001,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 const fieldWithValue = { ...field, value: field.value ?? '' };
                 switch (fieldConfig.type) {
                   case 'text':
-                    return <Input {...fieldWithValue} className="max-w-md" />;
+                    return <Input {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : undefined} />;
                   case 'url':
-                    return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder="https://example.com" />;
+                    return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : "https://example.com"} />;
                   case 'email':
-                    return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={t.enterEmail} />;
+                    return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterEmail} />;
                   case 'phone':
-                    return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={t.enterPhoneNumber} />;
+                    return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterPhoneNumber} />;
                   case 'digital-signature':
                     return (
                       <SignaturePad
@@ -1101,11 +1156,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                         >
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="true" id={`${fieldConfig.id}-yes`} />
-                            <Label htmlFor={`${fieldConfig.id}-yes`} className="cursor-pointer">Yes</Label>
+                            <Label htmlFor={`${fieldConfig.id}-yes`} className="cursor-pointer">{t.yes}</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="false" id={`${fieldConfig.id}-no`} />
-                            <Label htmlFor={`${fieldConfig.id}-no`} className="cursor-pointer">No</Label>
+                            <Label htmlFor={`${fieldConfig.id}-no`} className="cursor-pointer">{t.no}</Label>
                           </div>
                         </RadioGroup>
                       </div>

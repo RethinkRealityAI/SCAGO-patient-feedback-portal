@@ -25,7 +25,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Plus, FileText, Calendar, Building2, Trash2, Edit } from 'lucide-react';
+import { Plus, FileText, Calendar, Building2, Trash2, Edit, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { getReports, deleteReport } from '@/app/admin/reports/actions';
 import { ProgramReport } from '@/types/report';
@@ -129,10 +129,16 @@ export function ProgramReportsList() {
                             Manage monthly program metrics reports for hospitals.
                         </CardDescription>
                     </div>
-                    <Button onClick={() => router.push('/admin/reports/new')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Report
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => router.push('/admin/reports/analytics')}>
+                            <TrendingUp className="h-4 w-4 mr-2" />
+                            Live Analytics
+                        </Button>
+                        <Button onClick={() => router.push('/admin/reports/new')}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Report
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>

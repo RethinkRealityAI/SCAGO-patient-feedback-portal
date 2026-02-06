@@ -56,8 +56,9 @@ export type FieldDef = {
   conditionValue?: string;
   fields?: FieldDef[];
   rows?: { id: string; label: string; value: string }[];
-  columns?: { id: string; label: string; value: string }[];
+  columns?: { id: string; label: string; value: string; type?: string }[];
   helperText?: string;
+  placeholder?: string;
   className?: string;
 };
 
@@ -99,9 +100,10 @@ export function FormFieldRenderer({
             <Input
               type={fieldConfig.type === 'email' ? 'email' : fieldConfig.type === 'phone' ? 'tel' : fieldConfig.type === 'url' ? 'url' : 'text'}
               placeholder={
-                fieldConfig.type === 'email' ? t.enterEmail :
-                  fieldConfig.type === 'phone' ? t.enterPhoneNumber :
-                    ''
+                fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') :
+                  fieldConfig.type === 'email' ? t.enterEmail :
+                    fieldConfig.type === 'phone' ? t.enterPhoneNumber :
+                      ''
               }
               {...form.register(fieldConfig.id)}
             />
@@ -288,11 +290,11 @@ export function FormFieldRenderer({
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="true" id={`${fieldConfig.id}-yes`} />
-                <label htmlFor={`${fieldConfig.id}-yes`} className="text-sm cursor-pointer">Yes</label>
+                <label htmlFor={`${fieldConfig.id}-yes`} className="text-sm cursor-pointer">{t.yes}</label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="false" id={`${fieldConfig.id}-no`} />
-                <label htmlFor={`${fieldConfig.id}-no`} className="text-sm cursor-pointer">No</label>
+                <label htmlFor={`${fieldConfig.id}-no`} className="text-sm cursor-pointer">{t.no}</label>
               </div>
             </RadioGroup>
           </div>
@@ -301,7 +303,7 @@ export function FormFieldRenderer({
       case 'text-block':
         return (
           <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
-            {fieldConfig.helperText || translatedLabel}
+            {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
           </div>
         );
 

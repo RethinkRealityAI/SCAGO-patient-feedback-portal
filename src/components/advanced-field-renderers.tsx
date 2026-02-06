@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { translateOption, useTranslation, translateFieldLabel } from '@/lib/translations';
 
 interface AdvancedFieldProps {
   fieldConfig: any;
@@ -71,7 +72,7 @@ export function MultiTextField({ fieldConfig, form }: AdvancedFieldProps) {
 }
 
 // Matrix Field (Single, Multiple Choice, or Text Input)
-export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
+export function MatrixField({ fieldConfig, form, isFrench }: AdvancedFieldProps) {
   const isMultiple = fieldConfig.type === 'matrix-multiple';
   const isText = fieldConfig.type === 'matrix-text';
   const value = form.watch(fieldConfig.id) || {};
@@ -106,7 +107,7 @@ export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
             <th className="border p-2 bg-muted/50 text-left font-medium"></th>
             {columns.map((col: any) => (
               <th key={col.value} className="border p-2 bg-muted/50 text-center font-medium text-sm">
-                {col.label}
+                {translateOption(col.label, isFrench ? 'fr' : 'en')}
               </th>
             ))}
           </tr>
@@ -114,15 +115,16 @@ export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
         <tbody>
           {rows.map((row: any) => (
             <tr key={row.value}>
-              <td className="border p-2 font-medium text-sm">{row.label}</td>
+              <td className="border p-2 font-medium text-sm">{translateFieldLabel(row.label, isFrench ? 'fr' : 'en')}</td>
               {columns.map((col: any) => (
                 <td key={col.value} className="border p-2 text-center">
                   {isText ? (
                     <Input
+                      type={col.type || 'text'}
                       value={value[row.value]?.[col.value] || ''}
                       onChange={(e) => handleTextChange(row.value, col.value, e.target.value)}
-                      placeholder={col.label}
-                      className="h-8 text-sm"
+                      placeholder={translateOption(col.label, isFrench ? 'fr' : 'en')}
+                      className={cn("h-8 text-sm", col.type === 'email' || col.type === 'phone' ? 'min-w-[150px]' : '')}
                     />
                   ) : isMultiple ? (
                     <Checkbox
@@ -277,25 +279,49 @@ export function RankingField({ fieldConfig, form }: AdvancedFieldProps) {
 }
 
 // File Upload Field
-export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
+export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldProps) {
+  const t = useTranslation(isFrench ? 'fr' : 'en');
   const [files, setFiles] = useState<File[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const maxFiles = fieldConfig.maxFiles || 1;
-  const maxFileSize = (fieldConfig.maxFileSize || 5) * 1024 * 1024; // Convert MB to bytes
+  const maxFileSizeMB = fieldConfig.maxFileSize || 5;
+  const maxFileSize = maxFileSizeMB * 1024 * 1024; // Convert MB to bytes
   const allowedTypes = fieldConfig.fileTypes || ['.pdf', '.jpg', '.png'];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
     if (e.target.files) {
-      const newFiles = Array.from(e.target.files).filter(file => {
+      const selectedFiles = Array.from(e.target.files);
+      const validFiles: File[] = [];
+      let hasError = false;
+
+      selectedFiles.forEach(file => {
         const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-        return allowedTypes.includes(ext) && file.size <= maxFileSize;
+
+        if (!allowedTypes.includes(ext)) {
+          // In a more robust solution, we might differentiate errors, but focusing on size for now or generic validity
+        }
+
+        if (file.size > maxFileSize) {
+          setError(isFrench
+            ? `Le fichier ${file.name} dépasse la taille maximale de ${maxFileSizeMB} Mo.`
+            : `File ${file.name} exceeds the maximum size of ${maxFileSizeMB}MB.`);
+          hasError = true;
+        } else if (allowedTypes.includes(ext)) {
+          validFiles.push(file);
+        }
       });
-      const updatedFiles = [...files, ...newFiles].slice(0, maxFiles);
-      setFiles(updatedFiles);
-      form.setValue(fieldConfig.id, updatedFiles);
+
+      if (!hasError && validFiles.length > 0) {
+        const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
+        setFiles(updatedFiles);
+        form.setValue(fieldConfig.id, updatedFiles);
+      }
     }
   };
 
   const removeFile = (index: number) => {
+    setError(null);
     const updated = files.filter((_, i) => i !== index);
     setFiles(updated);
     form.setValue(fieldConfig.id, updated);
@@ -304,15 +330,27 @@ export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-center w-full">
-        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+        <label className={cn(
+          "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
+          error ? "border-destructive bg-destructive/5" : "border-border"
+        )}>
           <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <Upload className="w-8 h-8 mb-3 text-muted-foreground" />
-            <p className="mb-2 text-sm text-muted-foreground">
-              <span className="font-semibold">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {allowedTypes.join(', ')} (Max {maxFiles} file{maxFiles !== 1 ? 's' : ''}, {fieldConfig.maxFileSize || 5}MB each)
-            </p>
+            {error ? (
+              <div className="flex flex-col items-center text-destructive px-4 text-center">
+                <span className="font-semibold mb-1">{isFrench ? "Erreur de téléchargement" : "Upload Error"}</span>
+                <span className="text-sm">{error}</span>
+              </div>
+            ) : (
+              <>
+                <Upload className="w-8 h-8 mb-3 text-muted-foreground" />
+                <p className="mb-2 text-sm text-muted-foreground">
+                  <span className="font-semibold">{t.clickToUpload}</span> {t.orDragAndDrop}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {allowedTypes.join(', ')} ({t.max} {maxFiles} {maxFiles !== 1 ? t.filePlural : t.fileSingular}, {maxFileSizeMB}{t.mbEach})
+                </p>
+              </>
+            )}
           </div>
           <input
             type="file"

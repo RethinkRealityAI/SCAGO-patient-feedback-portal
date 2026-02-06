@@ -63,21 +63,33 @@ export async function submitFeedback(
     const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
     const surveyData = surveyDoc.exists() ? surveyDoc.data() : null;
 
-    // Send webhook notification (fire and forget)
-    sendWebhook({
-      submissionId: docRef.id,
-      surveyId,
-      sessionId: finalSessionId,
-      submittedAt: submissionData.submittedAt,
-      fields: formData,
-    }, {
-      url: surveyData?.webhookUrl,
-      secret: surveyData?.webhookSecret,
-      enabled: surveyData?.webhookEnabled,
-    }).catch((error) => {
-      // Log but don't fail submission if webhook fails
+    // Send webhook notification (await on server to ensure it completes)
+    try {
+      if (surveyData) {
+        console.log(`[submitFeedback] Triggering webhook for survey: ${surveyId}, enabled: ${surveyData.webhookEnabled}`);
+        await sendWebhook({
+          submissionId: docRef.id,
+          surveyId,
+          sessionId: finalSessionId,
+          submittedAt: submissionData.submittedAt,
+          fields: formData,
+        }, {
+          url: surveyData.webhookUrl,
+          secret: surveyData.webhookSecret,
+          enabled: surveyData.webhookEnabled,
+        });
+      } else {
+        await sendWebhook({
+          submissionId: docRef.id,
+          surveyId,
+          sessionId: finalSessionId,
+          submittedAt: submissionData.submittedAt,
+          fields: formData,
+        });
+      }
+    } catch (error) {
       console.error('Webhook notification failed:', error);
-    });
+    }
 
     return { sessionId: finalSessionId };
   } catch (e) {

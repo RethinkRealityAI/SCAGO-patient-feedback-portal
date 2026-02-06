@@ -73,7 +73,7 @@ export function useUserNavigation(): NavItem[] {
     navItems.push({
       id: 'dashboard',
       href: '/dashboard',
-      label: 'Survey Dashboard',
+      label: 'SCAGO Portal Forms Dashboard',
       icon: <LayoutDashboard className="h-4 w-4" fill="currentColor" />,
       permission: 'forms-dashboard',
     });
@@ -135,11 +135,20 @@ export function useUserNavigation(): NavItem[] {
   }
 
   // 10. Program Reports
-  if (hasAccess('program-reports')) {
+  const hasProgramReports = hasAccess('program-reports');
+  if (hasProgramReports) {
     navItems.push({
       id: 'reports',
       href: '/admin/reports',
       label: 'Program Reports',
+      icon: <FileText className="h-4 w-4" fill="currentColor" />,
+      permission: 'program-reports',
+    });
+
+    navItems.push({
+      id: 'analytics',
+      href: '/admin/reports/analytics',
+      label: 'Live Analytics',
       icon: <BarChart3 className="h-4 w-4" fill="currentColor" />,
       permission: 'program-reports',
     });

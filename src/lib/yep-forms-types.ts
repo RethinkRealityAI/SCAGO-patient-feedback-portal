@@ -55,7 +55,7 @@ export interface YEPFormField {
   minLength?: number;
   maxLength?: number;
   rows?: Array<{ id: string; label: string; value: string }>;
-  columns?: Array<{ id: string; label: string; value: string }>;
+  columns?: Array<{ id: string; label: string; value: string; type?: string }>;
   calculation?: string;
   fileTypes?: string[];
   maxFileSize?: number;
@@ -162,7 +162,8 @@ export const yepFormFieldSchema: z.ZodType<YEPFormField> = z.lazy(() => z.object
   columns: z.array(z.object({
     id: z.string(),
     label: z.string(),
-    value: z.string()
+    value: z.string(),
+    type: z.string().optional()
   })).optional(),
   calculation: z.string().optional(),
   fileTypes: z.array(z.string()).optional(),

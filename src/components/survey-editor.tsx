@@ -86,6 +86,16 @@ const appearanceSchema = z.object({
   gradient: z.boolean().default(true).optional(),
 }).optional();
 
+const thankYouSettingsSchema = z.object({
+  icon: z.enum(['checkmark', 'party', 'star', 'none']).default('checkmark').optional(),
+  title: z.string().default('Thank You!').optional(),
+  description: z.string().default('Your submission has been received successfully.').optional(),
+  showButton: z.boolean().default(true).optional(),
+  buttonText: z.string().default('Submit Another').optional(),
+  buttonLink: z.string().optional().or(z.literal('')),
+  themeColor: z.string().default('#22c55e').optional(),
+}).optional();
+
 const surveySchema = z.object({
   title: z.string().min(1, 'Survey title is required.'),
   description: z.string().optional(),
@@ -109,6 +119,7 @@ const surveySchema = z.object({
     showContinue: z.boolean().default(true).optional(),
     showStartOver: z.boolean().default(true).optional(),
   }).optional(),
+  thankYouSettings: thankYouSettingsSchema,
   sections: z.array(sectionSchema),
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
@@ -942,6 +953,15 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
       showContinue: true,
       showStartOver: true,
     },
+    thankYouSettings: {
+      icon: 'checkmark',
+      title: 'Thank You!',
+      description: 'Your submission has been received successfully.',
+      showButton: true,
+      buttonText: 'Submit Another',
+      buttonLink: '',
+      themeColor: '#22c55e',
+    },
     ...survey,
   } as any;
   const form = useForm<SurveyFormData>({ resolver: zodResolver(surveySchema), defaultValues: defaulted, shouldUnregister: false });
@@ -1150,10 +1170,86 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="appearance">Appearance</TabsTrigger>
                 <TabsTrigger value="sections">Sections</TabsTrigger>
+                <TabsTrigger value="thank-you">Thank You Page</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
               <Button type="submit" size="sm" disabled={isSubmitting} className="shadow-2xl md:hidden">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button>
             </div>
+            <TabsContent value="thank-you" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Thank You Page Customization</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="thankYouSettings.icon" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Success Icon</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? 'checkmark'}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select Icon" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="checkmark">Checkmark</SelectItem>
+                            <SelectItem value="party">Party Popper</SelectItem>
+                            <SelectItem value="star">Star</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="thankYouSettings.themeColor" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Icon/Accent Color</FormLabel>
+                        <FormControl><Input type="color" {...field} value={field.value ?? '#22c55e'} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="thankYouSettings.title" render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Success Title</FormLabel>
+                        <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="thankYouSettings.description" render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Success Message</FormLabel>
+                        <FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="thankYouSettings.showButton" render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-2">
+                        <div className="space-y-0.5">
+                          <FormLabel>Show Final Button</FormLabel>
+                          <FormDescription>Display a button after submission (e.g., to return to home or submit another).</FormDescription>
+                        </div>
+                        <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    {form.watch('thankYouSettings.showButton') && (
+                      <>
+                        <FormField control={form.control} name="thankYouSettings.buttonText" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Button Text</FormLabel>
+                            <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="thankYouSettings.buttonLink" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Button Link (Optional)</FormLabel>
+                            <FormDescription>Leave empty to just refresh/reset the form.</FormDescription>
+                            <FormControl><Input {...field} value={field.value ?? ''} placeholder="https://..." /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
             <TabsContent value="settings" className="space-y-6">
               <Card>
                 <CardHeader><CardTitle>Resume Later Settings</CardTitle></CardHeader>

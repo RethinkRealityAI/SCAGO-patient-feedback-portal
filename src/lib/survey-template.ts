@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 
 const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(String);
 const months = [
-  'January', 'February', 'March', 'April', 'May', 'June', 
+  'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
@@ -21,6 +21,15 @@ export const defaultSurvey = {
   },
   title: 'Patient Feedback Survey',
   description: 'The following information will help us understand the scope of the situation. Kindly provide as much information as you can.',
+  thankYouSettings: {
+    icon: 'checkmark',
+    title: 'Thank You!',
+    description: 'Your submission has been received successfully.',
+    showButton: true,
+    buttonText: 'Submit Another',
+    buttonLink: '',
+    themeColor: '#22c55e',
+  },
   // New: submission and sharing defaults
   submitButtonLabel: 'Submit',
   saveProgressEnabled: true,
@@ -29,35 +38,35 @@ export const defaultSurvey = {
   shareText: 'I’d like your feedback—please fill out this survey.',
   sections: [
     {
-        id: 'contact-information-section',
-        title: 'Contact Information',
-        fields: [
-            { id: 'submitAnonymously', type: 'anonymous-toggle', label: 'Submit anonymously' },
-            {
-                id: 'name-group',
-                type: 'group',
-                fields: [
-                    { id: 'firstName', type: 'text', label: 'First name' },
-                    { id: 'lastName', type: 'text', label: 'Last name' },
-                ]
-            },
-            {
-                id: 'contact-group',
-                type: 'group',
-                fields: [
-                    { id: 'email', type: 'email', label: 'Email' },
-                    { id: 'phone', type: 'text', label: 'Phone' },
-                ]
-            },
-            {
-                id: 'location-group',
-                type: 'group',
-                fields: [
-                    { id: 'city', type: 'city-on', label: 'City' },
-                    { id: 'province', type: 'province-ca', label: 'Province' },
-                ]
-            }
-        ]
+      id: 'contact-information-section',
+      title: 'Contact Information',
+      fields: [
+        { id: 'submitAnonymously', type: 'anonymous-toggle', label: 'Submit anonymously' },
+        {
+          id: 'name-group',
+          type: 'group',
+          fields: [
+            { id: 'firstName', type: 'text', label: 'First name' },
+            { id: 'lastName', type: 'text', label: 'Last name' },
+          ]
+        },
+        {
+          id: 'contact-group',
+          type: 'group',
+          fields: [
+            { id: 'email', type: 'email', label: 'Email' },
+            { id: 'phone', type: 'text', label: 'Phone' },
+          ]
+        },
+        {
+          id: 'location-group',
+          type: 'group',
+          fields: [
+            { id: 'city', type: 'city-on', label: 'City' },
+            { id: 'province', type: 'province-ca', label: 'Province' },
+          ]
+        }
+      ]
     },
     {
       id: 'quality-of-care-section',
@@ -74,22 +83,22 @@ export const defaultSurvey = {
           ],
         },
         {
-            id: 'provider-names-group',
-            type: 'group',
-            fields: [
-                {
-                  id: 'physicianName',
-                  label: 'Name of Physician',
-                  type: 'text',
-                  placeholder: 'Dr. Smith',
-                },
-                {
-                  id: 'triageNurseName',
-                  label: 'Name of Triage Nurse',
-                  type: 'text',
-                  placeholder: 'Nurse Jackie',
-                },
-            ]
+          id: 'provider-names-group',
+          type: 'group',
+          fields: [
+            {
+              id: 'physicianName',
+              label: 'Name of Physician',
+              type: 'text',
+              placeholder: 'Dr. Smith',
+            },
+            {
+              id: 'triageNurseName',
+              label: 'Name of Triage Nurse',
+              type: 'text',
+              placeholder: 'Nurse Jackie',
+            },
+          ]
         },
         {
           id: 'firstReception',
@@ -165,11 +174,11 @@ export const defaultSurvey = {
           ],
         },
         {
-            id: 'experiencedOther',
-            label: 'Please elaborate:',
-            type: 'textarea',
-            conditionField: 'experienced',
-            conditionValue: 'other',
+          id: 'experiencedOther',
+          label: 'Please elaborate:',
+          type: 'textarea',
+          conditionField: 'experienced',
+          conditionValue: 'other',
         }
       ],
     },
@@ -179,35 +188,35 @@ export const defaultSurvey = {
       description: 'Please provide details about your hospital experience.',
       fields: [
         {
-            id: 'interaction-date-group',
-            type: 'group',
-            fields: [
-                {
-                  id: 'interactionDate',
-                  label: 'Date of Interaction',
-                  type: 'date',
-                },
-            ]
+          id: 'interaction-date-group',
+          type: 'group',
+          fields: [
+            {
+              id: 'interactionDate',
+              label: 'Date of Interaction',
+              type: 'date',
+            },
+          ]
         },
         {
-            id: 'hospitalName',
-            label: 'Hospital Name',
-            type: 'hospital-on',
+          id: 'hospitalName',
+          label: 'Hospital Name',
+          type: 'hospital-on',
         },
         {
-            id: 'department',
-            label: 'Department or Service',
-            type: 'department-on',
+          id: 'department',
+          label: 'Department or Service',
+          type: 'department-on',
         },
         {
-            id: 'clinicianNames',
-            label: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
-            type: 'textarea',
+          id: 'clinicianNames',
+          label: 'Name of Physician, Nurse and other clinicians providing optimal or sub-optimal care',
+          type: 'textarea',
         },
         {
-            id: 'hospitalInteraction',
-            label: 'Your Experience',
-            type: 'textarea',
+          id: 'hospitalInteraction',
+          label: 'Your Experience',
+          type: 'textarea',
         },
         {
           id: 'timelyMedications',
@@ -219,58 +228,58 @@ export const defaultSurvey = {
           ],
         },
         {
-            id: 'rightInvestigationConducted',
-            label: 'Did you feel the right investigation/tests were conducted?',
-            type: 'select',
-            options: [
-                { id: nanoid(), label: 'Yes', value: 'yes' },
-                { id: nanoid(), label: 'No', value: 'no' },
-                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
-            ]
+          id: 'rightInvestigationConducted',
+          label: 'Did you feel the right investigation/tests were conducted?',
+          type: 'select',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ]
         },
         {
-            id: 'rightInvestigationRationale',
-            label: 'Please provide details:',
-            type: 'textarea',
-            conditionField: 'rightInvestigationConducted',
-            conditionValue: 'no',
+          id: 'rightInvestigationRationale',
+          label: 'Please provide details:',
+          type: 'textarea',
+          conditionField: 'rightInvestigationConducted',
+          conditionValue: 'no',
         },
         {
-            id: 'timelyManner',
-            label: 'Did you feel you were attended to in a timely manner?',
-            type: 'select',
-            options: [
-                { id: nanoid(), label: 'Yes', value: 'yes' },
-                { id: nanoid(), label: 'No', value: 'no' },
-                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
-            ]
+          id: 'timelyManner',
+          label: 'Did you feel you were attended to in a timely manner?',
+          type: 'select',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ]
         },
         {
-            id: 'timelyMannerRationale',
-            label: 'Please provide rationale:',
-            type: 'textarea',
-            conditionField: 'timelyManner',
-            conditionValue: 'no',
+          id: 'timelyMannerRationale',
+          label: 'Please provide rationale:',
+          type: 'textarea',
+          conditionField: 'timelyManner',
+          conditionValue: 'no',
         },
         {
-            id: 'concernsAddressed',
-            label: 'Did you feel your concerns were well addressed?',
-            type: 'select',
-            options: [
-                { id: nanoid(), label: 'Yes', value: 'yes' },
-                { id: nanoid(), label: 'No', value: 'no' },
-                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
-            ]
+          id: 'concernsAddressed',
+          label: 'Did you feel your concerns were well addressed?',
+          type: 'select',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ]
         },
         {
-            id: 'optimalTime',
-            label: 'Did you feel that you had an optimal amount of time?',
-            type: 'select',
-            options: [
-                { id: nanoid(), label: 'Yes', value: 'yes' },
-                { id: nanoid(), label: 'No', value: 'no' },
-                { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
-            ]
+          id: 'optimalTime',
+          label: 'Did you feel that you had an optimal amount of time?',
+          type: 'select',
+          options: [
+            { id: nanoid(), label: 'Yes', value: 'yes' },
+            { id: nanoid(), label: 'No', value: 'no' },
+            { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
+          ]
         },
         {
           id: 'reportedToHospital',
@@ -303,16 +312,16 @@ export const defaultSurvey = {
           ],
         },
         {
-            id: 'reportNotDoneReasonOther',
-            label: 'If other, please specify:',
-            type: 'text',
-            conditionField: 'reportNotDoneReason',
-            conditionValue: 'other',
+          id: 'reportNotDoneReasonOther',
+          label: 'If other, please specify:',
+          type: 'text',
+          conditionField: 'reportNotDoneReason',
+          conditionValue: 'other',
         },
         {
-            id: 'anythingElseToKnow',
-            label: 'Is there anything else would you like us to know about this hospital interaction?',
-            type: 'textarea',
+          id: 'anythingElseToKnow',
+          label: 'Is there anything else would you like us to know about this hospital interaction?',
+          type: 'textarea',
         },
         {
           id: 'rating',
@@ -337,6 +346,15 @@ export const surveyV2 = {
   },
   title: 'Patient Feedback Survey (V2)',
   description: 'This survey has two sections. Contact info helps us follow up if needed. Hospital engagement questions adapt to your visit type.',
+  thankYouSettings: {
+    icon: 'checkmark',
+    title: 'Thank You!',
+    description: 'Your submission has been received successfully.',
+    showButton: true,
+    buttonText: 'Submit Another',
+    buttonLink: '',
+    themeColor: '#22c55e',
+  },
   submitButtonLabel: '',
   saveProgressEnabled: true,
   shareButtonEnabled: true,
@@ -651,18 +669,18 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
-        { id: 'reportedToHospitalED', label: 'Did you report this situation to the hospital?', type: 'select', conditionField: 'concernsAddressedED', conditionValue: 'no', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'reportedToHospitalED', label: 'Did you report this situation to the hospital?', type: 'select', conditionField: 'concernsAddressedED', conditionValue: 'no', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
         { id: 'reportOutcomeED', label: 'If “Yes”, what was the outcome of your report?', type: 'textarea', conditionField: 'reportedToHospitalED', conditionValue: 'yes' },
-        { id: 'reportNotDoneReasonED', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalED', conditionValue: 'no', options: [ { id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' } ] },
+        { id: 'reportNotDoneReasonED', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalED', conditionValue: 'no', options: [{ id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' }] },
         { id: 'reportNotDoneReasonOtherED', label: 'If other, please specify:', type: 'text', conditionField: 'reportNotDoneReasonED', conditionValue: 'other' },
-        { id: 'followUpPlanED', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'emergency', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
-        { id: 'scagoFollowUpED', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanED', conditionValue: 'yes', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'followUpPlanED', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'emergency', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
+        { id: 'scagoFollowUpED', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanED', conditionValue: 'yes', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
         { id: 'anythingElseED', label: 'Is there anything else you would like us to know about this hospital interaction?', type: 'textarea', conditionField: 'visitType', conditionValue: 'emergency' },
 
         // Inpatient Admission
         { id: 'inpatientUnitDepartment', label: 'Unit/department', type: 'text', conditionField: 'visitType', conditionValue: 'inpatient' },
-        { id: 'inPainCrisisInpatient', label: 'Were you in the hospital for pain crisis?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
-        { id: 'timelyMedicationsInpatient', label: 'Did you receive timely medications while in the hospital?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'inPainCrisisInpatient', label: 'Were you in the hospital for pain crisis?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
+        { id: 'timelyMedicationsInpatient', label: 'Did you receive timely medications while in the hospital?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
         {
           id: 'rightInvestigationsInpatient',
           label: 'Did you feel the right investigation/tests were conducted?',
@@ -762,12 +780,12 @@ export const surveyV2 = {
             { id: nanoid(), label: 'Not Applicable', value: 'not-applicable' },
           ],
         },
-        { id: 'reportedToHospitalInpatient', label: 'Did you report this situation to the hospital?', type: 'select', conditionField: 'concernsAddressedInpatient', conditionValue: 'no', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'reportedToHospitalInpatient', label: 'Did you report this situation to the hospital?', type: 'select', conditionField: 'concernsAddressedInpatient', conditionValue: 'no', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
         { id: 'reportOutcomeInpatient', label: 'If “Yes”, what was the outcome of your report?', type: 'textarea', conditionField: 'reportedToHospitalInpatient', conditionValue: 'yes' },
-        { id: 'reportNotDoneReasonInpatient', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalInpatient', conditionValue: 'no', options: [ { id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' } ] },
+        { id: 'reportNotDoneReasonInpatient', label: 'If “No”, why not?', type: 'select', conditionField: 'reportedToHospitalInpatient', conditionValue: 'no', options: [{ id: nanoid(), label: 'Not aware of complaint process', value: 'not-aware' }, { id: nanoid(), label: 'Not comfortable', value: 'not-comfortable' }, { id: nanoid(), label: 'Other', value: 'other' }] },
         { id: 'reportNotDoneReasonOtherInpatient', label: 'If other, please specify:', type: 'text', conditionField: 'reportNotDoneReasonInpatient', conditionValue: 'other' },
-        { id: 'followUpPlanInpatient', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
-        { id: 'scagoFollowUpInpatient', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanInpatient', conditionValue: 'yes', options: [ { id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' } ] },
+        { id: 'followUpPlanInpatient', label: 'Before being discharged, were you provided with any follow-up plan?', type: 'radio', conditionField: 'visitType', conditionValue: 'inpatient', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
+        { id: 'scagoFollowUpInpatient', label: 'Were you advised to follow up with SCAGO after being discharged?', type: 'radio', conditionField: 'followUpPlanInpatient', conditionValue: 'yes', options: [{ id: nanoid(), label: 'Yes', value: 'yes' }, { id: nanoid(), label: 'No', value: 'no' }] },
         { id: 'anythingElseInpatient', label: 'Is there anything else you would like us to know about this hospital interaction?', type: 'textarea', conditionField: 'visitType', conditionValue: 'inpatient' },
 
         // Additional Feedback (not type-specific)
@@ -790,6 +808,15 @@ export const consentSurvey = {
   },
   title: 'SCAGO Digital Consent & Information Collection',
   description: 'The Sickle Cell Awareness Group of Ontario (SCAGO) is Ontario\'s largest patient support and advocacy organization. By completing this form, you are providing your information to SCAGO. We store all data securely and will never share your personal information with third parties without your consent.',
+  thankYouSettings: {
+    icon: 'checkmark',
+    title: 'Thank You!',
+    description: 'Your submission has been received successfully.',
+    showButton: false,
+    buttonText: 'Submit Another',
+    buttonLink: '',
+    themeColor: '#22c55e',
+  },
   submitButtonLabel: 'Submit Consent Form',
   saveProgressEnabled: true,
   shareButtonEnabled: false,

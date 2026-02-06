@@ -70,12 +70,17 @@ export async function sendWebhook(
       headers['X-Webhook-Secret'] = secret;
     }
 
-    // Send webhook (fire and forget - don't block submission)
-    fetch(url, {
+    // Send webhook
+    return fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000), // 10 second timeout
+    }).then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`Webhook delivery failed with status ${response.status}: ${text}`);
+      }
     }).catch((error) => {
       console.error('Webhook delivery failed:', error);
     });

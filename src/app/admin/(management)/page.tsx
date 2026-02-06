@@ -166,7 +166,7 @@ export default function AdminPage() {
               onClick={() => window.location.href = '/dashboard'}
             >
               <Settings className="h-5 w-5" />
-              <span className="text-xs">Dashboard</span>
+              <span className="text-xs">Forms Dashboard</span>
             </Button>
           </div>
         </CardContent>

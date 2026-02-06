@@ -15,6 +15,7 @@ interface AuthContextType {
   isYEPManager: boolean;
   userRole: 'super-admin' | 'admin' | 'mentor' | 'participant' | null;
   permissions: import('@/lib/permissions').PagePermissionKey[];
+  allowedForms: string[];
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -25,6 +26,7 @@ export const AuthContext = createContext<AuthContextType>({
   isYEPManager: false,
   userRole: null,
   permissions: [],
+  allowedForms: [],
 });
 
 interface AuthProviderProps {
@@ -53,6 +55,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isYEPManager, setIsYEPManager] = useState(false);
   const [userRole, setUserRole] = useState<'super-admin' | 'admin' | 'mentor' | 'participant' | null>(null);
   const [permissions, setPermissions] = useState<import('@/lib/permissions').PagePermissionKey[]>([]);
+  const [allowedForms, setAllowedForms] = useState<string[]>([]);
   const router = useRouter();
   const pathname = usePathname();
   const sessionPostedRef = useRef(false);
@@ -96,16 +99,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const permsData = await getPagePermissions();
               const userPerms = permsData.routesByEmail[authUser.email.toLowerCase()] || [];
               setPermissions(userPerms as import('@/lib/permissions').PagePermissionKey[]);
+              setAllowedForms(permsData.formsByEmail[authUser.email.toLowerCase()] || []);
             } catch (err) {
               console.error('Error fetching granular permissions:', err);
               setPermissions([]);
+              setAllowedForms([]);
             }
           } else if (superAdminStatus) {
             // Super admins conceptually have all permissions, but the UI might checks specific keys
             // We'll define them as needed or leave empty if the UI handles super-admin separately
             setPermissions([]);
+            setAllowedForms([]);
           } else {
             setPermissions([]);
+            setAllowedForms([]);
           }
 
           // Track login (optional - will fail if Firestore rules don't allow)
@@ -150,6 +157,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setIsYEPManager(false);
           setUserRole(null);
           setPermissions([]);
+          setAllowedForms([]);
 
           // Clear server session cookie
           try {
@@ -178,7 +186,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [router, pathname]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, isYEPManager, userRole, permissions }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, isYEPManager, userRole, permissions, allowedForms }}>
       {children}
     </AuthContext.Provider>
   );
