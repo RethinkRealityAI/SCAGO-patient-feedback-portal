@@ -6,7 +6,30 @@ export const CLINIC_TYPES = ['adult', 'paediatric'] as const;
 export const COMMUNICATION_METHODS = ['text', 'call', 'email'] as const;
 export const CONSENT_STATUSES = ['on_file', 'not_obtained', 'withdrawn', 'expired'] as const;
 export const CASE_STATUSES = ['active', 'inactive', 'closed', 'deceased'] as const;
-export const INTERACTION_TYPES = ['phone_call', 'follow_up', 'event_support', 'crisis_support'] as const;
+export const INTERACTION_TYPES = [
+    'phone_call',
+    'follow_up',
+    'event_support',
+    'crisis_support',
+    'er_visit',
+    'inpatient_support',
+    'outpatient_support',
+    'admission_support',
+    'routine_clinic_visit',
+    'other'
+] as const;
+
+export const SUPPORT_TYPES = [
+    'Advocacy support',
+    'Info about SCAGO and services',
+    'Psychosocial support',
+    'Employment support',
+    'Immigration or legal support',
+    'Connection to financial supports/benefits',
+    'Social prescribing (basic needs food, clothing, housing)',
+    'Other'
+] as const;
+
 export const DOCUMENT_TYPES = ['consent_form', 'hospital_card', 'letter', 'referral', 'other'] as const;
 
 export const PATIENT_NEEDS = [
@@ -55,7 +78,7 @@ export type Alert = z.infer<typeof alertSchema>;
 export const patientSchema = z.object({
     id: z.string().optional(),
     fullName: z.string().min(1, 'Full name is required'),
-    dateOfBirth: z.date(),
+    dateOfBirth: z.coerce.date(),
     hospital: z.string().min(1, 'Hospital is required'),
     clinicType: z.enum(CLINIC_TYPES).optional(),
     mrn: z.string().optional(),
@@ -78,12 +101,12 @@ export const patientSchema = z.object({
     emergencyContacts: z.array(emergencyContactSchema).default([]),
     preferredCommunication: z.enum(COMMUNICATION_METHODS),
     consentStatus: z.enum(CONSENT_STATUSES),
-    consentDate: z.date().optional(),
+    consentDate: z.coerce.date().optional(),
     referral: z.object({
         name: z.string().optional(),
         role: z.string().optional(),
         hospital: z.string().optional(),
-        date: z.date().optional(),
+        date: z.coerce.date().optional(),
         notes: z.string().optional(),
     }).optional(),
     caseStatus: z.enum(CASE_STATUSES).default('active'),
@@ -92,7 +115,7 @@ export const patientSchema = z.object({
     erUsageFrequency: z.string().optional(),   // Could use FREQUENCIES enum
     notes: z.string().optional(),
     lastInteraction: z.object({
-        date: z.date(),
+        date: z.coerce.date(),
         type: z.string(),
         summary: z.string(),
     }).optional(),
@@ -112,8 +135,10 @@ export type Patient = z.infer<typeof patientSchema>;
 export const interactionSchema = z.object({
     id: z.string().optional(),
     patientId: z.string(),
-    date: z.date(),
+    date: z.coerce.date(),
     type: z.enum(INTERACTION_TYPES),
+    category: z.string().optional(), // e.g. 'Hemoglobinopathy Clinic', 'ER', etc.
+    supportTypes: z.array(z.string()).default([]),
     notes: z.string().min(1, 'Notes are required'),
     outcome: z.string().optional(),
     createdBy: z.string().optional(),

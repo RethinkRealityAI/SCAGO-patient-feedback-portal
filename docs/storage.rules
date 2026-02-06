@@ -87,5 +87,26 @@ service firebase.storage {
       // Only admins can read and write patient documents
       allow read, write: if isAdmin();
     }
+
+    // Survey Submission Attachments - Public upload, Admin read
+    // Path structure: submissions/{surveyId}/{sessionId}/{timestamp}_{filename}
+    match /submissions/{surveyId}/{sessionId}/{filename} {
+      // Only admins can read or delete submission attachments
+      allow read, delete: if isAdmin();
+      
+      // Anyone can upload (create) attachments for a survey submission
+      // We restrict size to 10MB per file and specific allowed types
+      allow create: if request.resource.size < 10 * 1024 * 1024 &&
+                      (request.resource.contentType.matches('image/.*') || 
+                       request.resource.contentType == 'application/pdf' ||
+                       request.resource.contentType == 'application/msword' ||
+                       request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                       request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                       request.resource.contentType == 'application/vnd.ms-excel' ||
+                       request.resource.contentType == 'text/plain');
+      
+      // Updates are not allowed for public users, only internal admin if needed
+      allow update: if isAdmin();
+    }
   }
 }

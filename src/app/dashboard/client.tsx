@@ -75,6 +75,28 @@ function safeFormatDateForExport(dateValue: any, dateOnly: boolean = false): str
   return dateOnly ? date.toISOString().split('T')[0] : date.toISOString()
 }
 
+// Helper to robustly extract name from various schema formats
+function extractName(sub: any): string {
+  if (!sub) return ''
+  // Try standard combinations
+  const first = sub.firstName || sub.first_name || sub.fname || ''
+  const last = sub.lastName || sub.last_name || sub.lname || ''
+  if (first || last) return `${first} ${last}`.trim()
+
+  // Try single fields
+  if (sub.name) return sub.name
+  if (sub.fullName) return sub.fullName
+  if (sub.full_name) return sub.full_name
+
+  // Try finding a field with 'Name' in key (risky but needed for custom forms)
+  const nameKey = Object.keys(sub).find(k =>
+    k.toLowerCase().includes('name') &&
+    !['hospital', 'survey', 'file', 'user', 'project'].some(ex => k.toLowerCase().includes(ex)) &&
+    typeof sub[k] === 'string'
+  )
+  return nameKey ? sub[nameKey] : ''
+}
+
 // Helper function to detect if submissions are from consent survey
 function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
   if (!submissions || submissions.length === 0) return false
@@ -84,28 +106,35 @@ function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
   )
 }
 
-// Helper function to safely extract a string value from a field
-// The field might be: a string, an object with .selection, or something else entirely
-function extractStringValue(value: any): string | null {
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim()
-  }
-  if (value && typeof value === 'object') {
-    // Check for .selection property (common pattern in survey data)
-    if (typeof value.selection === 'string' && value.selection.trim()) {
-      return value.selection.trim()
-    }
-    // Check for .value property (another common pattern)
-    if (typeof value.value === 'string' && value.value.trim()) {
-      return value.value.trim()
-    }
-  }
-  return null
+// Helper function to detect if submissions are from hospital feedback/reporting survey
+// These surveys have ratings and hospital interaction experience fields
+function isHospitalFeedbackSurvey(submissions: FeedbackSubmission[]): boolean {
+  if (!submissions || submissions.length === 0) return false
+  // Check if submissions have typical hospital feedback fields like rating and hospitalInteraction
+  return submissions.some(sample =>
+    !!(sample.rating !== undefined || sample.hospitalInteraction || sample.hospitalName || (sample as any).inPainCrisis)
+  )
 }
 
-// Helper function to extract hospital/location from a submission
-// Handles multiple possible field name variations for consistent data access
-// IMPORTANT: Always returns a string, never an object (fixes React error #31)
+// Helper function to safely extract a string value from a field
+// The field might be: a string, an object with .selection, or something else entirely
+function extractStringValue(value: any): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'object') {
+    // Handle {selection: '...', other: '...'} from hospital-on/city-on/department-on
+    if (value.selection === 'other' && value.other) return value.other.trim()
+    if (value.selection) return value.selection.trim()
+    // Handle {value: number, unit: '...'} from time-amount
+    if (value.value !== undefined && value.unit) return `${value.value} ${value.unit}`
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+/**
+ * Robustly extract hospital or location information from a submission.
+ */
 function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: boolean = false): string {
   if (preferLocation) {
     // For consent/intake forms, prefer city or primaryHospital
@@ -117,9 +146,11 @@ function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: b
       'Unknown Location'
   }
   // For feedback forms, prefer hospital fields
+  // CRITICAL: Include primaryHospital in fallback search for consistency in "All Surveys" mode
   return extractStringValue(submission.hospitalName) ||
     extractStringValue(submission.hospital) ||
     extractStringValue(submission['hospital-on']) ||
+    extractStringValue(submission.primaryHospital) ||
     'Unknown Hospital'
 }
 
@@ -305,8 +336,28 @@ export default function Dashboard() {
   // Use getNormalizedSurveyId to match how filtered data is computed
   const isConsent = useMemo(() => {
     if (isAllSurveysMode) return false // Overview mode is neither consent nor feedback
-    return isConsentSurvey(submissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey))
-  }, [submissions, selectedSurvey, isAllSurveysMode, getNormalizedSurveyId])
+    // Strict check: Only the official Consent Survey is "Consent" type
+    const title = surveyTitleMap.get(selectedSurvey)
+    return title === 'SCAGO Digital Consent & Information Collection'
+  }, [selectedSurvey, isAllSurveysMode, surveyTitleMap])
+
+  // Detect if current filtered data is hospital feedback survey (the main reporting portal)
+  const isHospitalFeedback = useMemo(() => {
+    if (isAllSurveysMode) return false
+    if (isConsent) return false
+    // Strict check: Only the official Hospital Experience Reporting Portal is "Feedback" type
+    return selectedSurvey === HOSPITAL_SURVEY_ID
+  }, [selectedSurvey, isAllSurveysMode, isConsent, HOSPITAL_SURVEY_ID])
+
+  // Detect if current survey is a "generic" survey (created via survey editor, not consent or hospital feedback)
+  // Generic surveys get a simplified dashboard view
+  const isGenericSurvey = useMemo(() => {
+    if (isAllSurveysMode) return false
+    if (isConsent) return false
+    if (isHospitalFeedback) return false
+    // If it's neither consent nor hospital feedback, it's a generic survey
+    return true
+  }, [isAllSurveysMode, isConsent, isHospitalFeedback])
 
   // Ensure the chart selection matches the survey type
   useEffect(() => {
@@ -318,7 +369,9 @@ export default function Dashboard() {
       setSelectedChart('submissions')
     } else if (isConsent && feedbackCharts.has(selectedChart)) {
       setSelectedChart('submissions')
-    } else if (!isConsent && !isAllSurveysMode && consentCharts.has(selectedChart)) {
+    } else if (isGenericSurvey && selectedChart !== 'submissions') {
+      setSelectedChart('submissions')
+    } else if (!isConsent && !isGenericSurvey && !isAllSurveysMode && consentCharts.has(selectedChart)) {
       setSelectedChart('rating')
     }
   }, [isConsent, selectedChart, isAllSurveysMode])
@@ -415,7 +468,7 @@ export default function Dashboard() {
 
   // Improved trend calculation for ratings and submissions
   const ratingTrend = useMemo(() => {
-    if (dateRange === 'all' || isConsent || isAllSurveysMode) return null
+    if (dateRange === 'all' || isConsent || isAllSurveysMode || isGenericSurvey) return null
 
     const now = new Date()
     const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
@@ -572,6 +625,13 @@ export default function Dashboard() {
           topLocation: Array.from(geographicDistribution.entries())
             .sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
         }
+      }
+    }
+
+    if (isGenericSurvey) {
+      return {
+        total,
+        surveysCount
       }
     }
 
@@ -1357,7 +1417,7 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
 
-              {!isConsent && (
+              {!isConsent && !isAllSurveysMode && !isGenericSurvey && (
                 <Select onValueChange={(value) => setRatingFilter(value as 'all' | 'excellent' | 'good' | 'poor')} value={ratingFilter}>
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Rating filter" />
@@ -1371,18 +1431,20 @@ export default function Dashboard() {
                 </Select>
               )}
 
-              <Select onValueChange={setHospitalFilter} value={hospitalFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder={isConsent ? "Filter by care location" : "Filter by hospital"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {hospitalOptions.map(hospital => (
-                    <SelectItem key={hospital} value={hospital}>
-                      {hospital === 'all' ? (isConsent ? 'All Locations' : 'All Hospitals') : hospital}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {!isAllSurveysMode && !isGenericSurvey && (
+                <Select onValueChange={setHospitalFilter} value={hospitalFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder={isConsent ? "Filter by care location" : "Filter by hospital"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hospitalOptions.map(hospital => (
+                      <SelectItem key={hospital} value={hospital}>
+                        {hospital === 'all' ? (isConsent ? 'All Locations' : 'All Hospitals') : hospital}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Active Filters Display */}
@@ -1400,13 +1462,13 @@ export default function Dashboard() {
                     <X className="h-3 w-3 cursor-pointer" onClick={() => setDateRange('all')} />
                   </Badge>
                 )}
-                {ratingFilter !== 'all' && (
+                {!isAllSurveysMode && !isGenericSurvey && ratingFilter !== 'all' && (
                   <Badge variant="secondary" className="flex items-center gap-1">
                     Rating: {ratingFilter === 'excellent' ? 'Excellent' : ratingFilter === 'good' ? 'Good' : 'Poor'}
                     <X className="h-3 w-3 cursor-pointer" onClick={() => setRatingFilter('all')} />
                   </Badge>
                 )}
-                {hospitalFilter !== 'all' && (
+                {!isAllSurveysMode && !isGenericSurvey && hospitalFilter !== 'all' && (
                   <Badge variant="secondary" className="flex items-center gap-1">
                     Hospital: {hospitalFilter}
                     <X className="h-3 w-3 cursor-pointer" onClick={() => setHospitalFilter('all')} />
@@ -1424,33 +1486,71 @@ export default function Dashboard() {
 
           {/* Key Metrics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Key metrics overview">
-            {/* Card 1: Total Submissions (same for both) */}
-            <UCard className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 backdrop-blur-sm border-blue-200/50 dark:border-blue-800/50" role="article" aria-labelledby="submissions-title">
+            {/* Card 1: Submissions - shows per-survey breakdown in All Surveys mode */}
+            <UCard className={`bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 backdrop-blur-sm border-blue-200/50 dark:border-blue-800/50 ${isAllSurveysMode ? 'lg:col-span-2' : ''}`} role="article" aria-labelledby="submissions-title">
               <CardHeader className="pb-2">
                 <CardTitle id="submissions-title" className="text-base flex items-center gap-2 text-blue-900 dark:text-blue-100">
                   <ClipboardList className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                  Submissions
+                  {isAllSurveysMode ? 'Submissions by Survey' : 'Submissions'}
                 </CardTitle>
-                <CardDescription>Total responses ({filtered.length} filtered)</CardDescription>
+                <CardDescription>
+                  {isAllSurveysMode
+                    ? `${metrics.total} total responses across ${(metrics as any).surveysCount || 0} surveys`
+                    : `Total responses (${filtered.length} filtered)`
+                  }
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="text-3xl font-bold text-blue-700 dark:text-blue-300" aria-live="polite">{metrics.total}</div>
+                {isAllSurveysMode ? (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {((metrics as any).overviewMetrics?.surveyBreakdown || []).slice(0, 6).map((survey: any, idx: number) => (
+                      <div key={survey.surveyId} className="flex items-center justify-between text-sm py-1 border-b last:border-b-0">
+                        <span className="truncate flex-1 mr-2 font-medium">{survey.surveyTitle}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-blue-700 dark:text-blue-300 font-bold">{survey.count}</span>
+                          <span className="text-xs text-muted-foreground">({survey.percentage}%)</span>
+                        </div>
+                      </div>
+                    ))}
+                    {((metrics as any).overviewMetrics?.surveyBreakdown || []).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No submissions yet</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-3xl font-bold text-blue-700 dark:text-blue-300" aria-live="polite">{metrics.total}</div>
+                )}
               </CardContent>
             </UCard>
 
-            {/* Card 2: Different based on survey type */}
-            {isAllSurveysMode ? (
-              <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50" role="article" aria-labelledby="locations-title">
+
+            {/* Card 2: Most Recent 5 Preview for All Surveys and Generic Surveys, else type-specific */}
+            {isAllSurveysMode || isGenericSurvey ? (
+              <UCard className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 backdrop-blur-sm border-emerald-200/50 dark:border-emerald-800/50 md:col-span-2" role="article" aria-labelledby="recent-preview-title">
                 <CardHeader className="pb-2">
-                  <CardTitle id="locations-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
-                    <MapPin className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                    Active Locations
+                  <CardTitle id="recent-preview-title" className="text-base flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                    <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    Recent Submissions
                   </CardTitle>
-                  <CardDescription>Unique cities/hospitals</CardDescription>
+                  <CardDescription>Latest 5 entries</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">
-                    {(metrics as any).activeLocations || 0}
+                  <div className="space-y-2">
+                    {filtered.slice(0, 5).map((sub, idx) => (
+                      <div key={sub.id} className="flex items-center justify-between text-sm py-1 border-b last:border-b-0 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1" onClick={() => openSubmissionModal(sub)}>
+                        <span className="truncate flex-1 mr-2">
+                          {isGenericSurvey
+                            ? extractName(sub) || `Submission ${idx + 1}`
+                            : surveyTitleMap.get(sub.surveyId) || 'Unknown Survey'
+                          }
+                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(sub.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    ))}
+                    {filtered.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No submissions yet</p>
+                    )}
                   </div>
                 </CardContent>
               </UCard>
@@ -1496,72 +1596,52 @@ export default function Dashboard() {
               </UCard>
             )}
 
-            {/* Card 3: Different based on survey type */}
-            {/* Card 3: Different based on survey type */}
-            {isAllSurveysMode ? (
-              <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="trend-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="trend-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                    <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
-                    Daily Trend
-                  </CardTitle>
-                  <CardDescription>Vs. Yesterday</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex items-end justify-between">
-                    <div className="text-3xl font-bold text-purple-700 dark:text-purple-300" aria-live="polite">
-                      {(() => {
-                        const trend = (metrics as any).dailyTrend || 0;
-                        return trend > 0 ? `+${trend}%` : `${trend}%`;
-                      })()}
+            {/* Card 3: Hidden in All Surveys mode and Generic Survey mode, else type-specific */}
+            {!isAllSurveysMode && !isGenericSurvey && (
+              isConsent ? (
+                <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="location-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="location-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                      <Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+                      Top Location
+                    </CardTitle>
+                    <CardDescription>Most common city</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">
+                      {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.city || 'N/A'}
                     </div>
-                  </div>
-                </CardContent>
-              </UCard>
-            ) : isConsent ? (
-              <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="location-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="location-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                    <Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
-                    Top Location
-                  </CardTitle>
-                  <CardDescription>Most common city</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-lg font-bold truncate text-purple-700 dark:text-purple-300" aria-live="polite">
-                    {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.city || 'N/A'}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.count || 0} submissions
-                  </div>
-                </CardContent>
-              </UCard>
-            ) : (
-              <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="nps-title">
-                <CardHeader className="pb-2">
-                  <CardTitle id="nps-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                    <Activity className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
-                    NPS Score
-                  </CardTitle>
-                  <CardDescription>Net Promoter Score</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="text-3xl font-bold text-purple-700 dark:text-purple-300" aria-live="polite">
-                    {(metrics as any).npsScore || 0}
-                  </div>
-                  <div className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">
-                    -100 to +100
-                  </div>
-                </CardContent>
-              </UCard>
-            )}
+                    <div className="text-sm text-muted-foreground">
+                      {(metrics as any).consentMetrics?.geographicDistribution?.[0]?.count || 0} submissions
+                    </div>
+                  </CardContent>
+                </UCard>
+              ) : (
+                <UCard className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 backdrop-blur-sm border-purple-200/50 dark:border-purple-800/50" role="article" aria-labelledby="nps-title">
+                  <CardHeader className="pb-2">
+                    <CardTitle id="nps-title" className="text-base flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                      <Activity className="h-4 w-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+                      NPS Score
+                    </CardTitle>
+                    <CardDescription>Net Promoter Score</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-3xl font-bold text-purple-700 dark:text-purple-300" aria-live="polite">
+                      {(metrics as any).npsScore || 0}
+                    </div>
+                    <div className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">
+                      -100 to +100
+                    </div>
+                  </CardContent>
+                </UCard>
+              ))}
 
           </div>
 
           {/* Advanced Insights Section - Now Always Visible */}
           <div className="grid gap-4">
-            {/* Sentiment Distribution / Consent Preferences - Hide in overview mode */}
-            {!isAllSurveysMode && (
+            {/* Sentiment Distribution / Consent Preferences - Hide in overview mode and generic survey mode */}
+            {!isAllSurveysMode && !isGenericSurvey && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {isConsent ? (
                   <>
@@ -1651,8 +1731,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Hospital Rankings and Response Trends - Hide in overview mode */}
-            {!isAllSurveysMode && (
+            {/* Hospital Rankings and Response Trends - Hide in overview mode and generic survey mode */}
+            {!isAllSurveysMode && !isGenericSurvey && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {isConsent ? (
                   <Card>
@@ -1798,508 +1878,513 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Dynamic Chart Section */}
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Analytics Dashboard</CardTitle>
-                  <CardDescription>Interactive charts for key metrics</CardDescription>
+          {/* Dynamic Chart Section - Hidden in All Surveys mode and generic survey mode for simplified view */}
+          {!isAllSurveysMode && !isGenericSurvey && (
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Analytics Dashboard</CardTitle>
+                    <CardDescription>Interactive charts for key metrics</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Select value={selectedChart} onValueChange={(value: any) => setSelectedChart(value)}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {isAllSurveysMode ? (
+                          <>
+                            <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
+                            <SelectItem key="chart-survey-breakdown" value="surveyBreakdown">Survey Breakdown</SelectItem>
+                            <SelectItem key="chart-geography" value="geography">Geographic Distribution</SelectItem>
+                          </>
+                        ) : isConsent ? (
+                          <>
+                            <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
+                            <SelectItem key="chart-scd-connection" value="scdConnection">SCD Connection Types</SelectItem>
+                            <SelectItem key="chart-contact-preferences" value="contactPreferences">Contact Preferences</SelectItem>
+                            <SelectItem key="chart-geography" value="geography">Top Locations</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem key="chart-rating" value="rating">Rating Trends</SelectItem>
+                            <SelectItem key="chart-pain" value="pain">Pain Scores</SelectItem>
+                            <SelectItem key="chart-wait" value="wait">Wait Times</SelectItem>
+                            <SelectItem key="chart-stay" value="stay">Length of Stay</SelectItem>
+                            <SelectItem key="chart-satisfaction" value="satisfaction">Department Satisfaction</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const csv = [
+                          ['Date', 'Hospital', 'Rating', 'Experience', 'Survey ID'],
+                          ...filtered.map(s => [
+                            safeFormatDateForExport(s.submittedAt),
+                            getHospitalOrLocation(s, isConsent),
+                            s.rating ?? '',
+                            (s.hospitalInteraction || '').replace(/,/g, ';'),
+                            s.surveyId
+                          ])
+                        ].map(row => row.join(',')).join('\n')
+
+                        const blob = new Blob([csv], { type: 'text/csv' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `feedback-export-${new Date().toISOString().split('T')[0]}.csv`
+                        a.click()
+                      }}
+                    >
+                      Export CSV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.print()}
+                    >
+                      Print
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadChartAsPNG}
+                      title="Download current chart as PNG"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Select value={selectedChart} onValueChange={(value: any) => setSelectedChart(value)}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isAllSurveysMode ? (
-                        <>
-                          <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
-                          <SelectItem key="chart-survey-breakdown" value="surveyBreakdown">Survey Breakdown</SelectItem>
-                          <SelectItem key="chart-geography" value="geography">Geographic Distribution</SelectItem>
-                        </>
-                      ) : isConsent ? (
-                        <>
-                          <SelectItem key="chart-submissions" value="submissions">Submissions Over Time</SelectItem>
-                          <SelectItem key="chart-scd-connection" value="scdConnection">SCD Connection Types</SelectItem>
-                          <SelectItem key="chart-contact-preferences" value="contactPreferences">Contact Preferences</SelectItem>
-                          <SelectItem key="chart-geography" value="geography">Top Locations</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem key="chart-rating" value="rating">Rating Trends</SelectItem>
-                          <SelectItem key="chart-pain" value="pain">Pain Scores</SelectItem>
-                          <SelectItem key="chart-wait" value="wait">Wait Times</SelectItem>
-                          <SelectItem key="chart-stay" value="stay">Length of Stay</SelectItem>
-                          <SelectItem key="chart-satisfaction" value="satisfaction">Department Satisfaction</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const csv = [
-                        ['Date', 'Hospital', 'Rating', 'Experience', 'Survey ID'],
-                        ...filtered.map(s => [
-                          safeFormatDateForExport(s.submittedAt),
-                          getHospitalOrLocation(s, isConsent),
-                          s.rating ?? '',
-                          (s.hospitalInteraction || '').replace(/,/g, ';'),
-                          s.surveyId
-                        ])
-                      ].map(row => row.join(',')).join('\n')
-
-                      const blob = new Blob([csv], { type: 'text/csv' })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `feedback-export-${new Date().toISOString().split('T')[0]}.csv`
-                      a.click()
-                    }}
-                  >
-                    Export CSV
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.print()}
-                  >
-                    Print
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={downloadChartAsPNG}
-                    title="Download current chart as PNG"
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="h-80 w-full">
-                {/* Overview charts */}
-                {isAllSurveysMode && selectedChart === 'submissions' && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-                      <defs>
-                        <linearGradient id="colorSubmissions" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12 }}
-                        label={{ value: 'All Submissions', angle: -90, position: 'insideLeft' }}
-                      />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="hsl(var(--primary))"
-                        fillOpacity={1}
-                        fill="url(#colorSubmissions)"
-                        name="Submissions"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-
-                {isAllSurveysMode && selectedChart === 'surveyBreakdown' && (
-                  (chartData as any).surveyBreakdown?.length > 0 ? (
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="h-80 w-full">
+                  {/* Overview charts */}
+                  {isAllSurveysMode && selectedChart === 'submissions' && (
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={(chartData as any).surveyBreakdown}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={5}
-                          dataKey="count"
-                          nameKey="surveyTitle"
-                        >
-                          {(chartData as any).surveyBreakdown.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"][index % 6]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No survey data available</div>
-                  )
-                )}
-
-                {isAllSurveysMode && selectedChart === 'geography' && (
-                  (chartData as any).geography?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                      <AreaChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                        <defs>
+                          <linearGradient id="colorSubmissions" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                         <XAxis
-                          dataKey="location"
+                          dataKey="date"
                           tick={{ fontSize: 12 }}
                           angle={-45}
                           textAnchor="end"
-                          height={100}
-                        />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Submissions" fill="#8b5cf6" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No geographic data available</div>
-                  )
-                )}
-
-                {/* Consent charts */}
-                {isConsent && selectedChart === 'submissions' && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-                      <defs>
-                        <linearGradient id="colorSubmissionsConsent" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12 }}
-                        label={{ value: 'Submissions', angle: -90, position: 'insideLeft' }}
-                      />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="hsl(var(--primary))"
-                        fillOpacity={1}
-                        fill="url(#colorSubmissionsConsent)"
-                        name="Submissions"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-
-                {isConsent && selectedChart === 'scdConnection' && (
-                  (chartData as any).scdConnection?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(chartData as any).scdConnection} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                        <XAxis
-                          dataKey="type"
-                          tick={{ fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={100}
-                        />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Count" fill="#3b82f6" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No SCD connection data available</div>
-                  )
-                )}
-
-                {isConsent && selectedChart === 'contactPreferences' && (
-                  (chartData as any).contactPreferences?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(chartData as any).contactPreferences} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                        <XAxis dataKey="preference" tick={{ fontSize: 12 }} />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Count">
-                          {(chartData as any).contactPreferences.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b"][index % 4]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No contact preference data available</div>
-                  )
-                )}
-
-                {isConsent && selectedChart === 'geography' && (
-                  (chartData as any).geography?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                        <XAxis dataKey="city" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={100} />
-                        <YAxis tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Submissions" fill="#10b981" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No location data available</div>
-                  )
-                )}
-
-                {/* Feedback charts */}
-                {!isConsent && selectedChart === 'rating' && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={ratingOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-                      <defs>
-                        <linearGradient id="colorRating" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis
-                        domain={[0, 10]}
-                        tick={{ fontSize: 12 }}
-                        label={{ value: 'Rating', angle: -90, position: 'insideLeft' }}
-                      />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="avg"
-                        stroke="hsl(var(--primary))"
-                        fillOpacity={1}
-                        fill="url(#colorRating)"
-                        name="Avg Rating"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-
-                {!isConsent && selectedChart === 'pain' && (
-                  chartData.painScores.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData.painScores} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                        <XAxis
-                          dataKey="score"
-                          tick={{ fontSize: 12 }}
-                          label={{ value: 'Pain Score (0-10)', position: 'insideBottom', offset: -5 }}
+                          height={60}
                         />
                         <YAxis
                           tick={{ fontSize: 12 }}
-                          label={{ value: 'Number of Patients', angle: -90, position: 'insideLeft' }}
+                          label={{ value: 'All Submissions', angle: -90, position: 'insideLeft' }}
                         />
                         <Tooltip />
-                        <Bar dataKey="count" name="Patients">
-                          {chartData.painScores.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={
-                              entry.score <= 3 ? '#10b981' :
-                                entry.score <= 6 ? '#f59e0b' : '#ef4444'
-                            } />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      No pain score data available
-                    </div>
-                  )
-                )}
-
-                {!isConsent && selectedChart === 'wait' && (
-                  chartData.waitTimes.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={chartData.waitTimes}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          paddingAngle={2}
+                        <Area
+                          type="monotone"
                           dataKey="count"
-                          nameKey="category"
-                        >
-                          {chartData.waitTimes.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={
-                              ['#10b981', '#34d399', '#f59e0b', '#fb923c', '#ef4444', '#dc2626'][index % 6]
-                            } />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
+                          stroke="hsl(var(--primary))"
+                          fillOpacity={1}
+                          fill="url(#colorSubmissions)"
+                          name="Submissions"
+                        />
+                      </AreaChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      No wait time data available
-                    </div>
-                  )
-                )}
+                  )}
 
-                {!isConsent && selectedChart === 'stay' && (
-                  chartData.stayLength.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={chartData.stayLength}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          paddingAngle={2}
-                          dataKey="count"
-                          nameKey="category"
-                        >
-                          {chartData.stayLength.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={
-                              ['#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#eff6ff'][index % 5]
-                            } />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      No length of stay data available
-                    </div>
-                  )
-                )}
+                  {isAllSurveysMode && selectedChart === 'surveyBreakdown' && (
+                    (chartData as any).surveyBreakdown?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={(chartData as any).surveyBreakdown}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={5}
+                            dataKey="count"
+                            nameKey="surveyTitle"
+                          >
+                            {(chartData as any).surveyBreakdown.map((_: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"][index % 6]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">No survey data available</div>
+                    )
+                  )}
 
-                {!isConsent && selectedChart === 'satisfaction' && (
-                  chartData.departmentSatisfaction.length > 0 ? (
+                  {isAllSurveysMode && selectedChart === 'geography' && (
+                    (chartData as any).geography?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis
+                            dataKey="location"
+                            tick={{ fontSize: 12 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                          />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Submissions" fill="#8b5cf6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">No geographic data available</div>
+                    )
+                  )}
+
+                  {/* Consent charts */}
+                  {isConsent && selectedChart === 'submissions' && (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData.departmentSatisfaction} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                      <AreaChart data={submissionsOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                        <defs>
+                          <linearGradient id="colorSubmissionsConsent" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                         <XAxis
-                          dataKey="department"
-                          tick={{ fontSize: 11 }}
+                          dataKey="date"
+                          tick={{ fontSize: 12 }}
                           angle={-45}
                           textAnchor="end"
-                          height={100}
+                          height={60}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12 }}
+                          label={{ value: 'Submissions', angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip />
+                        <Area
+                          type="monotone"
+                          dataKey="count"
+                          stroke="hsl(var(--primary))"
+                          fillOpacity={1}
+                          fill="url(#colorSubmissionsConsent)"
+                          name="Submissions"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+
+                  {isConsent && selectedChart === 'scdConnection' && (
+                    (chartData as any).scdConnection?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(chartData as any).scdConnection} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis
+                            dataKey="type"
+                            tick={{ fontSize: 12 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                          />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Count" fill="#3b82f6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">No SCD connection data available</div>
+                    )
+                  )}
+
+                  {isConsent && selectedChart === 'contactPreferences' && (
+                    (chartData as any).contactPreferences?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(chartData as any).contactPreferences} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis dataKey="preference" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Count">
+                            {(chartData as any).contactPreferences.map((_: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b"][index % 4]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">No contact preference data available</div>
+                    )
+                  )}
+
+                  {isConsent && selectedChart === 'geography' && (
+                    (chartData as any).geography?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(chartData as any).geography} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis dataKey="city" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={100} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Submissions" fill="#10b981" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">No location data available</div>
+                    )
+                  )}
+
+                  {/* Feedback charts */}
+                  {!isConsent && selectedChart === 'rating' && (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={ratingOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                        <defs>
+                          <linearGradient id="colorRating" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
                         />
                         <YAxis
                           domain={[0, 10]}
                           tick={{ fontSize: 12 }}
-                          label={{ value: 'Average Rating', angle: -90, position: 'insideLeft' }}
+                          label={{ value: 'Rating', angle: -90, position: 'insideLeft' }}
                         />
                         <Tooltip />
-                        <Bar dataKey="avgRating" name="Avg Rating">
-                          {chartData.departmentSatisfaction.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={
-                              parseFloat(entry.avgRating) >= 8 ? '#10b981' :
-                                parseFloat(entry.avgRating) >= 5 ? '#f59e0b' : '#ef4444'
-                            } />
-                          ))}
-                        </Bar>
-                      </BarChart>
+                        <Area
+                          type="monotone"
+                          dataKey="avg"
+                          stroke="hsl(var(--primary))"
+                          fillOpacity={1}
+                          fill="url(#colorRating)"
+                          name="Avg Rating"
+                        />
+                      </AreaChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      No department satisfaction data available
-                    </div>
-                  )
-                )}
-              </div>
-
-              {/* Chart Description */}
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  {isConsent && selectedChart === 'submissions' && 'Shows the number of consent submissions over time.'}
-                  {isConsent && selectedChart === 'scdConnection' && 'Breakdown of users\' connection to SCD (patient, caregiver, HCP, etc.).'}
-                  {isConsent && selectedChart === 'contactPreferences' && 'Counts of users opting into contact, mailing list, support groups, and advocacy.'}
-                  {isConsent && selectedChart === 'geography' && 'Top cities represented in consent submissions.'}
-                  {!isConsent && selectedChart === 'rating' && 'Shows the average rating trend over time for all submissions.'}
-                  {!isConsent && selectedChart === 'pain' && 'Distribution of pain scores reported by patients (0 = no pain, 10 = severe pain).'}
-                  {!isConsent && selectedChart === 'wait' && 'Breakdown of emergency department wait times across different time ranges.'}
-                  {!isConsent && selectedChart === 'stay' && 'Distribution of patient length of stay in the hospital.'}
-                  {!isConsent && selectedChart === 'satisfaction' && 'Average satisfaction ratings by hospital department.'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-[#C8262A]" />
-                Smart Report Generation
-              </CardTitle>
-              <CardDescription>
-                create customizable PDF reports with high-level insights and data summaries
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2 mb-4">
-                <Button onClick={handleAnalyzeFeedback} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader className="mr-2 h-4 w-4 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    'Prepare Report'
                   )}
-                </Button>
-                {typeof analysis === 'string' && analysis.length > 0 && (
-                  <Button
-                    className="bg-gradient-to-br from-[#C8262A] to-[#D34040] hover:from-[#C8262A]/90 hover:to-[#D34040]/90 text-white"
-                    size="default"
-                    onClick={async () => {
-                      const res = await generateAnalysisPdf({
-                        title: 'Comprehensive Feedback Report',
-                        surveyId: selectedSurvey === 'all' ? 'all' : selectedSurvey,
-                        analysisMarkdown: analysis,
-                        includeSubmissions: true
-                      })
-                      if (res.error || !res.pdfBase64) return
-                      const link = document.createElement('a')
-                      link.href = `data:application/pdf;base64,${res.pdfBase64}`
-                      link.download = `comprehensive-report-${selectedSurvey}.pdf`
-                      link.click()
-                    }}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Report
-                  </Button>
-                )}
-              </div>
-              {error && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Analysis Error</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              {analysis && (
-                <div className="mt-6">
-                  <AnalysisDisplay analysisText={analysis} />
+
+                  {!isConsent && selectedChart === 'pain' && (
+                    chartData.painScores.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData.painScores} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis
+                            dataKey="score"
+                            tick={{ fontSize: 12 }}
+                            label={{ value: 'Pain Score (0-10)', position: 'insideBottom', offset: -5 }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 12 }}
+                            label={{ value: 'Number of Patients', angle: -90, position: 'insideLeft' }}
+                          />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Patients">
+                            {chartData.painScores.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                entry.score <= 3 ? '#10b981' :
+                                  entry.score <= 6 ? '#f59e0b' : '#ef4444'
+                              } />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No pain score data available
+                      </div>
+                    )
+                  )}
+
+                  {!isConsent && selectedChart === 'wait' && (
+                    chartData.waitTimes.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={chartData.waitTimes}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={2}
+                            dataKey="count"
+                            nameKey="category"
+                          >
+                            {chartData.waitTimes.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                ['#10b981', '#34d399', '#f59e0b', '#fb923c', '#ef4444', '#dc2626'][index % 6]
+                              } />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No wait time data available
+                      </div>
+                    )
+                  )}
+
+                  {!isConsent && selectedChart === 'stay' && (
+                    chartData.stayLength.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={chartData.stayLength}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={2}
+                            dataKey="count"
+                            nameKey="category"
+                          >
+                            {chartData.stayLength.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                ['#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#eff6ff'][index % 5]
+                              } />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No length of stay data available
+                      </div>
+                    )
+                  )}
+
+                  {!isConsent && selectedChart === 'satisfaction' && (
+                    chartData.departmentSatisfaction.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData.departmentSatisfaction} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis
+                            dataKey="department"
+                            tick={{ fontSize: 11 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                          />
+                          <YAxis
+                            domain={[0, 10]}
+                            tick={{ fontSize: 12 }}
+                            label={{ value: 'Average Rating', angle: -90, position: 'insideLeft' }}
+                          />
+                          <Tooltip />
+                          <Bar dataKey="avgRating" name="Avg Rating">
+                            {chartData.departmentSatisfaction.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={
+                                parseFloat(entry.avgRating) >= 8 ? '#10b981' :
+                                  parseFloat(entry.avgRating) >= 5 ? '#f59e0b' : '#ef4444'
+                              } />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No department satisfaction data available
+                      </div>
+                    )
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                {/* Chart Description */}
+                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    {isConsent && selectedChart === 'submissions' && 'Shows the number of consent submissions over time.'}
+                    {isConsent && selectedChart === 'scdConnection' && 'Breakdown of users\' connection to SCD (patient, caregiver, HCP, etc.).'}
+                    {isConsent && selectedChart === 'contactPreferences' && 'Counts of users opting into contact, mailing list, support groups, and advocacy.'}
+                    {isConsent && selectedChart === 'geography' && 'Top cities represented in consent submissions.'}
+                    {!isConsent && selectedChart === 'rating' && 'Shows the average rating trend over time for all submissions.'}
+                    {!isConsent && selectedChart === 'pain' && 'Distribution of pain scores reported by patients (0 = no pain, 10 = severe pain).'}
+                    {!isConsent && selectedChart === 'wait' && 'Breakdown of emergency department wait times across different time ranges.'}
+                    {!isConsent && selectedChart === 'stay' && 'Distribution of patient length of stay in the hospital.'}
+                    {!isConsent && selectedChart === 'satisfaction' && 'Average satisfaction ratings by hospital department.'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Smart Report Generation - Hidden in All Surveys mode and generic survey mode */}
+          {!isAllSurveysMode && !isGenericSurvey && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-[#C8262A]" />
+                  Smart Report Generation
+                </CardTitle>
+                <CardDescription>
+                  create customizable PDF reports with high-level insights and data summaries
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Button onClick={handleAnalyzeFeedback} disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader className="mr-2 h-4 w-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      'Prepare Report'
+                    )}
+                  </Button>
+                  {typeof analysis === 'string' && analysis.length > 0 && (
+                    <Button
+                      className="bg-gradient-to-br from-[#C8262A] to-[#D34040] hover:from-[#C8262A]/90 hover:to-[#D34040]/90 text-white"
+                      size="default"
+                      onClick={async () => {
+                        const res = await generateAnalysisPdf({
+                          title: 'Comprehensive Feedback Report',
+                          surveyId: selectedSurvey === 'all' ? 'all' : selectedSurvey,
+                          analysisMarkdown: analysis,
+                          includeSubmissions: true
+                        })
+                        if (res.error || !res.pdfBase64) return
+                        const link = document.createElement('a')
+                        link.href = `data:application/pdf;base64,${res.pdfBase64}`
+                        link.download = `comprehensive-report-${selectedSurvey}.pdf`
+                        link.click()
+                      }}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Report
+                    </Button>
+                  )}
+                </div>
+                {error && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Analysis Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                {analysis && (
+                  <div className="mt-6">
+                    <AnalysisDisplay analysisText={analysis} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
           <Card id="submissions-table-section" className="border-t-4 border-t-[#C8262A]">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
@@ -2372,11 +2457,11 @@ export default function Dashboard() {
                                 View
                               </Button>
                             </div>
-                            {isConsent ? (
+                            {isConsent || isGenericSurvey ? (
                               <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Name:</span>
-                                  <span className="font-medium">{`${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'N/A'}</span>
+                                  <span className="font-medium">{extractName(submission) || 'N/A'}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Email:</span>
@@ -2431,7 +2516,7 @@ export default function Dashboard() {
                       <TableRow className="bg-muted/30">
                         <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Date</TableHead>
                         <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Survey</TableHead>
-                        {isConsent ? (
+                        {isConsent || isGenericSurvey ? (
                           <>
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Email</TableHead>
@@ -2496,10 +2581,10 @@ export default function Dashboard() {
                                 {getSurveyDisplayName(submission.surveyId)}
                               </Badge>
                             </TableCell>
-                            {isConsent ? (
+                            {isConsent || isGenericSurvey ? (
                               <>
                                 <TableCell className="py-4 text-sm font-medium text-foreground">
-                                  {`${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'N/A'}
+                                  {extractName(submission) || 'N/A'}
                                 </TableCell>
                                 <TableCell className="py-4 text-sm">{(submission as any)?.email || 'N/A'}</TableCell>
                                 <TableCell className="py-4 text-sm">{getHospitalOrLocation(submission, true)}</TableCell>
@@ -2614,7 +2699,7 @@ export default function Dashboard() {
                           }
                         </h2>
                         {/* Subtitle with Hospital/Location info */}
-                        {isConsent ? (
+                        {isGenericSurvey ? null : isConsent ? (
                           <p className="text-lg font-medium text-white/95">
                             {activeSubmission ? getHospitalOrLocation(activeSubmission, true) : 'Unknown Location'}
                           </p>
@@ -2636,7 +2721,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                       </div>
-                      {!isConsent && activeSubmission?.rating !== undefined && (
+                      {!isConsent && !isGenericSurvey && activeSubmission?.rating !== undefined && (
                         <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeSubmission.rating >= 8 ? 'bg-green-500 text-white' :
                           activeSubmission.rating >= 5 ? 'bg-yellow-500 text-white' :
                             'bg-white text-[#C8262A]'
@@ -2655,7 +2740,7 @@ export default function Dashboard() {
                       {/* Modernized Submission Details Interface - Clean Q&A Layout */}
                       <div className="space-y-5 px-6 py-5">
                         {/* Experience Highlight Box */}
-                        {activeSubmission.hospitalInteraction && (
+                        {!isGenericSurvey && activeSubmission.hospitalInteraction && (
                           <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border-l-4 border-[#C8262A]">
                             <h3 className="text-sm font-semibold text-[#C8262A] mb-2 uppercase tracking-wide">
                               Patient Experience

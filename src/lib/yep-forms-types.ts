@@ -3,12 +3,13 @@ import { z } from 'zod';
 // YEP Form Categories
 export enum YEPFormCategory {
   MENTOR = 'mentor',
-  PARTICIPANT = 'participant', 
+  PARTICIPANT = 'participant',
   WORKSHOP = 'workshop',
   MEETING = 'meeting',
   ATTENDANCE = 'attendance',
   BULK_ATTENDANCE = 'bulk_attendance',
-  BULK_MEETING = 'bulk_meeting'
+  BULK_MEETING = 'bulk_meeting',
+  BOARD_RECRUITMENT = 'board_recruitment'
 }
 
 // YEP-specific field types
@@ -25,13 +26,13 @@ export enum YEPFieldType {
 }
 
 // Extended field type union (includes all survey types + YEP types)
-export type ExtendedFieldType = 
-  | 'text' | 'textarea' | 'email' | 'phone' | 'url' | 'date' | 'time' | 'time-amount' | 'number' 
-  | 'digital-signature' | 'select' | 'radio' | 'checkbox' | 'slider' | 'rating' | 'nps' 
-  | 'group' | 'boolean-checkbox' | 'anonymous-toggle' | 'province-ca' | 'city-on' | 'hospital-on' 
-  | 'department-on' | 'duration-hm' | 'duration-dh' | 'file-upload' | 'multi-text' | 'matrix-single' 
-  | 'matrix-multiple' | 'likert-scale' | 'pain-scale' | 'calculated' | 'ranking' | 'datetime' 
-  | 'color' | 'range' | 'percentage' | 'currency'
+export type ExtendedFieldType =
+  | 'text' | 'textarea' | 'email' | 'phone' | 'url' | 'date' | 'time' | 'time-amount' | 'number'
+  | 'digital-signature' | 'select' | 'radio' | 'checkbox' | 'slider' | 'rating' | 'nps'
+  | 'group' | 'boolean-checkbox' | 'anonymous-toggle' | 'province-ca' | 'city-on' | 'hospital-on'
+  | 'department-on' | 'duration-hm' | 'duration-dh' | 'file-upload' | 'multi-text' | 'matrix-single'
+  | 'matrix-multiple' | 'matrix-text' | 'likert-scale' | 'pain-scale' | 'calculated' | 'ranking' | 'datetime'
+  | 'color' | 'range' | 'percentage' | 'currency' | 'logo' | 'text-block' | 'boolean-row'
   | keyof typeof YEPFieldType;
 
 // YEP Form Field Configuration
@@ -63,6 +64,11 @@ export interface YEPFormField {
   helperText?: string;
   prefix?: string;
   suffix?: string;
+  // Logo / Image properties
+  logoUrl?: string;
+  altText?: string;
+  alignment?: 'left' | 'center' | 'right';
+  width?: string;
   // YEP-specific field properties
   yepConfig?: {
     targetEntity?: 'participant' | 'mentor' | 'workshop' | 'meeting';
@@ -71,6 +77,7 @@ export interface YEPFormField {
     secureField?: boolean;
     bulkEntry?: boolean;
   };
+  className?: string;
 }
 
 // YEP Form Section
@@ -165,6 +172,10 @@ export const yepFormFieldSchema: z.ZodType<YEPFormField> = z.lazy(() => z.object
   helperText: z.string().optional(),
   prefix: z.string().optional(),
   suffix: z.string().optional(),
+  logoUrl: z.string().optional(),
+  altText: z.string().optional(),
+  alignment: z.enum(['left', 'center', 'right']).optional(),
+  width: z.string().optional(),
   yepConfig: z.object({
     targetEntity: z.enum(['participant', 'mentor', 'workshop', 'meeting']).optional(),
     allowCreate: z.boolean().optional(),
@@ -172,6 +183,7 @@ export const yepFormFieldSchema: z.ZodType<YEPFormField> = z.lazy(() => z.object
     secureField: z.boolean().optional(),
     bulkEntry: z.boolean().optional(),
   }).optional(),
+  className: z.string().optional(),
 }));
 
 export const yepFormSectionSchema = z.object({
@@ -246,6 +258,6 @@ export function getYEPFieldTypeConfig(type: YEPFieldType) {
       secureField: true,
     },
   };
-  
+
   return configs[type];
 }

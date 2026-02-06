@@ -19,6 +19,7 @@ import { ImportDialog } from '@/components/youth-empowerment/import-dialog';
 import { YEPInvites } from '@/components/admin/yep-invites';
 import { YEPBackfill } from '@/components/admin/yep-backfill';
 import { WebhookSettings } from '@/components/admin/webhook-settings';
+import { NavCustomization } from '@/components/admin/nav-customization';
 
 export default function AdminPage() {
   const { user, isAdmin, loading } = useAuth();
@@ -55,8 +56,8 @@ export default function AdminPage() {
             <p className="text-sm text-muted-foreground">
               Check browser console for errors. Firebase may not be configured correctly.
             </p>
-            <Button 
-              onClick={() => window.location.reload()} 
+            <Button
+              onClick={() => window.location.reload()}
               className="mt-4"
               variant="outline"
             >
@@ -255,7 +256,7 @@ export default function AdminPage() {
         <TabsContent value="yep" className="space-y-4">
           {/* Backfill Tools */}
           <YEPBackfill />
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -317,7 +318,7 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <Button 
+                  <Button
                     onClick={() => setIsImportDialogOpen(true)}
                     className="w-full justify-start"
                   >
@@ -367,12 +368,13 @@ export default function AdminPage() {
 
         {/* Platform Settings Tab */}
         <TabsContent value="settings" className="space-y-4">
+          <NavCustomization />
           <WebhookSettings />
         </TabsContent>
       </Tabs>
 
       {/* Import Dialog */}
-      <ImportDialog 
+      <ImportDialog
         isOpen={isImportDialogOpen}
         onClose={() => setIsImportDialogOpen(false)}
         onSuccess={() => {

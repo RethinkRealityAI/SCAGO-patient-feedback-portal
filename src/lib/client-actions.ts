@@ -67,7 +67,7 @@ function sanitizeFirestoreData<T>(value: T): T {
 export async function updateSurvey(surveyId: string, data: any) {
   try {
     if (!surveyId) return { error: 'Missing survey ID' };
-    
+
     // Debug: Check auth state
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -75,7 +75,7 @@ export async function updateSurvey(surveyId: string, data: any) {
       return { error: 'You must be logged in to update surveys. Please refresh the page and try again.' };
     }
     console.log('[updateSurvey] Authenticated as:', currentUser.email);
-    
+
     const { id, ...dataToSave } = data || {};
     // Prefer client-side write so Firestore uses the current user's auth context
     const cleaned = sanitizeFirestoreData(dataToSave);
@@ -103,7 +103,7 @@ export async function createBlankSurvey() {
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
     console.log('[createBlankSurvey] Authenticated as:', currentUser.email);
-    
+
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = {
       appearance: {
@@ -157,7 +157,7 @@ export async function createSurvey() {
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
     console.log('[createSurvey] Authenticated as:', currentUser.email);
-    
+
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = { ...defaultSurvey, title: 'Untitled Survey' } as any;
     await setDoc(newSurveyRef, sanitizeFirestoreData(newSurvey));
@@ -182,7 +182,7 @@ export async function createSurveyV2() {
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
     console.log('[createSurveyV2] Authenticated as:', currentUser.email);
-    
+
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = { ...surveyV2, title: 'Untitled Survey (V2)' } as any;
     await setDoc(newSurveyRef, sanitizeFirestoreData(newSurvey));
@@ -207,7 +207,7 @@ export async function createConsentSurvey() {
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
     console.log('[createConsentSurvey] Authenticated as:', currentUser.email);
-    
+
     const newSurveyRef = doc(collection(db, 'surveys'));
     await setDoc(newSurveyRef, sanitizeFirestoreData(consentSurvey as any));
     return { id: newSurveyRef.id };
@@ -219,6 +219,40 @@ export async function createConsentSurvey() {
       return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create consent survey' };
+  }
+}
+
+export async function createSurveyFromTemplate(template: any) {
+  try {
+    // Debug: Check auth state
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error('[createSurveyFromTemplate] No authenticated user found');
+      return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
+    }
+    console.log('[createSurveyFromTemplate] Authenticated as:', currentUser.email);
+
+    const newSurveyRef = doc(collection(db, 'surveys'));
+    // Ensure we don't carry over template-specific flags that shouldn't be in the instance
+    const { isTemplate, isActive, category, ...surveyData } = template;
+
+    const newSurvey = {
+      ...surveyData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: currentUser.email || 'unknown',
+    };
+
+    await setDoc(newSurveyRef, sanitizeFirestoreData(newSurvey));
+    return { id: newSurveyRef.id };
+  } catch (error) {
+    console.error('Error creating survey from template:', error);
+    console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
+    const err = error as any;
+    if (err?.code === 'permission-denied') {
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
+    }
+    return { error: 'Failed to create survey from template' };
   }
 }
 

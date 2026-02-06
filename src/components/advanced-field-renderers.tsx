@@ -24,23 +24,23 @@ interface AdvancedFieldProps {
 // Multi-Text Field (Add Multiple Entries)
 export function MultiTextField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || [''];
-  
+
   const addEntry = () => {
     form.setValue(fieldConfig.id, [...value, '']);
   };
-  
+
   const removeEntry = (index: number) => {
     if (value.length > 1) {
       form.setValue(fieldConfig.id, value.filter((_: any, i: number) => i !== index));
     }
   };
-  
+
   const updateEntry = (index: number, newValue: string) => {
     const updated = [...value];
     updated[index] = newValue;
     form.setValue(fieldConfig.id, updated);
   };
-  
+
   return (
     <div className="space-y-2">
       {value.map((entry: string, index: number) => (
@@ -70,17 +70,18 @@ export function MultiTextField({ fieldConfig, form }: AdvancedFieldProps) {
   );
 }
 
-// Matrix Field (Single or Multiple Choice)
+// Matrix Field (Single, Multiple Choice, or Text Input)
 export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
   const isMultiple = fieldConfig.type === 'matrix-multiple';
+  const isText = fieldConfig.type === 'matrix-text';
   const value = form.watch(fieldConfig.id) || {};
   const rows = fieldConfig.rows || [];
   const columns = fieldConfig.columns || [];
-  
+
   const handleSingleChoice = (rowValue: string, colValue: string) => {
     form.setValue(fieldConfig.id, { ...value, [rowValue]: colValue });
   };
-  
+
   const handleMultipleChoice = (rowValue: string, colValue: string) => {
     const currentRow = value[rowValue] || [];
     const updated = currentRow.includes(colValue)
@@ -88,7 +89,15 @@ export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
       : [...currentRow, colValue];
     form.setValue(fieldConfig.id, { ...value, [rowValue]: updated });
   };
-  
+
+  const handleTextChange = (rowValue: string, colValue: string, text: string) => {
+    const currentRow = value[rowValue] || {};
+    form.setValue(fieldConfig.id, {
+      ...value,
+      [rowValue]: { ...currentRow, [colValue]: text }
+    });
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
@@ -108,7 +117,14 @@ export function MatrixField({ fieldConfig, form }: AdvancedFieldProps) {
               <td className="border p-2 font-medium text-sm">{row.label}</td>
               {columns.map((col: any) => (
                 <td key={col.value} className="border p-2 text-center">
-                  {isMultiple ? (
+                  {isText ? (
+                    <Input
+                      value={value[row.value]?.[col.value] || ''}
+                      onChange={(e) => handleTextChange(row.value, col.value, e.target.value)}
+                      placeholder={col.label}
+                      className="h-8 text-sm"
+                    />
+                  ) : isMultiple ? (
                     <Checkbox
                       checked={value[row.value]?.includes(col.value) || false}
                       onCheckedChange={() => handleMultipleChoice(row.value, col.value)}
@@ -140,7 +156,7 @@ export function LikertScaleField({ fieldConfig, form }: AdvancedFieldProps) {
     { value: '4', label: 'Agree' },
     { value: '5', label: 'Strongly Agree' },
   ];
-  
+
   return (
     <RadioGroup value={value} onValueChange={(val) => form.setValue(fieldConfig.id, val)}>
       <div className="flex flex-col space-y-2">
@@ -173,7 +189,7 @@ export function PainScaleField({ fieldConfig, form }: AdvancedFieldProps) {
     { value: 9, label: '', color: 'bg-red-600' },
     { value: 10, label: 'Worst', color: 'bg-red-700' },
   ];
-  
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between gap-1">
@@ -206,7 +222,7 @@ export function PainScaleField({ fieldConfig, form }: AdvancedFieldProps) {
 // Ranking Field (Drag to Reorder)
 function SortableItem({ id, label, index }: { id: string; label: string; index: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  
+
   return (
     <div
       ref={setNodeRef}
@@ -232,7 +248,7 @@ function SortableItem({ id, label, index }: { id: string; label: string; index: 
 export function RankingField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || fieldConfig.options?.map((opt: any) => opt.value) || [];
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -241,11 +257,11 @@ export function RankingField({ fieldConfig, form }: AdvancedFieldProps) {
       form.setValue(fieldConfig.id, arrayMove(value, oldIndex, newIndex));
     }
   };
-  
+
   const getLabel = (val: string) => {
     return fieldConfig.options?.find((opt: any) => opt.value === val)?.label || val;
   };
-  
+
   return (
     <div className="space-y-3">
       <div className="text-sm text-muted-foreground">Drag items to reorder from most to least important</div>
@@ -266,7 +282,7 @@ export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
   const maxFiles = fieldConfig.maxFiles || 1;
   const maxFileSize = (fieldConfig.maxFileSize || 5) * 1024 * 1024; // Convert MB to bytes
   const allowedTypes = fieldConfig.fileTypes || ['.pdf', '.jpg', '.png'];
-  
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files).filter(file => {
@@ -278,13 +294,13 @@ export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
       form.setValue(fieldConfig.id, updatedFiles);
     }
   };
-  
+
   const removeFile = (index: number) => {
     const updated = files.filter((_, i) => i !== index);
     setFiles(updated);
     form.setValue(fieldConfig.id, updated);
   };
-  
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-center w-full">
@@ -308,7 +324,7 @@ export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
           />
         </label>
       </div>
-      
+
       {files.length > 0 && (
         <div className="space-y-2">
           {files.map((file, index) => (
@@ -331,7 +347,7 @@ export function FileUploadField({ fieldConfig, form }: AdvancedFieldProps) {
 // Date & Time Combined
 export function DateTimeField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || { date: '', time: '' };
-  
+
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -357,7 +373,7 @@ export function DateTimeField({ fieldConfig, form }: AdvancedFieldProps) {
 // Color Picker
 export function ColorPickerField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || '#000000';
-  
+
   return (
     <div className="flex items-center gap-3">
       <Input
@@ -382,7 +398,7 @@ export function RangeField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || { min: fieldConfig.min || 0, max: fieldConfig.max || 100 };
   const min = fieldConfig.min || 0;
   const max = fieldConfig.max || 100;
-  
+
   return (
     <div className="space-y-4">
       <Slider
@@ -404,7 +420,7 @@ export function RangeField({ fieldConfig, form }: AdvancedFieldProps) {
 // Percentage Field
 export function PercentageField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || 0;
-  
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -438,7 +454,7 @@ export function CurrencyField({ fieldConfig, form }: AdvancedFieldProps) {
   const value = form.watch(fieldConfig.id) || '';
   const prefix = fieldConfig.prefix || '$';
   const suffix = fieldConfig.suffix || 'CAD';
-  
+
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm font-medium text-muted-foreground">{prefix}</span>
@@ -464,12 +480,12 @@ export function CalculatedField({ fieldConfig, form }: AdvancedFieldProps) {
       // Simple calculation parsing - in production, use a proper expression parser
       let formula = fieldConfig.calculation;
       const fieldIds = formula.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-      
+
       fieldIds.forEach((id: string) => {
         const value = form.watch(id);
         formula = formula.replace(new RegExp(`\\b${id}\\b`, 'g'), value || '0');
       });
-      
+
       // Use Function constructor safely for calculation
       const result = new Function(`return ${formula}`)();
       return isNaN(result) ? '' : result.toFixed(2);
@@ -477,9 +493,9 @@ export function CalculatedField({ fieldConfig, form }: AdvancedFieldProps) {
       return 'Error';
     }
   };
-  
+
   const calculatedValue = calculateValue();
-  
+
   return (
     <div className="relative">
       <Input

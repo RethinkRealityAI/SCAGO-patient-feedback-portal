@@ -55,10 +55,22 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
 
             if (interactionsRes.success && interactionsRes.data) {
                 setInteractions(interactionsRes.data);
+            } else if (!interactionsRes.success) {
+                toast({
+                    title: 'Interactions Error',
+                    description: interactionsRes.error || 'Failed to load interactions',
+                    variant: 'destructive',
+                });
             }
 
             if (documentsRes.success && documentsRes.data) {
                 setDocuments(documentsRes.data);
+            } else if (!documentsRes.success) {
+                toast({
+                    title: 'Documents Error',
+                    description: documentsRes.error || 'Failed to load documents',
+                    variant: 'destructive',
+                });
             }
         } catch (error) {
             console.error('Error loading profile:', error);
@@ -389,7 +401,7 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="interactions" className="h-[600px]">
+                <TabsContent value="interactions" className="min-h-[400px]">
                     <PatientInteractions
                         patientId={patientId}
                         interactions={interactions}

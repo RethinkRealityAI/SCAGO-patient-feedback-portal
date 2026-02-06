@@ -128,16 +128,21 @@
 @layer components {
   /* Glass morphism utilities */
   .glass {
-    @apply bg-white/10 backdrop-blur-md border border-white/20;
-    box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.15);
+    @apply bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10;
+    box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  .glass-premium {
+    @apply bg-white/70 dark:bg-black/40 backdrop-blur-2xl border border-white/30 dark:border-white/10;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
   }
   
   .glass-card {
-    @apply glass rounded-xl shadow-glass;
+    @apply glass-premium rounded-2xl;
   }
   
   .glass-button {
-    @apply glass rounded-lg transition-all duration-300 hover:bg-white/20 active:scale-95;
+    @apply glass rounded-lg transition-all duration-300 hover:bg-white/60 dark:hover:bg-white/10 active:scale-95;
   }
   
   .glass-input {
@@ -145,6 +150,16 @@
   }
   
   /* Performance optimized animations */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes pulse-subtle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
     will-change: transform;
@@ -154,17 +169,21 @@
     animation: glow 2s ease-in-out infinite alternate;
     will-change: opacity;
   }
+
+  .animate-pulse-subtle {
+    animation: pulse-subtle 3s ease-in-out infinite;
+  }
   
   /* Mobile-optimized backdrop blur */
   @supports (backdrop-filter: blur(0)) {
     .mobile-glass {
-      @apply backdrop-blur-sm;
+      @apply backdrop-blur-xl;
     }
   }
   
   @supports not (backdrop-filter: blur(0)) {
     .mobile-glass {
-      @apply bg-white/80;
+      @apply bg-white/90;
     }
   }
   
@@ -172,7 +191,8 @@
   @media (prefers-reduced-motion: reduce) {
     .animate-float,
     .animate-glow,
-    .animate-shimmer {
+    .animate-shimmer,
+    .animate-pulse-subtle {
       animation: none;
     }
   }

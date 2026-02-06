@@ -33,6 +33,7 @@ import { ontarioHospitals } from "@/lib/hospital-names";
 import { translateFieldLabel, translateOption, useTranslation } from '@/lib/translations';
 import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { SignaturePad } from '@/components/signature-pad';
+import { cn } from '@/lib/utils';
 
 // Define field type
 export type FieldDef = {
@@ -47,9 +48,17 @@ export type FieldDef = {
     required?: boolean;
     pattern?: string;
   };
+  logoUrl?: string; // For 'logo' type
+  altText?: string; // For 'logo' type
+  alignment?: 'left' | 'center' | 'right'; // For 'logo' type
+  width?: string; // For 'logo' type
   conditionField?: string;
   conditionValue?: string;
   fields?: FieldDef[];
+  rows?: { id: string; label: string; value: string }[];
+  columns?: { id: string; label: string; value: string }[];
+  helperText?: string;
+  className?: string;
 };
 
 interface FormFieldRendererProps {
@@ -59,18 +68,18 @@ interface FormFieldRendererProps {
   labelSizeClass?: string;
 }
 
-export function FormFieldRenderer({ 
-  fieldConfig, 
-  form, 
-  isFrench, 
-  labelSizeClass = 'text-xs' 
+export function FormFieldRenderer({
+  fieldConfig,
+  form,
+  isFrench,
+  labelSizeClass = 'text-xs'
 }: FormFieldRendererProps) {
   const t = useTranslation(isFrench ? 'fr' : 'en');
   const [calendarOpen, setCalendarOpen] = useState(false);
-  
+
   // Translate the field label
   const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
-  
+
   // Translate options if they exist
   const translatedOptions = sanitizeOptions(
     fieldConfig.options?.map(option => ({
@@ -90,9 +99,9 @@ export function FormFieldRenderer({
             <Input
               type={fieldConfig.type === 'email' ? 'email' : fieldConfig.type === 'phone' ? 'tel' : fieldConfig.type === 'url' ? 'url' : 'text'}
               placeholder={
-                fieldConfig.type === 'email' ? t.enterEmail : 
-                fieldConfig.type === 'phone' ? t.enterPhoneNumber : 
-                ''
+                fieldConfig.type === 'email' ? t.enterEmail :
+                  fieldConfig.type === 'phone' ? t.enterPhoneNumber :
+                    ''
               }
               {...form.register(fieldConfig.id)}
             />
@@ -181,7 +190,7 @@ export function FormFieldRenderer({
               <RadioGroup
                 onValueChange={(value) => form.setValue(fieldConfig.id, value)}
                 value={form.watch(fieldConfig.id) || ''}
-                className="flex flex-col space-y-1"
+                className="flex flex-row flex-wrap gap-4"
               >
                 {translatedOptions?.map((option) => (
                   <div key={option.value} className="flex items-center space-x-2">
@@ -263,6 +272,39 @@ export function FormFieldRenderer({
           </div>
         );
 
+      case 'boolean-row':
+        return (
+          <div className="flex flex-row items-center justify-between gap-4 w-full">
+            <FormLabel className="flex-1 font-medium text-sm">
+              {translatedLabel}
+              {fieldConfig.validation?.required && (
+                <span className="text-destructive ml-1">*</span>
+              )}
+            </FormLabel>
+            <RadioGroup
+              onValueChange={(val) => form.setValue(fieldConfig.id, val === 'true')}
+              value={form.watch(fieldConfig.id) === true ? 'true' : form.watch(fieldConfig.id) === false ? 'false' : undefined}
+              className="flex flex-row space-x-4 shrink-0"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="true" id={`${fieldConfig.id}-yes`} />
+                <label htmlFor={`${fieldConfig.id}-yes`} className="text-sm cursor-pointer">Yes</label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="false" id={`${fieldConfig.id}-no`} />
+                <label htmlFor={`${fieldConfig.id}-no`} className="text-sm cursor-pointer">No</label>
+              </div>
+            </RadioGroup>
+          </div>
+        );
+
+      case 'text-block':
+        return (
+          <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
+            {fieldConfig.helperText || translatedLabel}
+          </div>
+        );
+
       case 'slider':
         return (
           <div className="space-y-3">
@@ -288,11 +330,10 @@ export function FormFieldRenderer({
             {[1, 2, 3, 4, 5].map((star) => (
               <Star
                 key={star}
-                className={`h-6 w-6 cursor-pointer transition-colors ${
-                  star <= (form.watch(fieldConfig.id) || 0)
-                    ? 'fill-yellow-400 text-yellow-400'
-                    : 'text-gray-300 hover:text-yellow-400'
-                }`}
+                className={`h-6 w-6 cursor-pointer transition-colors ${star <= (form.watch(fieldConfig.id) || 0)
+                  ? 'fill-yellow-400 text-yellow-400'
+                  : 'text-gray-300 hover:text-yellow-400'
+                  }`}
                 onClick={() => form.setValue(fieldConfig.id, star)}
               />
             ))}
@@ -372,8 +413,8 @@ export function FormFieldRenderer({
       control={form.control}
       name={fieldConfig.id}
       render={({ field }) => (
-        <FormItem className={labelSizeClass}>
-          {fieldConfig.type !== 'boolean-checkbox' && (
+        <FormItem className={cn(labelSizeClass, fieldConfig.className)}>
+          {fieldConfig.type !== 'boolean-checkbox' && fieldConfig.type !== 'boolean-row' && (
             <FormLabel className="text-sm font-medium">
               {translatedLabel}
               {fieldConfig.validation?.required && (

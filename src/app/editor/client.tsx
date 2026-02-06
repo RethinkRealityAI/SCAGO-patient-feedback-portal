@@ -21,7 +21,8 @@ import { DeleteSurveyConfirmation } from '@/components/delete-survey-confirmatio
  * 
  * See: .cursor/rules/firebase-auth-pattern-rules.mdc for details
  */
-import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey } from '@/lib/client-actions';
+import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey, createSurveyFromTemplate } from '@/lib/client-actions';
+import { yepFormTemplates } from '@/lib/yep-form-templates';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,7 +75,7 @@ export function CreateSurveyDropdown() {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
-  const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent') => {
+  const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent' | 'board-recruitment') => {
     startTransition(async () => {
       let survey;
       switch (templateType) {
@@ -87,10 +88,23 @@ export function CreateSurveyDropdown() {
         case 'consent':
           survey = await createConsentSurvey();
           break;
+        case 'board-recruitment': {
+          const template = yepFormTemplates.find(t => t.id === 'board-recruitment-template');
+          if (!template) {
+            toast({
+              title: 'Template Not Found',
+              description: 'The Board Recruitment template could not be found.',
+              variant: 'destructive',
+            });
+            return;
+          }
+          survey = await createSurveyFromTemplate(template);
+          break;
+        }
         default:
           survey = await createSurvey();
       }
-      
+
       if (survey.error) {
         toast({
           title: 'Failed to Create Survey',
@@ -99,7 +113,7 @@ export function CreateSurveyDropdown() {
         });
         return;
       }
-      
+
       router.push(`/editor/${survey.id}`);
     });
   };
@@ -162,6 +176,18 @@ export function CreateSurveyDropdown() {
             <span className="font-medium">Digital Consent & Information Collection</span>
             <span className="text-xs text-muted-foreground">
               SCAGO consent form for patient registration and information collection
+            </span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => handleCreateSurvey('board-recruitment')}
+          disabled={isPending}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">Board Recruitment Form</span>
+            <span className="text-xs text-muted-foreground">
+              New! Professional form for recruiting board members with logo support
             </span>
           </div>
         </DropdownMenuItem>

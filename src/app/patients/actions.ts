@@ -9,6 +9,8 @@ import {
     PatientDocument,
 } from '@/types/patient';
 import { getServerSession } from '@/lib/server-auth';
+import { revalidatePath } from 'next/cache';
+import { interactionSchema } from '@/types/patient';
 
 // Collection References
 const PATIENTS_COLLECTION = 'patients';
@@ -186,27 +188,38 @@ export async function addInteraction(data: PatientInteraction) {
         const user = await getCurrentUser();
         const firestore = getAdminFirestore();
 
+        // Validate and COERCE data (very important for dates in server actions)
+        const validatedData = interactionSchema.parse(data);
+
         const interactionData = {
-            patientId: data.patientId,
-            date: data.date,
-            type: data.type,
-            notes: data.notes,
-            outcome: data.outcome || '',
+            patientId: validatedData.patientId,
+            date: validatedData.date,
+            type: validatedData.type,
+            category: validatedData.category || 'General',
+            supportTypes: validatedData.supportTypes || [],
+            notes: validatedData.notes,
+            outcome: validatedData.outcome || '',
             createdBy: user.email,
             createdAt: FieldValue.serverTimestamp(),
         };
 
-        await firestore.collection(INTERACTIONS_COLLECTION).add(interactionData);
+        console.log(`Saving interaction for patient ${validatedData.patientId}`, interactionData);
+
+        const docRef = await firestore.collection(INTERACTIONS_COLLECTION).add(interactionData);
+        console.log(`Interaction saved with ID: ${docRef.id}`);
 
         // Update last interaction on patient record
-        await firestore.collection(PATIENTS_COLLECTION).doc(data.patientId).update({
+        await firestore.collection(PATIENTS_COLLECTION).doc(validatedData.patientId).update({
             lastInteraction: {
-                date: FieldValue.serverTimestamp(),
-                type: data.type,
-                summary: data.notes.substring(0, 100),
+                date: validatedData.date,
+                type: validatedData.type,
+                summary: validatedData.notes.substring(0, 100),
             },
             updatedAt: FieldValue.serverTimestamp(),
         });
+
+        // Purge cache for the specific patient profile
+        revalidatePath(`/patients/${validatedData.patientId}`);
 
         return { success: true };
     } catch (error) {
@@ -220,10 +233,14 @@ export async function getPatientInteractions(patientId: string) {
         await getCurrentUser();
         const firestore = getAdminFirestore();
 
+        console.log(`Fetching interactions for patient: ${patientId}`);
+        // Remove orderBy to avoid potential missing index errors during development/scaling
+        // Sorting will be handled on the client side
         const snapshot = await firestore.collection(INTERACTIONS_COLLECTION)
             .where('patientId', '==', patientId)
-            .orderBy('date', 'desc')
             .get();
+
+        console.log(`Found ${snapshot.size} interactions for patient: ${patientId}`);
 
         const interactions = snapshot.docs.map((doc) => {
             const data = doc.data();
@@ -232,10 +249,58 @@ export async function getPatientInteractions(patientId: string) {
                 ...convertDates(data),
             } as PatientInteraction;
         });
+
         return { success: true, data: interactions };
     } catch (error) {
         console.error('Error fetching interactions:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch interactions', data: [] };
+    }
+}
+
+export async function updateInteraction(id: string, data: Partial<PatientInteraction>) {
+    try {
+        await getCurrentUser();
+        const firestore = getAdminFirestore();
+
+        const interactionDoc = await firestore.collection(INTERACTIONS_COLLECTION).doc(id).get();
+        if (!interactionDoc.exists) {
+            throw new Error('Interaction not found');
+        }
+        const existingData = interactionDoc.data();
+        const patientId = existingData?.patientId;
+
+        const updateData = {
+            ...data,
+            updatedAt: FieldValue.serverTimestamp(),
+        };
+
+        console.log(`Updating interaction ${id}`, updateData);
+        await firestore.collection(INTERACTIONS_COLLECTION).doc(id).update(updateData);
+
+        if (patientId) {
+            revalidatePath(`/patients/${patientId}`);
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating interaction:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to update interaction' };
+    }
+}
+
+export async function deleteInteraction(id: string, patientId: string) {
+    try {
+        await getCurrentUser();
+        const firestore = getAdminFirestore();
+
+        console.log(`Deleting interaction ${id} for patient ${patientId}`);
+        await firestore.collection(INTERACTIONS_COLLECTION).doc(id).delete();
+
+        revalidatePath(`/patients/${patientId}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting interaction:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to delete interaction' };
     }
 }
 

@@ -46,7 +46,7 @@ const otherOptionSchema = z.object({
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single', 'matrix-multiple', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime', 'color', 'range', 'percentage', 'currency']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single', 'matrix-multiple', 'matrix-text', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime', 'color', 'range', 'percentage', 'currency', 'logo', 'text-block']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -70,6 +70,10 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   helperText: z.string().optional(),
   prefix: z.string().optional(),
   suffix: z.string().optional(),
+  logoUrl: z.string().optional(),
+  altText: z.string().optional(),
+  alignment: z.enum(['left', 'center', 'right']).optional(),
+  width: z.string().optional(),
   otherOption: otherOptionSchema,
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
@@ -91,7 +95,11 @@ const surveySchema = z.object({
   saveProgressEnabled: z.boolean().default(true).optional(),
   shareButtonEnabled: z.boolean().default(true).optional(),
   shareTitle: z.string().default('Share this survey').optional(),
-  shareText: z.string().default("I’d like your feedback—please fill out this survey.").optional(),
+  shareText: z.string().default("I'd like your feedback—please fill out this survey.").optional(),
+  // Webhook integration
+  webhookUrl: z.string().url().optional().or(z.literal('')),
+  webhookSecret: z.string().optional().or(z.literal('')),
+  webhookEnabled: z.boolean().default(false).optional(),
   resumeSettings: z.object({
     showResumeModal: z.boolean().default(true).optional(),
     resumeTitle: z.string().default('Resume your saved progress?').optional(),
@@ -113,6 +121,10 @@ interface FormFieldConfig {
   fields?: FormFieldConfig[];
   conditionField?: string;
   conditionValue?: any;
+  logoUrl?: string;
+  altText?: string;
+  alignment?: 'left' | 'center' | 'right';
+  width?: string;
   validation?: { required?: boolean; pattern?: string; };
   otherOption?: {
     enabled?: boolean;
@@ -167,7 +179,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
     const sections = getValues('sections');
     const visit = (items: any[]) => {
       for (const f of items) {
-        if (f.id !== field.id && ['radio', 'select', 'checkbox', 'boolean-checkbox', 'province-ca', 'city-on', 'hospital-on'].includes(f.type)) {
+        if (f.id !== field.id && ['radio', 'select', 'checkbox', 'boolean-checkbox', 'boolean-row', 'province-ca', 'city-on', 'hospital-on'].includes(f.type)) {
           collected.push({ label: `${f.label} (ID: ${f.id})`, value: f.id });
         }
         if (f.type === 'group' && Array.isArray(f.fields)) visit(f.fields);
@@ -262,6 +274,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="multi-text">Multi-Text (Add Multiple)</SelectItem>
                 <SelectItem value="matrix-single">Matrix (Single Choice)</SelectItem>
                 <SelectItem value="matrix-multiple">Matrix (Multiple Choice)</SelectItem>
+                <SelectItem value="matrix-text">Matrix (Text Input)</SelectItem>
                 <SelectItem value="likert-scale">Likert Scale (Agreement)</SelectItem>
                 <SelectItem value="pain-scale">Pain Scale (0-10 Visual)</SelectItem>
                 <SelectItem value="calculated">Calculated Field</SelectItem>
@@ -271,6 +284,8 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="range">Range Slider</SelectItem>
                 <SelectItem value="percentage">Percentage (0-100%)</SelectItem>
                 <SelectItem value="currency">Currency (CAD)</SelectItem>
+                <SelectItem value="logo">Logo / Image</SelectItem>
+                <SelectItem value="text-block">Text Block / Description</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -519,7 +534,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
         {field?.type === 'group' && (
           <GroupChildrenEditor parentFieldPath={fieldPath} />
         )}
-        {['matrix-single', 'matrix-multiple'].includes(field?.type) && (
+        {['matrix-single', 'matrix-multiple', 'matrix-text'].includes(field?.type) && (
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>Matrix Rows</Label>
@@ -614,6 +629,34 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
             <FormField control={control} name={`${fieldPath}.suffix` as any} render={({ field: formField }) => (
               <FormItem><FormLabel>Suffix</FormLabel><FormControl><Input {...formField} value={formField.value ?? 'CAD'} onPointerDown={stopPropagation} /></FormControl></FormItem>
             )} />
+          </div>
+        )}
+        {field?.type === 'logo' && (
+          <div className="space-y-3">
+            <FormField control={control} name={`${fieldPath}.logoUrl` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Image URL</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="https://..." /></FormControl><FormDescription>Direct link to the logo image.</FormDescription></FormItem>
+            )} />
+            <FormField control={control} name={`${fieldPath}.altText` as any} render={({ field: formField }) => (
+              <FormItem><FormLabel>Alt Text</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="e.g., Company Logo" /></FormControl><FormDescription>Description for accessibility.</FormDescription></FormItem>
+            )} />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={control} name={`${fieldPath}.alignment` as any} render={({ field: formField }) => (
+                <FormItem>
+                  <FormLabel>Alignment</FormLabel>
+                  <Select onValueChange={formField.onChange} value={formField.value ?? 'center'}>
+                    <FormControl><SelectTrigger onPointerDown={stopPropagation}><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="left">Left</SelectItem>
+                      <SelectItem value="center">Center</SelectItem>
+                      <SelectItem value="right">Right</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={control} name={`${fieldPath}.width` as any} render={({ field: formField }) => (
+                <FormItem><FormLabel>Width (optional)</FormLabel><FormControl><Input {...formField} value={formField.value ?? ''} onPointerDown={stopPropagation} placeholder="e.g., 200px or 50%" /></FormControl></FormItem>
+              )} />
+            </div>
           </div>
         )}
         {!(field?.type === 'group' || field?.type === 'anonymous-toggle' || field?.type === 'calculated') && (
@@ -718,7 +761,7 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                       <span className="text-xs font-normal text-muted-foreground">(condition)</span>
                     </FormLabel>
                     <FormControl>
-                      {conditionalFieldType === 'boolean-checkbox' ? (
+                      {conditionalFieldType === 'boolean-checkbox' || conditionalFieldType === 'boolean-row' ? (
                         <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
                           <Switch
                             checked={formField.value === 'true'}
@@ -903,6 +946,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
   } as any;
   const form = useForm<SurveyFormData>({ resolver: zodResolver(surveySchema), defaultValues: defaulted, shouldUnregister: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const { fields: sections, append, remove, move: moveSection } = useFieldArray({ control: form.control, name: 'sections' });
   const moveFieldFns = useRef<Record<number, (from: number, to: number) => void>>({});
 
@@ -1143,6 +1187,96 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                         <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                       </FormItem>
                     )} />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle>Webhook Integration</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField control={form.control} name="webhookUrl" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Webhook URL</FormLabel>
+                      <FormDescription>When a submission is made, the form data will be sent to this URL via POST request.</FormDescription>
+                      <FormControl><Input {...field} value={field.value ?? ''} placeholder="https://your-webhook-endpoint.com/submissions" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="webhookSecret" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Webhook Secret (Optional)</FormLabel>
+                      <FormDescription>Optional secret key sent in the X-Webhook-Secret header for authentication.</FormDescription>
+                      <FormControl><Input type="password" {...field} value={field.value ?? ''} placeholder="Your secret key" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="webhookEnabled" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel>Enable Survey Webhook</FormLabel>
+                        <FormDescription>When enabled, submissions for this specific survey will be sent to the URL above.</FormDescription>
+                      </div>
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isTestingWebhook || !form.watch('webhookUrl')}
+                      onClick={async () => {
+                        const url = form.getValues('webhookUrl');
+                        if (!url) return;
+
+                        setIsTestingWebhook(true);
+                        try {
+                          const response = await fetch('/api/webhooks/test', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              url,
+                              secret: form.getValues('webhookSecret'),
+                              payload: {
+                                event: 'survey.test',
+                                surveyId: survey.id,
+                                surveyTitle: form.getValues('title'),
+                                timestamp: new Date().toISOString(),
+                                data: { message: 'This is a test notification from the survey editor.' }
+                              }
+                            }),
+                          });
+
+                          if (response.ok) {
+                            toast({ title: 'Test Sent', description: 'Webhook test notification sent successfully.' });
+                          } else {
+                            const err = await response.json();
+                            toast({ title: 'Test Failed', description: err.error || 'Failed to send test.', variant: 'destructive' });
+                          }
+                        } catch (err) {
+                          toast({ title: 'Test Failed', description: 'Network error or invalid URL.', variant: 'destructive' });
+                        } finally {
+                          setIsTestingWebhook(false);
+                        }
+                      }}
+                    >
+                      {isTestingWebhook ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+                      Test Webhook
+                    </Button>
+                  </div>
+                  <div className="p-3 bg-muted rounded-md border border-border mt-4">
+                    <h4 className="text-xs font-semibold mb-2 uppercase tracking-tight text-muted-foreground">Payload Preview</h4>
+                    <pre className="text-[10px] overflow-x-auto text-muted-foreground">
+                      {`{
+  "event": "survey.submission.created",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "submissionId": "...",
+    "surveyId": "${survey.id}",
+    "submittedAt": "2024-01-15T10:30:00Z",
+    "fields": { ... }
+  }
+}`}
+                    </pre>
                   </div>
                 </CardContent>
               </Card>

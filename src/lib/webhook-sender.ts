@@ -18,19 +18,30 @@ interface SubmissionData {
 /**
  * Send a webhook notification for a new survey submission
  */
-export async function sendWebhook(submissionData: SubmissionData): Promise<void> {
+export async function sendWebhook(
+  submissionData: SubmissionData,
+  customConfig?: { url?: string; secret?: string; enabled?: boolean }
+): Promise<void> {
   try {
-    // Get webhook configuration
-    const configDoc = await getDoc(doc(db, 'config', 'webhooks'));
+    let url = customConfig?.url;
+    let secret = customConfig?.secret;
+    let enabled = customConfig?.enabled;
 
-    if (!configDoc.exists()) {
-      // No webhook configured, skip
-      return;
+    // If no custom config or custom config is not enabled, try global config
+    if (!url || enabled === false) {
+      // Get global webhook configuration
+      const configDoc = await getDoc(doc(db, 'config', 'webhooks'));
+      if (configDoc.exists()) {
+        const globalConfig = configDoc.data() as WebhookConfig;
+
+        // Only use global if not overridden by custom (or if custom is missing)
+        if (!url) url = globalConfig.url;
+        if (!secret) secret = globalConfig.secret;
+        if (enabled === undefined) enabled = globalConfig.enabled;
+      }
     }
 
-    const config = configDoc.data() as WebhookConfig;
-
-    if (!config.enabled || !config.url) {
+    if (!enabled || !url) {
       // Webhook not enabled or no URL configured
       return;
     }
@@ -55,25 +66,20 @@ export async function sendWebhook(submissionData: SubmissionData): Promise<void>
       'User-Agent': 'SCAGO-Portal/1.0',
     };
 
-    if (config.secret) {
-      headers['X-Webhook-Secret'] = config.secret;
+    if (secret) {
+      headers['X-Webhook-Secret'] = secret;
     }
 
     // Send webhook (fire and forget - don't block submission)
-    fetch(config.url, {
+    fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000), // 10 second timeout
     }).catch((error) => {
-      // Log error but don't throw - webhook failures shouldn't block submissions
       console.error('Webhook delivery failed:', error);
-
-      // Optionally update webhook config with error (would need admin permissions)
-      // For now, just log it
     });
   } catch (error) {
-    // Log error but don't throw - webhook failures shouldn't block submissions
     console.error('Error sending webhook:', error);
   }
 }

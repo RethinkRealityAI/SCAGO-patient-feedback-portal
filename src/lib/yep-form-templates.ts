@@ -368,5 +368,172 @@ export const yepFormTemplates: YEPFormTemplate[] = [
     updatedAt: new Date(),
     createdBy: 'system',
     version: 1
+  },
+  {
+    id: 'board-recruitment-template',
+    name: 'Board Recruitment Form',
+    description: 'Standard Board Recruitment Form for: Sickle Cell Awareness Group of Ontario (SCAGO) Board of Director Positions',
+    category: YEPFormCategory.BOARD_RECRUITMENT,
+    targetEntity: 'mentor',
+    isTemplate: true,
+    isActive: true,
+    sections: [
+      {
+        id: 'header-section',
+        title: 'Board Member Application',
+        fields: [
+          {
+            id: 'scago-logo',
+            label: 'Organization Logo',
+            type: 'logo',
+            logoUrl: 'https://scagoalevelup.org/wp-content/uploads/2021/04/scago-logo-1.png',
+            altText: 'SCAGO Logo',
+            alignment: 'center',
+            width: '240px'
+          },
+          {
+            id: 'intro-text',
+            label: '',
+            type: 'text-block',
+            helperText: "Thank you for your interest in the Sickle Cell Awareness Group of Ontario (SCAGO). We are looking for individuals who are passionate about our mission and willing to contribute their skills and experience to our board. Please complete this form to apply for a position on our Board of Directors.",
+            validation: { required: false }
+          }
+        ]
+      },
+      {
+        id: 'contact-info',
+        title: 'Contact Information',
+        fields: [
+          {
+            id: 'fullName',
+            label: 'Full Name',
+            type: 'text',
+            validation: { required: true },
+            placeholder: 'Enter your full name'
+          },
+          {
+            id: 'primaryPhone',
+            label: 'Primary Phone Number',
+            type: 'phone',
+            validation: { required: true },
+            placeholder: '(555) 555-5555'
+          },
+          {
+            id: 'email',
+            label: 'Email Address',
+            type: 'email',
+            validation: { required: true },
+            placeholder: 'name@example.com'
+          }
+        ]
+      },
+      {
+        id: 'commitments',
+        title: 'Commitment and Understanding',
+        fields: [
+          {
+            id: 'term-commitment',
+            label: 'The Term is for 3 years and there are approximately 4 meetings per year. Are you able to make this commitment?',
+            type: 'boolean-row',
+            validation: { required: true }
+          },
+          {
+            id: 'confidentiality-agreement',
+            label: 'Successful candidates will be asked to sign a Confidentiality Agreement and a Conflict of Interest statement. Are you willing to do this?',
+            type: 'boolean-row',
+            validation: { required: true }
+          },
+          {
+            id: 'appendix-y-header',
+            label: 'Appendix Y - Committee Support',
+            type: 'text-block',
+            helperText: "Appendix Y - Committee Support",
+            className: "text-red-600 font-bold mt-6 mb-2 block"
+          },
+          {
+            id: 'committee-support',
+            label: 'Are you interested in supporting a specific SCAGO committee if not selected for the board?',
+            type: 'boolean-row'
+          },
+          {
+            id: 'preferred-committees',
+            label: 'If yes, which committees are you interested in?',
+            type: 'checkbox',
+            conditionField: 'committee-support',
+            conditionValue: 'true',
+            options: [
+              { id: 'advocacy', label: 'Advocacy', value: 'advocacy' },
+              { id: 'fundraising', label: 'Fundraising', value: 'fundraising' },
+              { id: 'programs', label: 'Programs & Services', value: 'programs' },
+              { id: 'governance', label: 'Governance', value: 'governance' }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'background-experience',
+        title: 'Background and Experience',
+        fields: [
+          {
+            id: 'board-experience-desc',
+            label: 'Please describe your board experience or attach a separate sheet:',
+            type: 'textarea',
+            placeholder: 'Describe your previous experience serving on boards...'
+          },
+          {
+            id: 'experience-attachment',
+            label: 'Upload Experience Document (Optional)',
+            type: 'file-upload',
+            maxFiles: 1,
+            fileTypes: ['.pdf', '.doc', '.docx'],
+            helperText: 'You can upload a separate sheet describing your experience.'
+          },
+          {
+            id: 'other-orgs',
+            label: 'What other organizations do you currently serve on?',
+            type: 'textarea',
+            placeholder: 'List other organizations...'
+          }
+        ]
+      },
+      {
+        id: 'references-section',
+        title: 'References',
+        fields: [
+          {
+            id: 'references-matrix',
+            label: 'Please provide two references we may contact:',
+            type: 'matrix-text',
+            rows: [
+              { id: 'ref1', label: 'Reference 1', value: 'ref1' },
+              { id: 'ref2', label: 'Reference 2', value: 'ref2' }
+            ],
+            columns: [
+              { id: 'ref-name', label: 'Name', value: 'name' },
+              { id: 'ref-contact', label: 'Contact Information', value: 'contact' }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'supporting-docs',
+        title: 'Supporting Documents',
+        fields: [
+          {
+            id: 'resume-upload',
+            label: 'Please forward your resume to recruitment@sicklecellanemia.ca or upload it here:',
+            type: 'file-upload',
+            maxFiles: 1,
+            fileTypes: ['.pdf', '.doc', '.docx'],
+            validation: { required: true }
+          }
+        ]
+      },
+
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    createdBy: 'system',
+    version: 1
   }
 ];

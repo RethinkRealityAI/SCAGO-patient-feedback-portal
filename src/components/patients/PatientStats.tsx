@@ -119,8 +119,8 @@ export function PatientStats() {
                             <CardTitle className="text-sm font-medium">
                                 {stat.title}
                             </CardTitle>
-                            <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                                <Icon className={`h-4 w-4 ${stat.color}`} />
+                            <div className={`p-2.5 rounded-xl ${stat.bgColor} border border-white/20 shadow-sm`}>
+                                <Icon className={`h-5 w-5 ${stat.color}`} fill="currentColor" />
                             </div>
                         </CardHeader>
                         <CardContent>

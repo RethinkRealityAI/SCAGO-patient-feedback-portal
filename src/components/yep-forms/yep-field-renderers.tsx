@@ -28,11 +28,11 @@ interface YEPFieldRendererProps {
   parentFieldName?: string;
 }
 
-export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({ 
-  field, 
-  sectionIndex, 
-  fieldIndex, 
-  parentFieldName 
+export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
+  field,
+  sectionIndex,
+  fieldIndex,
+  parentFieldName
 }) => {
   const { control, register, formState: { errors }, watch, setValue } = useFormContext();
   const fieldName = parentFieldName ? `${parentFieldName}.fields.${fieldIndex}.value` : `sections.${sectionIndex}.fields.${fieldIndex}.value`;
@@ -177,6 +177,40 @@ export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
             )}
           />
         );
+      case 'boolean-row':
+        return (
+          <Controller
+            control={control}
+            name={fieldName}
+            render={({ field: controllerField }) => (
+              <div className="flex flex-row items-center justify-between gap-4 w-full py-2">
+                <Label className="flex-1 font-medium text-sm leading-tight">
+                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                </Label>
+                <RadioGroup
+                  onValueChange={(val) => controllerField.onChange(val === 'true')}
+                  value={controllerField.value === true ? 'true' : controllerField.value === false ? 'false' : undefined}
+                  className="flex flex-row space-x-4 shrink-0"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="true" id={`${field.id}-yes`} />
+                    <Label htmlFor={`${field.id}-yes`} className="cursor-pointer text-sm">Yes</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="false" id={`${field.id}-no`} />
+                    <Label htmlFor={`${field.id}-no`} className="cursor-pointer text-sm">No</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )}
+          />
+        );
+      case 'text-block':
+        return (
+          <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap py-1", field.className)}>
+            {field.helperText || field.label}
+          </div>
+        );
       // 'switch' is not a supported ExtendedFieldType; render as checkbox if present
       // fallthrough handled by default
       case YEPFieldType.yepParticipantLookup:
@@ -232,8 +266,8 @@ export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
   };
 
   return (
-    <div className="space-y-2">
-      {field.type !== 'checkbox' && (
+    <div className={cn("space-y-2", field.className)}>
+      {field.type !== 'checkbox' && field.type !== 'boolean-row' && field.type !== 'text-block' && (
         <Label htmlFor={field.id}>
           {field.label} {field.required && <span className="text-red-500">*</span>}
         </Label>

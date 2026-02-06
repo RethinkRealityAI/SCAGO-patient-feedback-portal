@@ -47,7 +47,9 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
           <Header />
           <main className="flex-1 relative">
             <div className="p-4 sm:p-6">
-              {children}
+              <div className="mx-auto max-w-7xl w-full">
+                {children}
+              </div>
             </div>
           </main>
         </div>

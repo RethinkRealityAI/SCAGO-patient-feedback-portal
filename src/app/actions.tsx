@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { ReactNode } from 'react';
 import { nanoid } from 'nanoid';
 import { BotMessage } from '@/components/bot-message';
-import { collection, getDocs, addDoc, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, getDoc, DocumentData } from 'firebase/firestore';
 import { db as clientDb } from '@/lib/firebase';
 import { unstable_noStore as noStore } from 'next/cache';
+import { sendWebhook } from '@/lib/webhook-sender';
 
 // Note: We intentionally use the Web Firestore client on the server for writes
 // to respect Firestore security rules and avoid admin credential requirements
@@ -41,37 +42,43 @@ export async function submitFeedback(
     if (!surveyId) {
       return { error: 'Survey ID is missing.' };
     }
-    
+
     // Generate session ID if not provided (server-side generation)
     const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    
+
     const submissionData = {
       ...formData,
       surveyId,
       sessionId: finalSessionId,
       submittedAt: new Date(),
     };
-    
+
     // Save to organized structure: surveys/{surveyId}/submissions/{submissionId}
     const docRef = await addDoc(
-      collection(clientDb, 'surveys', surveyId, 'submissions'), 
+      collection(clientDb, 'surveys', surveyId, 'submissions'),
       submissionData
     );
-    
+
+    // Fetch survey for specific webhook info
+    const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
+    const surveyData = surveyDoc.exists() ? surveyDoc.data() : null;
+
     // Send webhook notification (fire and forget)
-    import('@/lib/webhook-sender').then(({ sendWebhook }) => {
-      sendWebhook({
-        submissionId: docRef.id,
-        surveyId,
-        sessionId: finalSessionId,
-        submittedAt: submissionData.submittedAt,
-        fields: formData,
-      }).catch((error) => {
-        // Log but don't fail submission if webhook fails
-        console.error('Webhook notification failed:', error);
-      });
+    sendWebhook({
+      submissionId: docRef.id,
+      surveyId,
+      sessionId: finalSessionId,
+      submittedAt: submissionData.submittedAt,
+      fields: formData,
+    }, {
+      url: surveyData?.webhookUrl,
+      secret: surveyData?.webhookSecret,
+      enabled: surveyData?.webhookEnabled,
+    }).catch((error) => {
+      // Log but don't fail submission if webhook fails
+      console.error('Webhook notification failed:', error);
     });
-    
+
     return { sessionId: finalSessionId };
   } catch (e) {
     console.error('Error submitting feedback:', e);

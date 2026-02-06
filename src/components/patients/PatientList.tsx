@@ -277,23 +277,27 @@ export function PatientList() {
     return (
         <Card>
             <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <User className="h-5 w-5" />
-                            Patients ({filteredPatients.length})
-                        </CardTitle>
-                        <CardDescription>
-                            Manage patient records and interactions
-                        </CardDescription>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shadow-sm">
+                            <User className="h-6 w-6 text-primary" fill="currentColor" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-2xl font-bold tracking-tight">
+                                Patient Directory
+                            </CardTitle>
+                            <CardDescription className="text-base">
+                                Manage and track active patient records ({filteredPatients.length} total)
+                            </CardDescription>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={handleExportCSV}>
+                    <div className="flex gap-3 w-full sm:w-auto">
+                        <Button variant="outline" onClick={handleExportCSV} className="flex-1 sm:flex-none rounded-xl h-11 border-primary/20 hover:bg-primary/5 transition-colors">
                             <Download className="h-4 w-4 mr-2" />
-                            Export
+                            Export Data
                         </Button>
-                        <Button onClick={() => router.push('/patients/new')}>
-                            <Plus className="h-4 w-4 mr-2" />
+                        <Button onClick={() => router.push('/patients/new')} className="flex-1 sm:flex-none rounded-xl h-11 shadow-lg shadow-primary/20 transition-all active:scale-95">
+                            <Plus className="h-5 w-5 mr-2" />
                             Add Patient
                         </Button>
                     </div>
@@ -303,13 +307,13 @@ export function PatientList() {
                 {/* Filters */}
                 <div className="space-y-4 mb-6">
                     <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-                        <div className="flex-1 relative min-w-[200px]">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 relative min-w-[250px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/70" fill="currentColor" />
                             <Input
-                                placeholder="Search by name, hospital, MRN..."
+                                placeholder="Search patients by name, hospital, MRN..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10"
+                                className="pl-10 h-11 rounded-xl border-primary/10 focus-visible:ring-primary/20 transition-all shadow-sm"
                             />
                         </div>
 
@@ -396,8 +400,9 @@ export function PatientList() {
                                 setAgeFilter('all');
                             }}
                             title="Clear Filters"
+                            className="rounded-xl"
                         >
-                            <Filter className="h-4 w-4" />
+                            <Filter className="h-4 w-4 text-primary/70" fill="currentColor" />
                         </Button>
                     </div>
                 </div>
@@ -466,11 +471,11 @@ export function PatientList() {
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); patient.id && handleViewProfile(patient.id); }}>
-                                                        <User className="mr-2 h-4 w-4" />
+                                                        <User className="mr-2 h-4 w-4 text-primary/70" fill="currentColor" />
                                                         View Profile
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* Add interaction handler */ }}>
-                                                        <Calendar className="mr-2 h-4 w-4" />
+                                                        <Calendar className="mr-2 h-4 w-4 text-primary/70" fill="currentColor" />
                                                         Log Interaction
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />

@@ -26,8 +26,10 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages } from "lucide-react"
+import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages, Upload as UploadIcon } from "lucide-react"
 import { submitFeedback } from "@/app/actions"
+import { storage } from "@/lib/firebase"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { useToast } from "@/hooks/use-toast"
 import {
   Card,
@@ -41,6 +43,7 @@ import { useState, useEffect, useMemo } from "react"
 import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 import { provinces, ontarioCities } from "@/lib/location-data"
 import { hospitalDepartments } from "@/lib/hospital-departments"
 import { ontarioHospitals } from "@/lib/hospital-names"
@@ -218,6 +221,9 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
       case 'matrix-multiple':
         fieldSchema = z.record(z.array(z.string())).optional();
         break;
+      case 'matrix-text':
+        fieldSchema = z.record(z.record(z.string())).optional();
+        break;
       case 'likert-scale':
         fieldSchema = z.string().optional();
         break;
@@ -245,6 +251,9 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
       case 'calculated':
         fieldSchema = z.string().optional();
         break;
+      case 'boolean-row':
+        fieldSchema = z.boolean();
+        break;
       default:
         fieldSchema = z.any();
     }
@@ -262,23 +271,47 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
   const base = z.object(schema);
   return base.superRefine((values: Record<string, any>, ctx) => {
     const isEmpty = (f: FieldDef, v: any): boolean => {
+      if (v == null) return true;
       switch (f.type) {
         case 'checkbox':
+        case 'file-upload':
+        case 'multi-text':
+        case 'ranking':
           return !Array.isArray(v) || v.length === 0;
         case 'city-on':
         case 'hospital-on':
         case 'department-on':
           // Check if object exists and has a valid selection
-          return !v || typeof v !== 'object' || !v.selection || v.selection === '' || (v.selection === 'other' && (!v.other || v.other.trim() === ''));
+          return typeof v !== 'object' || !v.selection || v.selection === '' || (v.selection === 'other' && (!v.other || v.other.trim() === ''));
+        case 'matrix-single':
+        case 'matrix-multiple':
+        case 'matrix-text':
+          if (typeof v !== 'object') return true;
+          const matrixKeys = Object.keys(v);
+          if (matrixKeys.length === 0) return true;
+          // For matrix-text, let's also check if cells are empty
+          if (f.type === 'matrix-text') {
+            return !Object.values(v).some(row =>
+              row && typeof row === 'object' && Object.values(row).some(cell =>
+                typeof cell === 'string' && cell.trim() !== ''
+              )
+            );
+          }
+          return false;
         case 'duration-hm':
         case 'duration-dh':
         case 'time-amount':
-          return v == null;
+          return false;
+        case 'datetime':
+          return !v?.date && !v?.time;
+        case 'range':
+          return v?.min === undefined || v?.max === undefined;
         case 'boolean-checkbox':
         case 'anonymous-toggle':
-          return v == null;
+        case 'boolean-row':
+          return v === undefined;
         default:
-          return v == null || (typeof v === 'string' && v.trim() === '');
+          return typeof v === 'string' && v.trim() === '';
       }
     };
 
@@ -287,10 +320,10 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
       const controlling = fieldMapById.get(f.conditionField);
       const actual = values[f.conditionField];
       const expected = f.conditionValue;
-      if (controlling && (controlling.type === 'boolean-checkbox' || controlling.type === 'anonymous-toggle')) {
+      if (controlling && (controlling.type === 'boolean-checkbox' || controlling.type === 'anonymous-toggle' || controlling.type === 'boolean-row')) {
         return String(actual) === String(expected);
       }
-      // Support array-based conditions (for checkbox fields like multi-select visitType)
+      // Support array-based conditions (for checkbox fields)
       if (controlling && controlling.type === 'checkbox' && Array.isArray(actual)) {
         return actual.includes(expected);
       }
@@ -745,13 +778,53 @@ export default function FeedbackForm({ survey }: { survey: any }) {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setSubmitErrors([]);
     // Get or create session ID for tracking related submissions
-    let sessionId = sessionStorage.getItem(`feedbackSession_${survey.id}`);
+    const sessionId = sessionStorage.getItem(`feedbackSession_${survey.id}`);
+    const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     if (!sessionId) {
-      sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      sessionStorage.setItem(`feedbackSession_${survey.id}`, sessionId);
+      sessionStorage.setItem(`feedbackSession_${survey.id}`, finalSessionId);
     }
 
-    const result = await submitFeedback(survey.id, values, sessionId);
+    // Process file uploads before submitting to Firestore
+    const processedValues = { ...values };
+    try {
+      for (const field of allFields) {
+        if (field.type === 'file-upload' && values[field.id]) {
+          const files = values[field.id];
+          if (Array.isArray(files) && files.length > 0) {
+            const uploadPromises = files.map(async (file: any) => {
+              if (file instanceof File) {
+                // Sanitize filename and add timestamp to avoid collisions
+                const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+                const filePath = `submissions/${survey.id}/${finalSessionId}/${Date.now()}_${safeName}`;
+                const storageRef = ref(storage, filePath);
+                const snapshot = await uploadBytes(storageRef, file);
+                const downloadUrl = await getDownloadURL(snapshot.ref);
+                return {
+                  name: file.name,
+                  url: downloadUrl,
+                  size: file.size,
+                  type: file.type,
+                  path: filePath,
+                  uploadedAt: new Date().toISOString()
+                };
+              }
+              return file; // Already metadata
+            });
+            processedValues[field.id] = await Promise.all(uploadPromises);
+          }
+        }
+      }
+    } catch (uploadError: any) {
+      console.error('File upload failed:', uploadError);
+      toast({
+        title: "Upload Failed",
+        description: "There was an error uploading your files. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const result = await submitFeedback(survey.id, processedValues, finalSessionId);
     if (result.error) {
       toast({
         title: "Submission Failed",
@@ -763,6 +836,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
       if (result.sessionId) {
         sessionStorage.setItem(`feedbackSession_${survey.id}`, result.sessionId);
       }
+
       setIsSubmitted(true);
       clearDraft();
     }
@@ -858,13 +932,15 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         control={control}
         name={fieldConfig.id}
         render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              {translatedLabel}
-              {fieldConfig.validation?.required && (
-                <span className="text-destructive ml-1">*</span>
-              )}
-            </FormLabel>
+          <FormItem className={fieldConfig.className}>
+            {fieldConfig.type !== 'boolean-row' && (
+              <FormLabel>
+                {translatedLabel}
+                {fieldConfig.validation?.required && (
+                  <span className="text-destructive ml-1">*</span>
+                )}
+              </FormLabel>
+            )}
             <FormControl>
               {(() => {
                 const fieldWithValue = { ...field, value: field.value ?? '' };
@@ -924,13 +1000,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     return <TimeAmountField field={field} />;
                   case 'radio':
                     return (
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
+                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-row flex-wrap gap-4">
                         {fieldConfig.options?.map((option) => (
                           <FormItem key={option.value} className="flex items-center space-x-3 space-y-0">
                             <FormControl>
                               <RadioGroupItem value={option.value} />
                             </FormControl>
-                            <FormLabel className="font-normal">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
+                            <FormLabel className="font-normal cursor-pointer">{translateOption(option.label, isFrench ? 'fr' : 'en')}</FormLabel>
                           </FormItem>
                         ))}
                         {(fieldConfig as any).otherOption?.enabled && (
@@ -938,7 +1014,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                             <FormControl>
                               <RadioGroupItem value={(fieldConfig as any).otherOption?.optionValue || 'other'} id={`${fieldConfig.id}_other`} />
                             </FormControl>
-                            <FormLabel htmlFor={`${fieldConfig.id}_other`} className="font-normal">
+                            <FormLabel htmlFor={`${fieldConfig.id}_other`} className="font-normal cursor-pointer">
                               {translateFieldLabel((fieldConfig as any).otherOption?.label || 'Other', isFrench ? 'fr' : 'en')}
                             </FormLabel>
                           </FormItem>
@@ -1009,6 +1085,31 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   }
                   case 'boolean-checkbox':
                     return <Checkbox checked={field.value} onCheckedChange={field.onChange} />;
+                  case 'boolean-row':
+                    return (
+                      <div className="flex flex-row items-center justify-between gap-4 w-full">
+                        <FormLabel className="flex-1 font-medium text-sm">
+                          {translatedLabel}
+                          {fieldConfig.validation?.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
+                        </FormLabel>
+                        <RadioGroup
+                          onValueChange={(val) => field.onChange(val === 'true')}
+                          value={field.value === true ? 'true' : field.value === false ? 'false' : undefined}
+                          className="flex flex-row space-x-4 shrink-0"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="true" id={`${fieldConfig.id}-yes`} />
+                            <Label htmlFor={`${fieldConfig.id}-yes`} className="cursor-pointer">Yes</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="false" id={`${fieldConfig.id}-no`} />
+                            <Label htmlFor={`${fieldConfig.id}-no`} className="cursor-pointer">No</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+                    );
                   case 'anonymous-toggle':
                     return (
                       <div className="flex items-center gap-3">
@@ -1026,6 +1127,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     return <MultiTextField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
                   case 'matrix-single':
                   case 'matrix-multiple':
+                  case 'matrix-text':
                     return <MatrixField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
                   case 'likert-scale':
                     return <LikertScaleField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
@@ -1045,6 +1147,33 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     return <CurrencyField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
                   case 'calculated':
                     return <CalculatedField fieldConfig={fieldConfig} form={form} isFrench={isFrench} />;
+                  case 'logo':
+                    return (
+                      <div className={`flex w-full my-4 ${fieldConfig.alignment === 'left' ? 'justify-start' :
+                        fieldConfig.alignment === 'right' ? 'justify-end' :
+                          'justify-center'
+                        }`}>
+                        <img
+                          src={fieldConfig.logoUrl || '/placeholder-logo.png'}
+                          alt={fieldConfig.altText || 'Logo'}
+                          className={`max-w-full h-auto object-contain ${fieldConfig.width
+                            ? (fieldConfig.width.endsWith('%') || fieldConfig.width.endsWith('px') ? '' : 'w-48')
+                            : 'w-48'
+                            }`}
+                          style={
+                            fieldConfig.width && (fieldConfig.width.endsWith('%') || fieldConfig.width.endsWith('px'))
+                              ? { width: fieldConfig.width }
+                              : undefined
+                          }
+                        />
+                      </div>
+                    );
+                  case 'text-block':
+                    return (
+                      <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
+                        {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
+                      </div>
+                    );
                   default:
                     return <Input {...fieldWithValue} className="max-w-md" />;
                 }
