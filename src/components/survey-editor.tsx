@@ -110,6 +110,15 @@ const surveySchema = z.object({
   webhookUrl: z.string().url().optional().or(z.literal('')),
   webhookSecret: z.string().optional().or(z.literal('')),
   webhookEnabled: z.boolean().default(false).optional(),
+  // Email notifications
+  emailNotifications: z.object({
+    enabled: z.boolean().default(false).optional(),
+    recipients: z.array(z.string().email()).optional(),
+    subject: z.string().optional(),
+    bodyTemplate: z.string().optional(),
+    attachPdf: z.boolean().default(true).optional(),
+    senderName: z.string().optional(),
+  }).optional(),
   resumeSettings: z.object({
     showResumeModal: z.boolean().default(true).optional(),
     resumeTitle: z.string().default('Resume your saved progress?').optional(),
@@ -1374,6 +1383,74 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
 }`}
                     </pre>
                   </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle>📧 Email Notifications</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField control={form.control} name="emailNotifications.enabled" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel>Enable Email Notifications</FormLabel>
+                        <FormDescription>Send an email with a PDF attachment when a submission is received.</FormDescription>
+                      </div>
+                      <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {form.watch('emailNotifications.enabled') && (
+                    <>
+                      <FormField control={form.control} name="emailNotifications.recipients" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Recipient Emails</FormLabel>
+                          <FormDescription>Enter email addresses separated by commas.</FormDescription>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={Array.isArray(field.value) ? field.value.join(', ') : ''}
+                              onChange={(e) => {
+                                const emails = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                field.onChange(emails);
+                              }}
+                              placeholder="admin@scago.org, manager@scago.org"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="emailNotifications.subject" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email Subject (Optional)</FormLabel>
+                          <FormDescription>Use {'{{surveyTitle}}'} and {'{{submissionDate}}'} placeholders.</FormDescription>
+                          <FormControl><Input {...field} value={field.value ?? ''} placeholder="New Submission: {{surveyTitle}}" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="emailNotifications.bodyTemplate" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email Body (Optional)</FormLabel>
+                          <FormDescription>Custom message to include in the email.</FormDescription>
+                          <FormControl><Textarea {...field} value={field.value ?? ''} placeholder="A new response has been submitted. Please see the attached PDF for details." /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="emailNotifications.attachPdf" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>Attach PDF</FormLabel>
+                            <FormDescription>Include submission data as a PDF attachment.</FormDescription>
+                          </div>
+                          <FormControl><Switch checked={field.value !== false} onCheckedChange={field.onChange} /></FormControl>
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="emailNotifications.senderName" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Sender Name (Optional)</FormLabel>
+                          <FormControl><Input {...field} value={field.value ?? ''} placeholder="Form Notifications" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

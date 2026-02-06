@@ -29,7 +29,9 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
-  const navItems = useUserNavigation();
+  const allNavItems = useUserNavigation();
+  // Filter out globally hidden items
+  const navItems = allNavItems.filter(item => !item.isGloballyHidden);
   const [isOpen, setIsOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
 

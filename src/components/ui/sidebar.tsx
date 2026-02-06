@@ -44,7 +44,8 @@ export function Sidebar() {
   const [isPinned, setIsPinned] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const { user, isAdmin, isYEPManager, userRole } = useContext(AuthContext);
-  const navItems = useUserNavigation();
+  const allNavItems = useUserNavigation();
+  const navItems = allNavItems.filter(item => !item.isGloballyHidden);
   const router = useRouter();
   const { toast } = useToast();
 

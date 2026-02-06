@@ -45,6 +45,11 @@ service cloud.firestore {
       allow read: if isAdmin();  // Only admins can read feedback
       allow update, delete: if isAdmin();  // Only admins can modify
     }
+
+    // Allow collectionGroup queries on submissions for dashboard
+    match /{path=**}/submissions/{submissionId} {
+      allow read: if isAdmin();
+    }
     
     // Config collection - Read by authenticated users, Write by admin only
     match /config/{docId} {

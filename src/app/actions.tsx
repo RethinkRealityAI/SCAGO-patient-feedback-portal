@@ -8,6 +8,7 @@ import { collection, getDocs, addDoc, doc, getDoc, DocumentData } from 'firebase
 import { db as clientDb } from '@/lib/firebase';
 import { unstable_noStore as noStore } from 'next/cache';
 import { sendWebhook } from '@/lib/webhook-sender';
+import type { SubmissionEmailConfig } from '@/lib/email-templates';
 
 // Note: We intentionally use the Web Firestore client on the server for writes
 // to respect Firestore security rules and avoid admin credential requirements
@@ -59,7 +60,7 @@ export async function submitFeedback(
       submissionData
     );
 
-    // Fetch survey for specific webhook info
+    // Fetch survey for webhook and email notification config
     const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
     const surveyData = surveyDoc.exists() ? surveyDoc.data() : null;
 
@@ -89,6 +90,41 @@ export async function submitFeedback(
       }
     } catch (error) {
       console.error('Webhook notification failed:', error);
+    }
+
+    // Send email notification if configured
+    if (surveyData?.emailNotifications?.enabled) {
+      try {
+        const { sendSubmissionEmail } = await import('@/lib/email-templates');
+        const { generateSubmissionPdf, extractFieldLabels } = await import('@/lib/pdf-generator');
+
+        // Build field labels map from survey definition
+        const fieldLabels = extractFieldLabels(surveyData);
+
+        // Generate PDF
+        const pdfBuffer = await generateSubmissionPdf({
+          title: surveyData.title || 'Form Submission',
+          surveyId,
+          submittedAt: submissionData.submittedAt,
+          data: formData,
+          fieldLabels,
+        });
+
+        // Send email
+        const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
+        await sendSubmissionEmail({
+          config: emailConfig,
+          surveyTitle: surveyData.title || 'Form Submission',
+          surveyId,
+          submissionData: formData,
+          pdfBuffer,
+        });
+
+        console.log(`[submitFeedback] Email notification sent for survey: ${surveyId}`);
+      } catch (emailError) {
+        console.error('Email notification failed:', emailError);
+        // Don't block submission on email failure
+      }
     }
 
     return { sessionId: finalSessionId };

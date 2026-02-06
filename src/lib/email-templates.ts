@@ -34,7 +34,7 @@ function generateEmailTemplate(data: {
   footerNote?: string;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
-  
+
   return `
     <!DOCTYPE html>
     <html>
@@ -458,3 +458,174 @@ This email was sent by SCAGO Youth Empowerment Program
   }
 }
 
+/**
+ * Email notification configuration for a survey
+ */
+export interface SubmissionEmailConfig {
+  enabled: boolean;
+  recipients: string[]; // Array of email addresses
+  subject?: string; // Optional custom subject, supports {{surveyTitle}} {{submissionDate}} placeholders
+  bodyTemplate?: string; // Optional custom body text
+  attachPdf?: boolean; // Whether to attach the PDF (default: true)
+  senderName?: string; // Custom sender name
+}
+
+/**
+ * Generate HTML email template for form submission notification
+ */
+function generateSubmissionEmailTemplate(data: {
+  surveyTitle: string;
+  submissionDate: string;
+  bodyText?: string;
+  attachmentNote?: string;
+}): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Submission - ${data.surveyTitle}</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #0070f3; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background-color: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; }
+        .info-box { background-color: #fff; padding: 20px; border-left: 4px solid #0070f3; margin: 20px 0; }
+        .button { display: inline-block; background-color: #0070f3; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        .attachment-note { background-color: #e8f4fd; padding: 15px; border-radius: 6px; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>📋 New Form Submission</h1>
+        <p>${data.surveyTitle}</p>
+      </div>
+      
+      <div class="content">
+        <div class="info-box">
+          <p style="margin: 0;"><strong>Survey:</strong> ${data.surveyTitle}</p>
+          <p style="margin: 10px 0 0 0;"><strong>Submitted:</strong> ${data.submissionDate}</p>
+        </div>
+        
+        ${data.bodyText ? `<p>${data.bodyText}</p>` : '<p>A new form submission has been received. Please see the attached PDF for details.</p>'}
+        
+        ${data.attachmentNote ? `
+          <div class="attachment-note">
+            <p style="margin: 0;"><strong>📎 Attachment:</strong> ${data.attachmentNote}</p>
+          </div>
+        ` : ''}
+        
+        <div style="text-align: center;">
+          <a href="${appUrl}/dashboard" class="button">View Dashboard</a>
+        </div>
+      </div>
+      
+      <div class="footer">
+        <p>This is an automated notification from your feedback portal.</p>
+        <p>Manage notifications in the Survey Settings.</p>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Replace template placeholders in subject or body
+ */
+function replacePlaceholders(template: string, data: { surveyTitle: string; submissionDate: string }): string {
+  return template
+    .replace(/\{\{surveyTitle\}\}/g, data.surveyTitle)
+    .replace(/\{\{submissionDate\}\}/g, data.submissionDate);
+}
+
+/**
+ * Send submission notification email with optional PDF attachment
+ */
+export async function sendSubmissionEmail(data: {
+  config: SubmissionEmailConfig;
+  surveyTitle: string;
+  surveyId: string;
+  submissionData: Record<string, any>;
+  pdfBuffer?: Uint8Array | null;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!data.config.enabled || !data.config.recipients || data.config.recipients.length === 0) {
+    return { success: true }; // No notification configured
+  }
+
+  try {
+    const transporter = getTransporter();
+    const submissionDate = new Date().toLocaleString();
+
+    // Prepare subject
+    const defaultSubject = `New Submission: {{surveyTitle}} - {{submissionDate}}`;
+    const subject = replacePlaceholders(
+      data.config.subject || defaultSubject,
+      { surveyTitle: data.surveyTitle, submissionDate }
+    );
+
+    // Prepare body
+    const bodyText = data.config.bodyTemplate
+      ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate })
+      : undefined;
+
+    // Generate HTML
+    const attachmentNote = data.pdfBuffer && data.config.attachPdf !== false
+      ? 'Submission_Details.pdf'
+      : undefined;
+
+    const htmlContent = generateSubmissionEmailTemplate({
+      surveyTitle: data.surveyTitle,
+      submissionDate,
+      bodyText,
+      attachmentNote,
+    });
+
+    // Plain text version
+    const textContent = `
+New Form Submission
+
+Survey: ${data.surveyTitle}
+Submitted: ${submissionDate}
+
+${bodyText || 'A new form submission has been received. Please see the attached PDF for details.'}
+
+${attachmentNote ? `Attachment: ${attachmentNote}` : ''}
+
+---
+This is an automated notification from your feedback portal.
+    `;
+
+    // Build email options
+    const mailOptions: any = {
+      from: `"${data.config.senderName || 'Form Notifications'}" <${process.env.SMTP_USER}>`,
+      to: data.config.recipients.join(', '),
+      subject,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    // Add PDF attachment if available and enabled
+    if (data.pdfBuffer && data.config.attachPdf !== false) {
+      mailOptions.attachments = [
+        {
+          filename: `Submission_${data.surveyId}_${Date.now()}.pdf`,
+          content: Buffer.from(data.pdfBuffer),
+          contentType: 'application/pdf',
+        },
+      ];
+    }
+
+    await transporter.sendMail(mailOptions);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending submission notification email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send notification email',
+    };
+  }
+}

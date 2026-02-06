@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '@/components/auth/auth-provider';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { PAGE_PERMISSIONS, type PagePermissionKey } from '@/lib/permissions';
 import { getPagePermissions } from '@/lib/page-permissions-actions';
 import {
@@ -27,6 +29,7 @@ export interface NavItem {
   label: string;
   icon: React.ReactNode;
   permission?: PagePermissionKey;
+  isGloballyHidden?: boolean;
 }
 
 /**
@@ -34,6 +37,30 @@ export interface NavItem {
  */
 export function useUserNavigation(): NavItem[] {
   const { user, isSuperAdmin, isAdmin, permissions, loading } = useContext(AuthContext);
+  const [globalHiddenIds, setGlobalHiddenIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Fetch global navigation settings
+    async function fetchSettings() {
+      try {
+        const docRef = doc(db, 'config', 'navigation');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.hiddenIds && Array.isArray(data.hiddenIds)) {
+            setGlobalHiddenIds(data.hiddenIds);
+          }
+        }
+      } catch (e) {
+        // Silent fail for regular users if permission denied (though rules allow read)
+        console.debug("Failed to fetch nav settings", e);
+      }
+    }
+
+    if (user) {
+      fetchSettings();
+    }
+  }, [user]);
 
   if (!user || loading) {
     return [];
@@ -165,6 +192,10 @@ export function useUserNavigation(): NavItem[] {
     });
   }
 
-  return navItems;
+  // Apply global visibility settings
+  return navItems.map(item => ({
+    ...item,
+    isGloballyHidden: globalHiddenIds.includes(item.id)
+  }));
 }
 
