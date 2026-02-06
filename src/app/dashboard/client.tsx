@@ -157,7 +157,7 @@ function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: b
 export default function Dashboard() {
   const { user, loading: authLoading, isAdmin, isSuperAdmin, allowedForms } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
-  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string }>>([])
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string> }>>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -224,6 +224,17 @@ export default function Dashboard() {
     const map = new Map<string, string>()
     surveys.forEach(survey => {
       map.set(survey.id, survey.title)
+    })
+    return map
+  }, [surveys])
+
+  // Map survey IDs to their field labels (for human-readable display in modal)
+  const surveyFieldLabelsMap = useMemo(() => {
+    const map = new Map<string, Record<string, string>>()
+    surveys.forEach(survey => {
+      if (survey.fieldLabels) {
+        map.set(survey.id, survey.fieldLabels)
+      }
     })
     return map
   }, [surveys])
@@ -434,29 +445,30 @@ export default function Dashboard() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       result = result.filter(s => {
-        // Helper to check if this specific submission is a consent type
-        const isConsentSubmission = isConsentSurvey([s])
+        // Always search by name (works for all form types)
+        const name = extractName(s).toLowerCase()
+        if (name.includes(query)) return true
 
-        // Search all relevant fields based on submission type
-        if (isConsentSubmission) {
-          // Search consent-specific fields
-          return (
-            ((s as any).firstName || '').toLowerCase().includes(query) ||
-            ((s as any).lastName || '').toLowerCase().includes(query) ||
-            ((s as any).email || '').toLowerCase().includes(query) ||
-            getHospitalOrLocation(s, true).toLowerCase().includes(query) ||
-            (s.surveyId || '').toLowerCase().includes(query)
-          )
-        } else {
-          // Search feedback-specific fields
-          return (
-            (s.hospitalInteraction || '').toLowerCase().includes(query) ||
-            getHospitalOrLocation(s, false).toLowerCase().includes(query) ||
-            (s.surveyId || '').toLowerCase().includes(query) ||
-            // Also check rating if it's a number
-            (s.rating && String(s.rating).includes(query))
-          )
+        // Search by email
+        if (((s as any).email || '').toLowerCase().includes(query)) return true
+
+        // Search by survey display name
+        const surveyName = getSurveyDisplayName(s.surveyId).toLowerCase()
+        if (surveyName.includes(query)) return true
+
+        // Hospital feedback-specific searches
+        if (isHospitalFeedbackSurvey([s])) {
+          if ((s.hospitalInteraction || '').toLowerCase().includes(query)) return true
+          if (getHospitalOrLocation(s, false).toLowerCase().includes(query)) return true
+          if (s.rating && String(s.rating).includes(query)) return true
         }
+
+        // Consent-specific searches
+        if (isConsentSurvey([s])) {
+          if (getHospitalOrLocation(s, true).toLowerCase().includes(query)) return true
+        }
+
+        return false
       })
     }
 
@@ -1035,6 +1047,15 @@ export default function Dashboard() {
     setIsModalOpen(true)
   }
 
+  // Get a human-readable field label for a submission key, preferring survey-specific labels
+  const getFieldLabel = useCallback((key: string, surveyId?: string) => {
+    if (surveyId) {
+      const labels = surveyFieldLabelsMap.get(surveyId)
+      if (labels && labels[key]) return labels[key]
+    }
+    return getQuestionText(key)
+  }, [surveyFieldLabelsMap])
+
   const closeSubmissionModal = () => {
     setIsModalOpen(false)
     setActiveSubmission(null)
@@ -1118,33 +1139,16 @@ export default function Dashboard() {
 
   // Export functionality
   const exportToCSV = useCallback(() => {
-    const headers = isConsent
-      ? ['Date', 'Name', 'Email', 'Phone', 'City', 'Province', 'Primary Hospital', 'SCD Connection', 'May Contact', 'Mailing List', 'Support Groups']
-      : ['Date', 'Rating', 'Hospital', 'Department', 'Experience', 'Pain Score', 'Wait Time', 'Length of Stay']
-
-    const rows = filtered.map(sub => {
-      if (isConsent) {
-        return [
-          safeFormatDateForExport(sub.submittedAt, true),
-          `${sub.firstName || ''} ${sub.lastName || ''}`.trim(),
-          sub.email || '',
-          sub.phone || '',
-          (sub.city as any)?.selection || sub.city || '',
-          (sub.province as any)?.selection || sub.province || '',
-          (sub.primaryHospital as any)?.selection || sub.primaryHospital || '',
-          Array.isArray(sub.scdConnection) ? sub.scdConnection.join('; ') : sub.scdConnection || '',
-          sub.mayContact || '',
-          sub.joinMailingList || '',
-          sub.joinSupportGroups || ''
-        ]
-      } else {
-        // Get hospital from all possible field variations using the centralized helper
+    if (isHospitalFeedback) {
+      // Hospital feedback-specific export
+      const headers = ['Date', 'Name', 'Rating', 'Hospital', 'Department', 'Experience', 'Pain Score', 'Wait Time', 'Length of Stay']
+      const rows = filtered.map(sub => {
         const hospitalValue = getHospitalOrLocation(sub, false)
         const waitTime = sub.waitTime as any
         const lengthOfStay = sub.lengthOfStay as any
-
         return [
           safeFormatDateForExport(sub.submittedAt, true),
+          extractName(sub) || 'Anonymous',
           sub.rating ?? '',
           hospitalValue,
           sub.department || '',
@@ -1153,24 +1157,66 @@ export default function Dashboard() {
           waitTime ? (typeof waitTime === 'object' ? `${waitTime.hours || 0}h ${waitTime.minutes || 0}m` : waitTime) : '',
           lengthOfStay ? (typeof lengthOfStay === 'object' ? `${lengthOfStay.days || 0}d ${lengthOfStay.hours || 0}h` : lengthOfStay) : ''
         ]
-      }
-    })
+      })
+      return exportCSVData(headers, rows, 'feedback')
+    } else if (isConsent) {
+      // Consent form export
+      const headers = ['Date', 'Name', 'Email', 'Phone', 'City', 'Province', 'Primary Hospital', 'SCD Connection', 'May Contact', 'Mailing List', 'Support Groups']
+      const rows = filtered.map(sub => [
+        safeFormatDateForExport(sub.submittedAt, true),
+        `${sub.firstName || ''} ${sub.lastName || ''}`.trim(),
+        sub.email || '',
+        sub.phone || '',
+        (sub.city as any)?.selection || sub.city || '',
+        (sub.province as any)?.selection || sub.province || '',
+        (sub.primaryHospital as any)?.selection || sub.primaryHospital || '',
+        Array.isArray(sub.scdConnection) ? sub.scdConnection.join('; ') : sub.scdConnection || '',
+        sub.mayContact || '',
+        sub.joinMailingList || '',
+        sub.joinSupportGroups || ''
+      ])
+      return exportCSVData(headers, rows, 'consent')
+    } else {
+      // Generic survey or All Surveys export - dynamic columns from all submission fields
+      const excludeKeys = new Set(['id', 'submittedAt', 'surveyId', 'sessionId', 'userId'])
+      const allKeys = new Set<string>()
+      filtered.forEach(sub => {
+        Object.keys(sub).forEach(key => {
+          if (!excludeKeys.has(key)) allKeys.add(key)
+        })
+      })
+      const fieldKeys = Array.from(allKeys).sort()
+      const headers = ['Date', 'Survey', ...fieldKeys.map(key => getFieldLabel(key, selectedSurvey !== 'all' ? selectedSurvey : undefined))]
+      const rows = filtered.map(sub => [
+        safeFormatDateForExport(sub.submittedAt, true),
+        getSurveyDisplayName(sub.surveyId),
+        ...fieldKeys.map(key => {
+          const val = (sub as any)[key]
+          if (val === null || val === undefined) return ''
+          if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join('; ')
+          if (typeof val === 'object') return extractStringValue(val)
+          return String(val)
+        })
+      ])
+      return exportCSVData(headers, rows, 'submissions')
+    }
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `${isConsent ? 'consent' : 'feedback'}_export_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, [filtered, isConsent])
+    function exportCSVData(headers: string[], rows: (string | number)[][], prefix: string) {
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `${prefix}_export_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }, [filtered, isConsent, isHospitalFeedback, selectedSurvey, getFieldLabel, getSurveyDisplayName])
 
   const exportToExcel = useCallback(() => {
     import('@/lib/export-utils').then(({ exportToXLSX }) => {
@@ -1354,7 +1400,7 @@ export default function Dashboard() {
         onRemove={removeNotification}
         onClearAll={clearAllNotifications}
       />
-      <div className="container mx-auto px-4 py-4 sm:py-8">
+      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-full overflow-x-hidden">
         <div className="grid gap-4 sm:gap-6">
           {/* Header with Enhanced Filters */}
           <div className="space-y-3 sm:space-y-4">
@@ -1367,9 +1413,9 @@ export default function Dashboard() {
                   {dashboardDescription}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 {user?.email && (
-                  <p className="text-sm text-muted-foreground hidden sm:inline">
+                  <p className="text-sm text-muted-foreground hidden lg:inline">
                     Signed in as <span className="font-medium">{user.email}</span>
                   </p>
                 )}
@@ -1386,16 +1432,15 @@ export default function Dashboard() {
                       }
                     }}
                   >
-                    <LogOut className="h-4 w-4 mr-2" />
+                    <LogOut className="h-4 w-4 sm:mr-2" />
                     <span className="hidden sm:inline">Sign Out</span>
-                    <span className="sm:hidden">Out</span>
                   </Button>
                 )}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowKeyboardHelp(true)}
-                  className="flex items-center gap-2"
+                  className="hidden sm:flex items-center gap-2"
                   title="Keyboard shortcuts"
                 >
                   <Keyboard className="h-4 w-4" />
@@ -1407,7 +1452,7 @@ export default function Dashboard() {
                   className="flex items-center gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Export Data
+                  <span className="hidden sm:inline">Export Data</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -1417,39 +1462,39 @@ export default function Dashboard() {
                   className="flex items-center gap-2"
                 >
                   <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh
+                  <span className="hidden sm:inline">Refresh</span>
                 </Button>
                 {activeFiltersCount > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={clearAllFilters}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-1 sm:gap-2"
                   >
                     <X className="h-4 w-4" />
-                    Clear Filters ({activeFiltersCount})
+                    <span className="hidden sm:inline">Clear Filters</span> ({activeFiltersCount})
                   </Button>
                 )}
               </div>
             </div>
 
             {/* Advanced Filter Controls */}
-            <div className="flex flex-wrap gap-3 p-4 bg-muted/20 rounded-lg border">
-              <div className="flex items-center gap-2 relative">
-                <Search className="h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-4 bg-muted/20 rounded-lg border overflow-hidden">
+              <div className="flex items-center gap-2 relative w-full sm:w-auto">
+                <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <Input
-                  placeholder={isConsent ? "Search by name, email, city..." : "Search feedback, hospitals, surveys..."}
+                  placeholder={isConsent ? "Search by name, email, city..." : "Search feedback, hospitals..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pr-16"
+                  className="w-full sm:w-64 pr-16"
                 />
-                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded opacity-60">
+                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded opacity-60 hidden sm:inline">
                   {typeof navigator !== 'undefined' && navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'}
                 </kbd>
               </div>
 
               <Select onValueChange={setSelectedSurvey} value={selectedSurvey}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Filter by survey" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1462,7 +1507,7 @@ export default function Dashboard() {
               </Select>
 
               <Select onValueChange={(value) => setDateRange(value as 'all' | '7d' | '30d' | '90d')} value={dateRange}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-40">
                   <SelectValue placeholder="Date range" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1475,7 +1520,7 @@ export default function Dashboard() {
 
               {!isConsent && !isAllSurveysMode && !isGenericSurvey && (
                 <Select onValueChange={(value) => setRatingFilter(value as 'all' | 'excellent' | 'good' | 'poor')} value={ratingFilter}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-40">
                     <SelectValue placeholder="Rating filter" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1489,7 +1534,7 @@ export default function Dashboard() {
 
               {!isAllSurveysMode && !isGenericSurvey && (
                 <Select onValueChange={setHospitalFilter} value={hospitalFilter}>
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full sm:w-48">
                     <SelectValue placeholder={isConsent ? "Filter by care location" : "Filter by hospital"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1541,7 +1586,7 @@ export default function Dashboard() {
           </div>
 
           {/* Key Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Key metrics overview">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" role="region" aria-label="Key metrics overview">
             {/* Card 1: Submissions - shows per-survey breakdown in All Surveys mode */}
             <UCard className={`bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 backdrop-blur-sm border-blue-200/50 dark:border-blue-800/50 ${isAllSurveysMode ? 'lg:col-span-2' : ''}`} role="article" aria-labelledby="submissions-title">
               <CardHeader className="pb-2">
@@ -1698,7 +1743,7 @@ export default function Dashboard() {
           <div className="grid gap-4">
             {/* Sentiment Distribution / Consent Preferences - Hide in overview mode and generic survey mode */}
             {!isAllSurveysMode && !isGenericSurvey && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                 {isConsent ? (
                   <>
                     <Card key="contact-card" className="bg-blue-50 dark:bg-blue-950/20">
@@ -1906,7 +1951,7 @@ export default function Dashboard() {
                                 ) : null
                               })()}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                            <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5">
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                                 {surveyTitleMap.get(submission.surveyId) || 'Unknown Survey'}
                               </Badge>
@@ -1945,7 +1990,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Select value={selectedChart} onValueChange={(value: any) => setSelectedChart(value)}>
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger className="w-full sm:w-48">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -2016,8 +2061,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
-                <div className="h-80 w-full">
+              <CardContent className="p-2 sm:p-4">
+                <div className="h-64 sm:h-80 w-full">
                   {/* Overview charts */}
                   {isAllSurveysMode && selectedChart === 'submissions' && (
                     <ResponsiveContainer width="100%" height="100%">
@@ -2441,12 +2486,12 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           )}
-          <Card id="submissions-table-section" className="border-t-4 border-t-[#C8262A]">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
+          <Card id="submissions-table-section" className="border-t-4 border-t-[#C8262A] overflow-hidden">
+            <CardHeader className="pb-4 px-4 sm:px-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <CardTitle className="text-xl font-bold flex items-center gap-2">
-                    <ClipboardList className="h-5 w-5 text-[#C8262A]" />
+                  <CardTitle className="text-lg sm:text-xl font-bold flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-[#C8262A] flex-shrink-0" />
                     Recent Submissions
                   </CardTitle>
                   <CardDescription className="text-sm mt-1">
@@ -2458,15 +2503,16 @@ export default function Dashboard() {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowExportDialog(true)}
-                    className="flex items-center gap-2 bg-gradient-to-r from-[#C8262A]/10 to-[#D34040]/10 hover:from-[#C8262A]/20 hover:to-[#D34040]/20 border-[#C8262A]/30 text-[#C8262A] hover:text-[#C8262A] font-medium"
+                    className="flex items-center gap-2 bg-gradient-to-r from-[#C8262A]/10 to-[#D34040]/10 hover:from-[#C8262A]/20 hover:to-[#D34040]/20 border-[#C8262A]/30 text-[#C8262A] hover:text-[#C8262A] font-medium text-xs sm:text-sm"
                   >
-                    <Download className="h-4 w-4" />
-                    Export Submissions
+                    <Download className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Export</span>
+                    <span className="xs:hidden">Export</span>
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0 sm:p-6">
+            <CardContent className="p-0 sm:p-6 overflow-x-hidden">
               {/* Mobile Card View */}
               <div className="block md:hidden">
                 {paginatedSubmissions.length === 0 ? (
@@ -2479,9 +2525,7 @@ export default function Dashboard() {
                       <p className="text-sm text-muted-foreground max-w-md">
                         {activeFiltersCount > 0
                           ? "Try adjusting your filters to see more results"
-                          : isConsent
-                            ? "Consent form submissions will appear here once participants start filling them out"
-                            : "Feedback submissions will appear here once patients start submitting their experiences"
+                          : "Submissions will appear here once forms start being filled out"
                         }
                       </p>
                     </div>
@@ -2498,41 +2542,37 @@ export default function Dashboard() {
                       const dateStr = date && !isNaN(date.getTime())
                         ? date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                         : 'Invalid Date';
+                      const submitterName = extractName(submission);
 
                       return (
-                        <Card key={submission.id} className="border-l-4 border-l-primary">
+                        <Card key={submission.id} className="border-l-4 border-l-primary overflow-hidden">
                           <CardContent className="p-4">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1">
-                                <Badge variant="outline" className="font-normal mb-2">
-                                  {getSurveyDisplayName(submission.surveyId)}
-                                </Badge>
-                                <p className="text-xs text-muted-foreground">{dateStr}</p>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                {submitterName && (
+                                  <p className="font-semibold text-sm truncate mb-1">{submitterName}</p>
+                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge variant="outline" className="font-normal text-xs">
+                                    {getSurveyDisplayName(submission.surveyId)}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">{dateStr}</span>
+                                </div>
                               </div>
-                              <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>
-                                View
-                              </Button>
+                              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                                <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)} className="h-8 px-3 text-xs">
+                                  View
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSubmissionToDelete(submission); }}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </div>
-                            {isConsent || isGenericSurvey ? (
-                              <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Name:</span>
-                                  <span className="font-medium">{extractName(submission) || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Email:</span>
-                                  <span className="font-medium truncate ml-2">{(submission as any)?.email || 'N/A'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">City:</span>
-                                  <span className="font-medium">{getHospitalOrLocation(submission, true)}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="space-y-2 text-sm">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-muted-foreground">Rating:</span>
-                                  <div className="flex items-center gap-2">
+                            {isHospitalFeedback ? (
+                              <div className="space-y-1.5 text-sm mt-2 pt-2 border-t border-border/50">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground text-xs">Rating:</span>
+                                  <div className="flex items-center gap-1.5">
                                     {(() => {
                                       const rating = Number(submission.rating);
                                       const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10;
@@ -2541,20 +2581,31 @@ export default function Dashboard() {
                                           <div className={`h-2 w-2 rounded-full ${isValidRating && rating >= 8 ? 'bg-green-500' :
                                             isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
                                             }`} />
-                                          <span className="font-semibold">{isValidRating ? `${rating}/10` : 'N/A'}</span>
+                                          <span className="font-semibold text-xs">{isValidRating ? `${rating}/10` : 'N/A'}</span>
                                         </>
                                       );
                                     })()}
                                   </div>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Hospital:</span>
-                                  <span className="font-medium">{getHospitalOrLocation(submission, false)}</span>
-                                </div>
                                 <div>
-                                  <span className="text-muted-foreground">Experience:</span>
-                                  <p className="font-medium text-xs mt-1 line-clamp-2">{submission.hospitalInteraction || 'N/A'}</p>
+                                  <span className="text-muted-foreground text-xs">Hospital: </span>
+                                  <span className="font-medium text-xs">{getHospitalOrLocation(submission, false)}</span>
                                 </div>
+                                {submission.hospitalInteraction && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{submission.hospitalInteraction}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-1 text-sm mt-2 pt-2 border-t border-border/50">
+                                {!submitterName && (
+                                  <p className="text-xs text-muted-foreground italic">Anonymous</p>
+                                )}
+                                {isConsent && (submission as any)?.email && (
+                                  <div>
+                                    <span className="text-muted-foreground text-xs">Email: </span>
+                                    <span className="font-medium text-xs truncate">{(submission as any).email}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </CardContent>
@@ -2572,27 +2623,26 @@ export default function Dashboard() {
                       <TableRow className="bg-muted/30">
                         <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Date</TableHead>
                         <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Survey</TableHead>
-                        {isConsent || isGenericSurvey ? (
+                        <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
+                        {isHospitalFeedback ? (
                           <>
-                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
-                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Email</TableHead>
-                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Location</TableHead>
-                          </>
-                        ) : (
-                          <>
-                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Name</TableHead>
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Rating</TableHead>
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Hospital</TableHead>
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4 min-w-[200px]">Experience</TableHead>
                           </>
-                        )}
+                        ) : isConsent ? (
+                          <>
+                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Email</TableHead>
+                            <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Location</TableHead>
+                          </>
+                        ) : null}
                         <TableHead className="text-right whitespace-nowrap sticky right-0 bg-background text-sm font-semibold py-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedSubmissions.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={isConsent ? 5 : 4} className="h-64 text-center">
+                          <TableCell colSpan={isHospitalFeedback ? 7 : isConsent ? 6 : 4} className="h-64 text-center">
                             <div className="flex flex-col items-center justify-center space-y-4 py-8">
                               <div className="rounded-full bg-muted p-6">
                                 <ClipboardList className="h-12 w-12 text-muted-foreground" />
@@ -2602,9 +2652,7 @@ export default function Dashboard() {
                                 <p className="text-sm text-muted-foreground max-w-md">
                                   {activeFiltersCount > 0
                                     ? "Try adjusting your filters to see more results"
-                                    : isConsent
-                                      ? "Consent form submissions will appear here once participants start filling them out"
-                                      : "Feedback submissions will appear here once patients start submitting their experiences"
+                                    : "Submissions will appear here once forms start being filled out"
                                   }
                                 </p>
                               </div>
@@ -2642,9 +2690,17 @@ export default function Dashboard() {
                                 <TableCell className="py-4 text-sm font-medium text-foreground">
                                   {extractName(submission) || 'N/A'}
                                 </TableCell>
-                                <TableCell className="py-4 text-sm">{(submission as any)?.email || 'N/A'}</TableCell>
-                                <TableCell className="py-4 text-sm">{getHospitalOrLocation(submission, true)}</TableCell>
+                                {isConsent ? (
+                                  <>
+                                    <TableCell className="py-4 text-sm">{(submission as any)?.email || 'N/A'}</TableCell>
+                                    <TableCell className="py-4 text-sm">{getHospitalOrLocation(submission, true)}</TableCell>
+                                  </>
+                                ) : null}
                               </>
+                            ) : isAllSurveysMode ? (
+                              <TableCell className="py-4 text-sm font-medium text-foreground">
+                                {extractName(submission) || 'N/A'}
+                              </TableCell>
                             ) : (
                               <>
                                 <TableCell className="py-4 text-sm font-medium text-foreground">
@@ -2690,31 +2746,32 @@ export default function Dashboard() {
 
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-6 border-t">
-                  <p className="text-sm text-muted-foreground order-2 sm:order-1">
-                    Showing <span className="font-medium">{(currentPage - 1) * SUBMISSIONS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * SUBMISSIONS_PER_PAGE, filtered.length)}</span> of <span className="font-medium">{filtered.length}</span> submissions
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 py-3 sm:py-4 px-4 sm:px-6 border-t">
+                  <p className="text-xs sm:text-sm text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
+                    Showing <span className="font-medium">{(currentPage - 1) * SUBMISSIONS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * SUBMISSIONS_PER_PAGE, filtered.length)}</span> of <span className="font-medium">{filtered.length}</span>
                   </p>
-                  <Pagination className="justify-end order-1 sm:order-2">
-                    <PaginationContent>
+                  <Pagination className="justify-center sm:justify-end order-1 sm:order-2">
+                    <PaginationContent className="gap-0.5 sm:gap-1">
                       <PaginationItem>
                         <PaginationPrevious
                           href="#"
                           onClick={(e) => { e.preventDefault(); if (currentPage > 1) handlePageChange(currentPage - 1); }}
-                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm`}
                         />
                       </PaginationItem>
 
-                      {/* Page numbers */}
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      {/* Page numbers - show fewer on mobile */}
+                      {Array.from({ length: Math.min(typeof window !== 'undefined' && window.innerWidth < 640 ? 3 : 5, totalPages) }, (_, i) => {
+                        const maxVisible = typeof window !== 'undefined' && window.innerWidth < 640 ? 3 : 5;
                         let pageNum: number;
-                        if (totalPages <= 5) {
+                        if (totalPages <= maxVisible) {
                           pageNum = i + 1;
-                        } else if (currentPage <= 3) {
+                        } else if (currentPage <= Math.ceil(maxVisible / 2)) {
                           pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i;
+                        } else if (currentPage >= totalPages - Math.floor(maxVisible / 2)) {
+                          pageNum = totalPages - maxVisible + 1 + i;
                         } else {
-                          pageNum = currentPage - 2 + i;
+                          pageNum = currentPage - Math.floor(maxVisible / 2) + i;
                         }
 
                         return (
@@ -2723,7 +2780,7 @@ export default function Dashboard() {
                               href="#"
                               isActive={currentPage === pageNum}
                               onClick={(e) => { e.preventDefault(); handlePageChange(pageNum); }}
-                              className="cursor-pointer"
+                              className="cursor-pointer h-8 sm:h-9 w-8 sm:w-9 text-xs sm:text-sm"
                             >
                               {pageNum}
                             </PaginationLink>
@@ -2735,7 +2792,7 @@ export default function Dashboard() {
                         <PaginationNext
                           href="#"
                           onClick={(e) => { e.preventDefault(); if (currentPage < totalPages) handlePageChange(currentPage + 1); }}
-                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm`}
                         />
                       </PaginationItem>
                     </PaginationContent>
@@ -2743,42 +2800,39 @@ export default function Dashboard() {
                 </div>
               )}
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-gray-900 p-0 gap-0">
+                <DialogContent className="w-[95vw] max-w-3xl max-h-[85vh] sm:max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-gray-900 p-0 gap-0 rounded-lg">
                   {/* Red Header with Submission Details */}
-                  <div className="bg-[#C8262A] text-white px-6 py-5">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-2">
-                        <h2 className="text-xl font-bold">
-                          {isConsent
-                            ? `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || ''}`.trim() || 'Anonymous Submission'
-                            : `${(activeSubmission as any)?.firstName || ''} ${(activeSubmission as any)?.lastName || (activeSubmission as any)?.name || ''}`.trim() || 'Anonymous Submission'
-                          }
+                  <div className="bg-[#C8262A] text-white px-4 py-4 sm:px-6 sm:py-5">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="space-y-1.5 sm:space-y-2 min-w-0">
+                        <h2 className="text-lg sm:text-xl font-bold truncate">
+                          {extractName(activeSubmission as any) || 'Anonymous Submission'}
                         </h2>
-                        {/* Subtitle with Hospital/Location info */}
-                        {isGenericSurvey ? null : isConsent ? (
-                          <p className="text-lg font-medium text-white/95">
-                            {activeSubmission ? getHospitalOrLocation(activeSubmission, true) : 'Unknown Location'}
-                          </p>
-                        ) : (
-                          <p className="text-lg font-medium text-white/95">
+                        {/* Subtitle with Hospital/Location info - only for hospital feedback and consent */}
+                        {isHospitalFeedback ? (
+                          <p className="text-base sm:text-lg font-medium text-white/95 truncate">
                             {activeSubmission ? getHospitalOrLocation(activeSubmission, false) : 'Unknown Hospital'}
                           </p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-white/90">
+                        ) : isConsent ? (
+                          <p className="text-base sm:text-lg font-medium text-white/95 truncate">
+                            {activeSubmission ? getHospitalOrLocation(activeSubmission, true) : 'Unknown Location'}
+                          </p>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-white/90">
                           <span className="flex items-center gap-1.5">
-                            <Calendar className="h-4 w-4" />
-                            {activeSubmission && new Date(activeSubmission.submittedAt).toLocaleDateString('en-US', {
-                              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                            })}
+                            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                            <span className="truncate">{activeSubmission && new Date(activeSubmission.submittedAt).toLocaleDateString('en-US', {
+                              year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}</span>
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <ClipboardList className="h-4 w-4" />
-                            {getSurveyDisplayName(activeSubmission?.surveyId)}
+                            <ClipboardList className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                            <span className="truncate">{getSurveyDisplayName(activeSubmission?.surveyId)}</span>
                           </span>
                         </div>
                       </div>
-                      {!isConsent && !isGenericSurvey && activeSubmission?.rating !== undefined && (
-                        <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${activeSubmission.rating >= 8 ? 'bg-green-500 text-white' :
+                      {isHospitalFeedback && activeSubmission?.rating !== undefined && (
+                        <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold self-start flex-shrink-0 ${activeSubmission.rating >= 8 ? 'bg-green-500 text-white' :
                           activeSubmission.rating >= 5 ? 'bg-yellow-500 text-white' :
                             'bg-white text-[#C8262A]'
                           }`}>
@@ -2792,11 +2846,11 @@ export default function Dashboard() {
                     <DialogDescription>View submission information</DialogDescription>
                   </DialogHeader>
                   {activeSubmission && (
-                    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+                    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 min-h-0">
                       {/* Modernized Submission Details Interface - Clean Q&A Layout */}
-                      <div className="space-y-5 px-6 py-5">
-                        {/* Experience Highlight Box */}
-                        {!isGenericSurvey && activeSubmission.hospitalInteraction && (
+                      <div className="space-y-4 sm:space-y-5 px-4 py-4 sm:px-6 sm:py-5">
+                        {/* Experience Highlight Box - only for hospital feedback */}
+                        {isHospitalFeedback && activeSubmission.hospitalInteraction && (
                           <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border-l-4 border-[#C8262A]">
                             <h3 className="text-sm font-semibold text-[#C8262A] mb-2 uppercase tracking-wide">
                               Patient Experience
@@ -2812,7 +2866,54 @@ export default function Dashboard() {
                           .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction', 'userId', 'sessionId'].includes(key))
                           .sort((a, b) => a[0].localeCompare(b[0]))
                           .map(([key, value]) => {
-                            const question = getQuestionText(key);
+                            const question = getFieldLabel(key, activeSubmission.surveyId);
+
+                            // Detect file upload values: array of objects with url/name
+                            const isFileUpload = Array.isArray(value) && value.length > 0 && value.every((v: any) => typeof v === 'object' && v !== null && v.url);
+                            if (isFileUpload) {
+                              return (
+                                <div key={key} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-b-0">
+                                  <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                                    {question}
+                                  </h4>
+                                  <div className="space-y-2">
+                                    {value.map((file: any, i: number) => (
+                                      <a
+                                        key={i}
+                                        href={file.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-[#C8262A] hover:text-[#a51f22] underline text-sm"
+                                      >
+                                        <FileText className="h-4 w-4 flex-shrink-0" />
+                                        {file.name || `File ${i + 1}`}
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Detect single file upload stored as object with url
+                            if (typeof value === 'object' && value !== null && !Array.isArray(value) && value.url) {
+                              return (
+                                <div key={key} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-b-0">
+                                  <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                                    {question}
+                                  </h4>
+                                  <a
+                                    href={value.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-[#C8262A] hover:text-[#a51f22] underline text-sm"
+                                  >
+                                    <FileText className="h-4 w-4 flex-shrink-0" />
+                                    {value.name || 'View Document'}
+                                  </a>
+                                </div>
+                              );
+                            }
+
                             const formattedValue = formatAnswerValue(value);
 
                             // Skip empty values
@@ -2836,8 +2937,12 @@ export default function Dashboard() {
                                         </span>
                                       ))}
                                     </div>
+                                  ) : typeof formattedValue === 'string' && formattedValue.startsWith('https://') ? (
+                                    <a href={formattedValue} target="_blank" rel="noopener noreferrer" className="text-[#C8262A] hover:text-[#a51f22] underline break-all">
+                                      {formattedValue}
+                                    </a>
                                   ) : (
-                                    <span>{formattedValue}</span>
+                                    <span className="whitespace-pre-wrap">{formattedValue}</span>
                                   )}
                                 </div>
                               </div>
@@ -2847,22 +2952,22 @@ export default function Dashboard() {
                       </div>
 
                       {/* Raw Data Collapsible */}
-                      <details className="mx-6 mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4">
+                      <details className="mx-4 sm:mx-6 mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 sm:p-4">
                         <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400 font-medium hover:text-gray-700 dark:hover:text-gray-300">
                           View Raw JSON Data
                         </summary>
-                        <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-gray-100 dark:bg-gray-900 p-3 text-xs font-mono text-gray-600 dark:text-gray-400">
+                        <pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-gray-100 dark:bg-gray-900 p-3 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words">
                           {JSON.stringify(activeSubmission, null, 2)}
                         </pre>
                       </details>
                     </div>
                   )}
-                  <DialogFooter className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 bg-gray-50 dark:bg-gray-800 flex flex-wrap items-center justify-between gap-3">
+                  <DialogFooter className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-4 py-3 sm:px-6 sm:py-4 bg-gray-50 dark:bg-gray-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
                     <Button
                       variant="destructive"
                       size="sm"
                       onClick={() => setSubmissionToDelete(activeSubmission)}
-                      className="bg-[#C8262A] hover:bg-[#a51f22]"
+                      className="bg-[#C8262A] hover:bg-[#a51f22] w-full sm:w-auto"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
@@ -2871,6 +2976,7 @@ export default function Dashboard() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="flex-1 sm:flex-none"
                         onClick={() => {
                           if (!activeSubmission) return
                           const csv = [
@@ -2879,7 +2985,7 @@ export default function Dashboard() {
                             ...Object.entries(activeSubmission)
                               .filter(([key]) => !['id', 'submittedAt', 'surveyId'].includes(key))
                               .map(([key, value]) => [
-                                getQuestionText(key),
+                                getFieldLabel(key, activeSubmission.surveyId),
                                 Array.isArray(value)
                                   ? value.join('; ')
                                   : typeof value === 'object'
@@ -2901,7 +3007,7 @@ export default function Dashboard() {
                       </Button>
                       <Button
                         onClick={closeSubmissionModal}
-                        className="bg-gray-600 hover:bg-gray-700 text-white"
+                        className="bg-gray-600 hover:bg-gray-700 text-white flex-1 sm:flex-none"
                       >
                         Close
                       </Button>
@@ -2945,7 +3051,7 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Export Data</DialogTitle>
             <DialogDescription>
-              Download {isConsent ? 'consent form' : 'feedback'} submissions in CSV or Excel format
+              Download submissions in CSV or Excel format
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

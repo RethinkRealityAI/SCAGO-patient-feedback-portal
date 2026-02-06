@@ -23,11 +23,34 @@ export async function getSurveys() {
     if (snapshot.empty) {
       return [];
     }
-    return snapshot.docs.map((doc: DocumentData) => ({
-      id: doc.id,
-      title: doc.data().title || 'Untitled Survey',
-      description: doc.data().description || 'No description.',
-    }));
+    return snapshot.docs.map((doc: DocumentData) => {
+      const data = doc.data();
+      // Extract field label mapping from sections for use in dashboard
+      const fieldLabels: Record<string, string> = {};
+      if (data.sections) {
+        for (const section of data.sections) {
+          for (const field of section.fields || []) {
+            if (field.id && field.label) {
+              fieldLabels[field.id] = field.label;
+            }
+            // Handle grouped fields
+            if (field.type === 'group' && field.fields) {
+              for (const subField of field.fields) {
+                if (subField.id && subField.label) {
+                  fieldLabels[subField.id] = subField.label;
+                }
+              }
+            }
+          }
+        }
+      }
+      return {
+        id: doc.id,
+        title: data.title || 'Untitled Survey',
+        description: data.description || 'No description.',
+        fieldLabels,
+      };
+    });
   } catch (e) {
     console.error('Error listing surveys:', e);
     return [];
@@ -99,7 +122,7 @@ export async function submitFeedback(
         const { generateSubmissionPdf, extractFieldLabels } = await import('@/lib/pdf-generator');
 
         // Build field labels map from survey definition
-        const fieldLabels = extractFieldLabels(surveyData);
+        const fieldLabels = await extractFieldLabels(surveyData);
 
         // Generate PDF
         const pdfBuffer = await generateSubmissionPdf({
