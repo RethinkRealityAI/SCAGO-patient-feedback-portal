@@ -124,18 +124,23 @@ export async function submitFeedback(
         // Build field labels map from survey definition
         const fieldLabels = await extractFieldLabels(surveyData);
 
-        // Generate PDF
-        const pdfBuffer = await generateSubmissionPdf({
-          title: surveyData.title || 'Form Submission',
-          surveyId,
-          submittedAt: submissionData.submittedAt,
-          data: formData,
-          fieldLabels,
-        });
+        // Generate PDF (don't let PDF failure block email)
+        let pdfBuffer: Uint8Array | null = null;
+        try {
+          pdfBuffer = await generateSubmissionPdf({
+            title: surveyData.title || 'Form Submission',
+            surveyId,
+            submittedAt: submissionData.submittedAt,
+            data: formData,
+            fieldLabels,
+          });
+        } catch (pdfError) {
+          console.error('[submitFeedback] PDF generation failed, sending email without attachment:', pdfError);
+        }
 
         // Send email
         const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
-        await sendSubmissionEmail({
+        const emailResult = await sendSubmissionEmail({
           config: emailConfig,
           surveyTitle: surveyData.title || 'Form Submission',
           surveyId,
@@ -143,10 +148,48 @@ export async function submitFeedback(
           pdfBuffer,
         });
 
-        console.log(`[submitFeedback] Email notification sent for survey: ${surveyId}`);
+        // Log the email notification result to Firestore for admin visibility
+        try {
+          await addDoc(
+            collection(clientDb, 'surveys', surveyId, 'emailLogs'),
+            {
+              submissionId: docRef.id,
+              recipients: emailConfig.recipients || [],
+              subject: emailConfig.subject || `New Submission: ${surveyData.title}`,
+              success: emailResult.success,
+              error: emailResult.error || null,
+              skipped: emailResult.skipped || false,
+              sentAt: new Date(),
+            }
+          );
+        } catch (logError) {
+          console.error('[submitFeedback] Failed to log email result:', logError);
+        }
+
+        if (emailResult.success) {
+          console.log(`[submitFeedback] Email notification sent for survey: ${surveyId}`);
+        } else {
+          console.error(`[submitFeedback] Email notification failed for survey: ${surveyId}:`, emailResult.error);
+        }
       } catch (emailError) {
-        console.error('Email notification failed:', emailError);
-        // Don't block submission on email failure
+        console.error('[submitFeedback] Email notification error:', emailError);
+        // Log the failure to Firestore
+        try {
+          await addDoc(
+            collection(clientDb, 'surveys', surveyId, 'emailLogs'),
+            {
+              submissionId: docRef.id,
+              recipients: (surveyData.emailNotifications as SubmissionEmailConfig).recipients || [],
+              subject: (surveyData.emailNotifications as SubmissionEmailConfig).subject || `New Submission: ${surveyData.title}`,
+              success: false,
+              error: emailError instanceof Error ? emailError.message : 'Email notification failed',
+              skipped: false,
+              sentAt: new Date(),
+            }
+          );
+        } catch (logError) {
+          console.error('[submitFeedback] Failed to log email error:', logError);
+        }
       }
     }
 

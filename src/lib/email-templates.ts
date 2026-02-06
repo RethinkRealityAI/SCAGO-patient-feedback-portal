@@ -8,12 +8,20 @@ import nodemailer from 'nodemailer';
 function getTransporter() {
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASSWORD;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.ionos.com';
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+
+  console.log(`[getTransporter] SMTP_USER defined: ${!!smtpUser}, SMTP_PASSWORD defined: ${!!smtpPass}, host: ${smtpHost}, port: ${smtpPort}`);
+
   if (!smtpUser || !smtpPass) {
-    throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASSWORD.');
+    throw new Error(
+      `SMTP credentials are not configured. SMTP_USER=${smtpUser ? 'set' : 'MISSING'}, SMTP_PASSWORD=${smtpPass ? 'set' : 'MISSING'}. ` +
+      `Add SMTP_USER and SMTP_PASSWORD in Netlify Environment Variables.`
+    );
   }
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ionos.com',
-    port: Number(process.env.SMTP_PORT || 587),
+    host: smtpHost,
+    port: smtpPort,
     secure: false,
     auth: {
       user: smtpUser,
@@ -550,9 +558,21 @@ export async function sendSubmissionEmail(data: {
   surveyId: string;
   submissionData: Record<string, any>;
   pdfBuffer?: Uint8Array | null;
-}): Promise<{ success: boolean; error?: string }> {
-  if (!data.config.enabled || !data.config.recipients || data.config.recipients.length === 0) {
-    return { success: true }; // No notification configured
+}): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
+  // Validate configuration
+  if (!data.config.enabled) {
+    return { success: false, skipped: true, error: 'Email notifications are not enabled for this survey.' };
+  }
+
+  if (!data.config.recipients || data.config.recipients.length === 0) {
+    return { success: false, error: 'No recipient email addresses configured.' };
+  }
+
+  // Validate SMTP credentials are available
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    const errMsg = `Email service is not configured. SMTP_USER=${process.env.SMTP_USER ? 'set' : 'MISSING'}, SMTP_PASSWORD=${process.env.SMTP_PASSWORD ? 'set' : 'MISSING'}. Add them in Netlify Environment Variables and redeploy.`;
+    console.error(`[sendSubmissionEmail] ${errMsg}`);
+    return { success: false, error: errMsg };
   }
 
   try {
@@ -618,14 +638,85 @@ This is an automated notification from your feedback portal.
       ];
     }
 
-    await transporter.sendMail(mailOptions);
+    console.log(`[sendSubmissionEmail] Sending email to: ${data.config.recipients.join(', ')} for survey: ${data.surveyId}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[sendSubmissionEmail] Email sent successfully. MessageId: ${info.messageId}`);
 
     return { success: true };
   } catch (error) {
-    console.error('Error sending submission notification email:', error);
+    console.error('[sendSubmissionEmail] Failed to send email:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to send notification email',
+    };
+  }
+}
+
+/**
+ * Send a test email to verify SMTP configuration works
+ */
+export async function sendTestEmail(recipientEmail: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[sendTestEmail] Starting test email to: ${recipientEmail}`);
+  console.log(`[sendTestEmail] SMTP_USER defined: ${!!process.env.SMTP_USER}, SMTP_PASSWORD defined: ${!!process.env.SMTP_PASSWORD}`);
+
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    const errMsg = `SMTP credentials are not configured. SMTP_USER=${process.env.SMTP_USER ? 'set' : 'MISSING'}, SMTP_PASSWORD=${process.env.SMTP_PASSWORD ? 'set' : 'MISSING'}. Add them in Netlify Environment Variables and redeploy.`;
+    console.error(`[sendTestEmail] ${errMsg}`);
+    return { success: false, error: errMsg };
+  }
+
+  if (!recipientEmail) {
+    return { success: false, error: 'Recipient email address is required.' };
+  }
+
+  try {
+    const transporter = getTransporter();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+
+    const htmlContent = generateEmailTemplate({
+      title: 'Test Email - SCAGO Portal',
+      greeting: 'Hello',
+      content: `
+        <p>This is a test email to verify that your email notification settings are working correctly.</p>
+        <div style="background-color: #f0fdf4; padding: 20px; border-left: 4px solid #22c55e; margin: 20px 0;">
+          <p style="margin: 0; font-weight: bold; color: #15803d;">Email Configuration Verified</p>
+          <p style="margin: 10px 0 0 0;">Your SMTP settings are working correctly. Submission notification emails will be delivered to this address.</p>
+        </div>
+      `,
+      buttonText: 'Go to Dashboard',
+      buttonLink: `${appUrl}/dashboard`,
+      footerNote: 'This test email was sent from your SCAGO Portal email notification settings.',
+    });
+
+    const textContent = `
+Test Email - SCAGO Portal
+
+Hello,
+
+This is a test email to verify that your email notification settings are working correctly.
+
+Your SMTP settings are working correctly. Submission notification emails will be delivered to this address.
+
+Go to Dashboard: ${appUrl}/dashboard
+
+---
+This test email was sent from your SCAGO Portal email notification settings.
+    `;
+
+    await transporter.sendMail({
+      from: `"SCAGO Portal Notifications" <${process.env.SMTP_USER}>`,
+      to: recipientEmail,
+      subject: 'Test Email - SCAGO Portal Notifications',
+      text: textContent,
+      html: htmlContent,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[sendTestEmail] Failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send test email',
     };
   }
 }

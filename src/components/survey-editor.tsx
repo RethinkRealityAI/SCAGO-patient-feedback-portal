@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DndContext, closestCenter, KeyboardSensor as DndKeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X, Plus, Eraser, GitBranch, Zap } from 'lucide-react';
+import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X, Plus, Eraser, GitBranch, Zap, Mail, Send, CheckCircle2, AlertTriangle, RefreshCw, Clock } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -947,6 +947,195 @@ const SortableField = ({ field, sectionIndex, fieldIndex, remove, move, totalFie
   );
 };
 
+interface EmailLogEntry {
+  id: string;
+  submissionId: string | null;
+  recipients: string[];
+  subject: string;
+  success: boolean;
+  error: string | null;
+  skipped: boolean;
+  sentAt: string | null;
+}
+
+function EmailNotificationLog({ surveyId }: { surveyId: string }) {
+  const [logs, setLogs] = useState<EmailLogEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/email-logs?surveyId=${encodeURIComponent(surveyId)}`);
+      const data = await response.json();
+      if (response.ok) {
+        setLogs(data.logs || []);
+      } else {
+        setError(data.error || 'Failed to load email logs');
+      }
+    } catch {
+      setError('Network error loading email logs');
+    } finally {
+      setIsLoading(false);
+      setHasLoaded(true);
+    }
+  }, [surveyId]);
+
+  const successCount = logs.filter((l) => l.success).length;
+  const failedCount = logs.filter((l) => !l.success && !l.skipped).length;
+
+  return (
+    <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          Notification History
+        </h4>
+        <Button type="button" variant="ghost" size="sm" onClick={fetchLogs} disabled={isLoading} className="h-7 px-2 text-xs">
+          {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          <span className="ml-1">{hasLoaded ? 'Refresh' : 'Load'}</span>
+        </Button>
+      </div>
+
+      {!hasLoaded && !isLoading && (
+        <p className="text-xs text-muted-foreground">Click Load to view recent email notification history for this survey.</p>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-1.5 text-xs text-red-700">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {error}
+        </div>
+      )}
+
+      {hasLoaded && !error && (
+        <>
+          {logs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No email notifications have been sent for this survey yet.</p>
+          ) : (
+            <>
+              <div className="flex gap-3 text-xs">
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">
+                  <CheckCircle2 className="h-3 w-3" /> {successCount} sent
+                </span>
+                {failedCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700">
+                    <AlertTriangle className="h-3 w-3" /> {failedCount} failed
+                  </span>
+                )}
+                <span className="text-muted-foreground">{logs.length} total</span>
+              </div>
+
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className={`flex items-start gap-3 rounded-md border px-3 py-2 text-xs ${
+                      log.success
+                        ? 'border-green-200 bg-green-50/50'
+                        : log.skipped
+                          ? 'border-gray-200 bg-gray-50'
+                          : 'border-red-200 bg-red-50/50'
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      {log.success ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">
+                          {log.recipients.join(', ') || 'No recipients'}
+                        </span>
+                        <span className="text-muted-foreground shrink-0">
+                          {log.sentAt ? new Date(log.sentAt).toLocaleString() : '—'}
+                        </span>
+                      </div>
+                      {log.error && (
+                        <p className="mt-0.5 text-red-600 truncate">{log.error}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function TestEmailButton({ recipients }: { recipients: string[] }) {
+  const [testEmail, setTestEmail] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { toast } = useToast();
+
+  const handleSendTest = async () => {
+    const email = testEmail.trim() || (recipients.length > 0 ? recipients[0] : '');
+    if (!email) {
+      toast({ title: 'No email address', description: 'Enter an email address or add recipients above.', variant: 'destructive' });
+      return;
+    }
+
+    setIsSending(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setTestResult({ success: true, message: `Test email sent to ${email}` });
+        toast({ title: 'Test email sent', description: `Check ${email} for the test message.` });
+      } else {
+        setTestResult({ success: false, message: data.error || 'Failed to send test email' });
+        toast({ title: 'Test email failed', description: data.error || 'Failed to send. Check your SMTP configuration.', variant: 'destructive' });
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: 'Network error. Could not reach the server.' });
+      toast({ title: 'Test email failed', description: 'Network error. Please try again.', variant: 'destructive' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          value={testEmail}
+          onChange={(e) => setTestEmail(e.target.value)}
+          placeholder={recipients.length > 0 ? recipients[0] : 'Enter email address'}
+          type="email"
+          className="flex-1"
+        />
+        <Button type="button" variant="outline" onClick={handleSendTest} disabled={isSending} size="sm" className="shrink-0">
+          {isSending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+          {isSending ? 'Sending...' : 'Send Test'}
+        </Button>
+      </div>
+      {testResult && (
+        <div className={`flex items-center gap-1.5 text-xs ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
+          {testResult.success ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+          {testResult.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SurveyEditor({ survey }: { survey: Record<string, any> }) {
   const [isMounted, setIsMounted] = useState(false);
   const [activeItem, setActiveItem] = useState<any>(null);
@@ -1386,23 +1575,40 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader><CardTitle>📧 Email Notifications</CardTitle></CardHeader>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-5 w-5 text-blue-500" />
+                      <CardTitle>Email Notifications</CardTitle>
+                    </div>
+                    {form.watch('emailNotifications.enabled') && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle2 className="h-3 w-3" /> Active
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField control={form.control} name="emailNotifications.enabled" render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
                       <div className="space-y-0.5">
-                        <FormLabel>Enable Email Notifications</FormLabel>
-                        <FormDescription>Send an email with a PDF attachment when a submission is received.</FormDescription>
+                        <FormLabel className="text-base">Enable Email Notifications</FormLabel>
+                        <FormDescription>Automatically send an email with submission details (and optional PDF) each time someone submits a response.</FormDescription>
                       </div>
                       <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                     </FormItem>
                   )} />
                   {form.watch('emailNotifications.enabled') && (
-                    <>
+                    <div className="space-y-4 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                        <AlertTriangle className="h-4 w-4" />
+                        Requires SMTP credentials (SMTP_USER and SMTP_PASSWORD) to be configured in your environment variables.
+                      </div>
+
                       <FormField control={form.control} name="emailNotifications.recipients" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Recipient Emails</FormLabel>
-                          <FormDescription>Enter email addresses separated by commas.</FormDescription>
+                          <FormLabel className="text-sm font-semibold">Recipient Emails <span className="text-destructive">*</span></FormLabel>
+                          <FormDescription>Comma-separated list of email addresses that will receive notifications.</FormDescription>
                           <FormControl>
                             <Input
                               {...field}
@@ -1411,45 +1617,79 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                                 const emails = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
                                 field.onChange(emails);
                               }}
-                              placeholder="admin@scago.org, manager@scago.org"
+                              placeholder="admin@example.com, manager@example.com"
                             />
                           </FormControl>
+                          {Array.isArray(field.value) && field.value.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {field.value.map((email: string, i: number) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+                                  <Mail className="h-3 w-3" />
+                                  {email}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = (field.value || []).filter((_: string, idx: number) => idx !== i);
+                                      field.onChange(updated);
+                                    }}
+                                    className="ml-0.5 hover:text-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )} />
+
                       <FormField control={form.control} name="emailNotifications.subject" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Email Subject (Optional)</FormLabel>
-                          <FormDescription>Use {'{{surveyTitle}}'} and {'{{submissionDate}}'} placeholders.</FormDescription>
+                          <FormDescription>Supports placeholders: {'{{surveyTitle}}'} and {'{{submissionDate}}'}.</FormDescription>
                           <FormControl><Input {...field} value={field.value ?? ''} placeholder="New Submission: {{surveyTitle}}" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
+
                       <FormField control={form.control} name="emailNotifications.bodyTemplate" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Email Body (Optional)</FormLabel>
-                          <FormDescription>Custom message to include in the email.</FormDescription>
-                          <FormControl><Textarea {...field} value={field.value ?? ''} placeholder="A new response has been submitted. Please see the attached PDF for details." /></FormControl>
+                          <FormDescription>Custom message included in the notification email body.</FormDescription>
+                          <FormControl><Textarea {...field} value={field.value ?? ''} placeholder="A new response has been submitted. Please see the attached PDF for details." rows={3} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="emailNotifications.attachPdf" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                          <div className="space-y-0.5">
-                            <FormLabel>Attach PDF</FormLabel>
-                            <FormDescription>Include submission data as a PDF attachment.</FormDescription>
-                          </div>
-                          <FormControl><Switch checked={field.value !== false} onCheckedChange={field.onChange} /></FormControl>
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="emailNotifications.senderName" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Sender Name (Optional)</FormLabel>
-                          <FormControl><Input {...field} value={field.value ?? ''} placeholder="Form Notifications" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="emailNotifications.attachPdf" render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border bg-white p-3 shadow-sm">
+                            <div className="space-y-0.5">
+                              <FormLabel>Attach PDF</FormLabel>
+                              <FormDescription>Include a PDF summary of the submission.</FormDescription>
+                            </div>
+                            <FormControl><Switch checked={field.value !== false} onCheckedChange={field.onChange} /></FormControl>
+                          </FormItem>
+                        )} />
+
+                        <FormField control={form.control} name="emailNotifications.senderName" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Sender Name (Optional)</FormLabel>
+                            <FormControl><Input {...field} value={field.value ?? ''} placeholder="Form Notifications" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+
+                      <div className="rounded-lg border bg-white p-4 shadow-sm">
+                        <h4 className="text-sm font-semibold mb-2">Test Email Delivery</h4>
+                        <p className="text-xs text-muted-foreground mb-3">Send a test email to verify your SMTP configuration is working. Enter a recipient and click Send Test.</p>
+                        <TestEmailButton recipients={form.watch('emailNotifications.recipients') || []} />
+                      </div>
+
+                      <EmailNotificationLog surveyId={survey.id} />
+                    </div>
                   )}
                 </CardContent>
               </Card>
