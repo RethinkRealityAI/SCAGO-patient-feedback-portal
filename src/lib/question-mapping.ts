@@ -69,7 +69,15 @@ export function formatAnswerValue(value: any): string | string[] {
     if (value === null || value === undefined) return 'N/A';
 
     if (Array.isArray(value)) {
-        return value.map(v => formatStringValue(v));
+        // Skip file upload arrays (handled separately in the UI)
+        if (value.length > 0 && typeof value[0] === 'object' && value[0]?.url) return 'N/A';
+        return value.map(v => {
+            if (typeof v === 'object' && v !== null) {
+                if (v.selection) return v.selection === 'other' && v.other ? v.other : v.selection;
+                return JSON.stringify(v);
+            }
+            return formatStringValue(String(v));
+        });
     }
 
     if (typeof value === 'boolean') {
@@ -77,8 +85,16 @@ export function formatAnswerValue(value: any): string | string[] {
     }
 
     if (typeof value === 'object') {
-        // Handle complex objects if any
-        if (value.selection) return value.selection; // Handle selector objects
+        // Skip file upload objects (handled separately in the UI)
+        if (value.url) return 'N/A';
+        // Handle {selection: '...', other: '...'} from hospital-on/city-on/department-on
+        if (value.selection === 'other' && value.other) return value.other;
+        if (value.selection) return value.selection;
+        // Handle duration {hours, minutes} or {days, hours}
+        if (value.hours !== undefined && value.minutes !== undefined) return `${value.hours}h ${value.minutes}m`;
+        if (value.days !== undefined && value.hours !== undefined) return `${value.days}d ${value.hours}h`;
+        // Handle time-amount {value, unit}
+        if (value.value !== undefined && value.unit) return `${value.value} ${value.unit}`;
         return JSON.stringify(value);
     }
 

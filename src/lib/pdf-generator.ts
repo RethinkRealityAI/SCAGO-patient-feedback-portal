@@ -78,7 +78,7 @@ function formatValue(value: any): string {
 /**
  * Helper to extract field labels from survey data
  */
-export function extractFieldLabels(surveyData: any): Record<string, string> {
+export async function extractFieldLabels(surveyData: any): Promise<Record<string, string>> {
     const labels: Record<string, string> = {};
     if (surveyData?.sections) {
         for (const section of surveyData.sections) {
