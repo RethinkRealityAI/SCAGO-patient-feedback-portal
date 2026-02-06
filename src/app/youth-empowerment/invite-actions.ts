@@ -190,12 +190,20 @@ async function sendInviteEmail(data: {
   // Create transporter - IONOS SMTP
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASSWORD;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.ionos.com';
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+
+  console.log(`[sendInviteEmail] SMTP_USER defined: ${!!smtpUser}, SMTP_PASSWORD defined: ${!!smtpPass}, host: ${smtpHost}, port: ${smtpPort}`);
+
   if (!smtpUser || !smtpPass) {
-    throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASSWORD.');
+    throw new Error(
+      `SMTP credentials are not configured. SMTP_USER=${smtpUser ? 'set' : 'MISSING'}, SMTP_PASSWORD=${smtpPass ? 'set' : 'MISSING'}. ` +
+      `Add SMTP_USER and SMTP_PASSWORD in Netlify Environment Variables.`
+    );
   }
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ionos.com',
-    port: Number(process.env.SMTP_PORT || 587),
+    host: smtpHost,
+    port: smtpPort,
     secure: false,
     auth: {
       user: smtpUser,

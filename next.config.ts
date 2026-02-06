@@ -42,6 +42,7 @@ const nextConfig: NextConfig = {
     'agent-base',
     'http-proxy-agent',
     'https-proxy-agent',
+    'nodemailer',
   ],
   // Exclude server-only modules from client bundle
   webpack: (config, { isServer }) => {
