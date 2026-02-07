@@ -167,6 +167,26 @@ export async function generateSubmissionPdf(
         const maxTextWidth = pageWidth - margin * 2;
         const lineHeight = 14;
 
+        // Safely convert submittedAt to Date (handles Firestore Timestamps)
+        let submittedAtDate: Date;
+        try {
+            if (config.submittedAt && typeof (config.submittedAt as any).toDate === 'function') {
+                // Firestore Timestamp
+                submittedAtDate = (config.submittedAt as any).toDate();
+            } else if (config.submittedAt instanceof Date) {
+                submittedAtDate = config.submittedAt;
+            } else if (typeof config.submittedAt === 'string' || typeof config.submittedAt === 'number') {
+                submittedAtDate = new Date(config.submittedAt);
+            } else {
+                submittedAtDate = new Date();
+            }
+        } catch (e) {
+            console.warn('[generateSubmissionPdf] Failed to parse submittedAt, using current date:', e);
+            submittedAtDate = new Date();
+        }
+
+        console.log(`[generateSubmissionPdf] Starting PDF generation for: ${config.title}`);
+
         let page = doc.addPage([pageWidth, pageHeight]);
         let cursorY = pageHeight - margin;
 
@@ -203,7 +223,7 @@ export async function generateSubmissionPdf(
         });
         cursorY -= 14;
 
-        page.drawText(`Submitted: ${config.submittedAt.toLocaleString()}`, {
+        page.drawText(`Submitted: ${submittedAtDate.toLocaleString()}`, {
             x: margin,
             y: cursorY,
             size: 10,
@@ -364,9 +384,14 @@ export async function generateSubmissionPdf(
             });
         }
 
-        return await doc.save();
+        const pdfBytes = await doc.save();
+        console.log(`[generateSubmissionPdf] PDF created successfully: ${pdfBytes.length} bytes`);
+        return pdfBytes;
     } catch (error) {
-        console.error('Error generating submission PDF:', error);
+        console.error('[generateSubmissionPdf] Error generating submission PDF:', error);
+        if (error instanceof Error) {
+            console.error('[generateSubmissionPdf] Error stack:', error.stack);
+        }
         return null;
     }
 }

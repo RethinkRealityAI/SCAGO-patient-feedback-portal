@@ -157,6 +157,9 @@ export async function submitFeedback(
             ? `${surveyData.title}${submitterName ? ` - ${submitterName}` : ''}`
             : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
 
+          console.log(`[submitFeedback] Generating PDF with title: "${title}"`);
+          console.log(`[submitFeedback] orderedData keys: ${Object.keys(orderedData).length}`);
+
           pdfBuffer = await generateSubmissionPdf({
             title,
             surveyId,
@@ -164,16 +167,23 @@ export async function submitFeedback(
             data: orderedData,
             fieldLabels,
           });
+
+          if (pdfBuffer) {
+            console.log(`[submitFeedback] PDF generated successfully: ${pdfBuffer.length} bytes`);
+          } else {
+            console.warn('[submitFeedback] PDF generation returned null - check pdf-generator.ts for errors');
+          }
         } catch (pdfError) {
-          console.error('[submitFeedback] PDF generation failed, sending email without attachment:', pdfError);
+          console.error('[submitFeedback] PDF generation failed with exception:', pdfError);
         }
 
-        // Send email
+        // Send email with submission ID for direct view link
         const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
         const emailResult = await sendSubmissionEmail({
           config: emailConfig,
           surveyTitle: surveyData.title || 'Form Submission',
           surveyId,
+          submissionId: docRef.id,
           submissionData: formData,
           pdfBuffer,
         });

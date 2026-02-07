@@ -484,6 +484,8 @@ export interface SubmissionEmailConfig {
 function generateSubmissionEmailTemplate(data: {
   surveyTitle: string;
   submissionDate: string;
+  submitterName?: string;
+  viewSubmissionLink?: string;
   bodyText?: string;
   attachmentNote?: string;
 }): string {
@@ -498,12 +500,14 @@ function generateSubmissionEmailTemplate(data: {
       <title>New Submission - ${data.surveyTitle}</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #0070f3; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header { background-color: #C8262A; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
         .content { background-color: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; }
-        .info-box { background-color: #fff; padding: 20px; border-left: 4px solid #0070f3; margin: 20px 0; }
-        .button { display: inline-block; background-color: #0070f3; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .info-box { background-color: #fff; padding: 20px; border-left: 4px solid #C8262A; margin: 20px 0; border-radius: 0 6px 6px 0; }
+        .button { display: inline-block; background-color: #C8262A; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 5px; }
+        .button-secondary { display: inline-block; background-color: #666; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 5px; }
         .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
         .attachment-note { background-color: #e8f4fd; padding: 15px; border-radius: 6px; margin-top: 20px; }
+        .submitter-highlight { font-size: 18px; color: #C8262A; font-weight: bold; }
       </style>
     </head>
     <body>
@@ -514,11 +518,12 @@ function generateSubmissionEmailTemplate(data: {
       
       <div class="content">
         <div class="info-box">
+          ${data.submitterName ? `<p style="margin: 0 0 10px 0;"><strong>Submitted by:</strong> <span class="submitter-highlight">${data.submitterName}</span></p>` : ''}
           <p style="margin: 0;"><strong>Survey:</strong> ${data.surveyTitle}</p>
           <p style="margin: 10px 0 0 0;"><strong>Submitted:</strong> ${data.submissionDate}</p>
         </div>
         
-        ${data.bodyText ? `<p>${data.bodyText}</p>` : '<p>A new form submission has been received. Please see the attached PDF for details.</p>'}
+        ${data.bodyText ? `<p>${data.bodyText}</p>` : '<p>A new form submission has been received.</p>'}
         
         ${data.attachmentNote ? `
           <div class="attachment-note">
@@ -526,13 +531,14 @@ function generateSubmissionEmailTemplate(data: {
           </div>
         ` : ''}
         
-        <div style="text-align: center;">
-          <a href="${appUrl}/dashboard" class="button">View Dashboard</a>
+        <div style="text-align: center; margin-top: 25px;">
+          ${data.viewSubmissionLink ? `<a href="${data.viewSubmissionLink}" class="button">View Submission Details</a>` : ''}
+          <a href="${appUrl}/dashboard" class="button-secondary">Go to Dashboard</a>
         </div>
       </div>
       
       <div class="footer">
-        <p>This is an automated notification from your feedback portal.</p>
+        <p>This is an automated notification from your SCAGO Portal.</p>
         <p>Manage notifications in the Survey Settings.</p>
       </div>
     </body>
@@ -556,6 +562,7 @@ export async function sendSubmissionEmail(data: {
   config: SubmissionEmailConfig;
   surveyTitle: string;
   surveyId: string;
+  submissionId?: string;
   submissionData: Record<string, any>;
   pdfBuffer?: Uint8Array | null;
 }): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
@@ -578,9 +585,22 @@ export async function sendSubmissionEmail(data: {
   try {
     const transporter = getTransporter();
     const submissionDate = new Date().toLocaleString();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
 
-    // Prepare subject
-    const defaultSubject = `New Submission: {{surveyTitle}} - {{submissionDate}}`;
+    // Extract submitter name for display
+    const { extractName } = await import('@/lib/submission-utils');
+    const submitterName = extractName(data.submissionData);
+    console.log(`[sendSubmissionEmail] Submitter name: ${submitterName || 'Anonymous'}`);
+
+    // Create view submission link (as a fallback for PDF)
+    const viewSubmissionLink = data.submissionId
+      ? `${appUrl}/dashboard?submission=${data.submissionId}`
+      : undefined;
+
+    // Prepare subject - include submitter name if available
+    const defaultSubject = submitterName
+      ? `New Submission: {{surveyTitle}} from ${submitterName}`
+      : `New Submission: {{surveyTitle}} - {{submissionDate}}`;
     const subject = replacePlaceholders(
       data.config.subject || defaultSubject,
       { surveyTitle: data.surveyTitle, submissionDate }
@@ -591,14 +611,15 @@ export async function sendSubmissionEmail(data: {
       ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate })
       : undefined;
 
-    // Generate HTML
-    const attachmentNote = data.pdfBuffer && data.config.attachPdf !== false
-      ? 'Submission_Details.pdf'
-      : undefined;
+    // Generate HTML with submitter name and view link
+    const hasPdfAttachment = data.pdfBuffer && data.config.attachPdf !== false;
+    const attachmentNote = hasPdfAttachment ? 'Submission_Details.pdf' : undefined;
 
     const htmlContent = generateSubmissionEmailTemplate({
       surveyTitle: data.surveyTitle,
       submissionDate,
+      submitterName: submitterName || undefined,
+      viewSubmissionLink,
       bodyText,
       attachmentNote,
     });
@@ -606,21 +627,22 @@ export async function sendSubmissionEmail(data: {
     // Plain text version
     const textContent = `
 New Form Submission
-
+${submitterName ? `\nSubmitted by: ${submitterName}` : ''}
 Survey: ${data.surveyTitle}
 Submitted: ${submissionDate}
 
-${bodyText || 'A new form submission has been received. Please see the attached PDF for details.'}
+${bodyText || 'A new form submission has been received.'}
 
+${viewSubmissionLink ? `View submission details: ${viewSubmissionLink}` : ''}
 ${attachmentNote ? `Attachment: ${attachmentNote}` : ''}
 
 ---
-This is an automated notification from your feedback portal.
+This is an automated notification from your SCAGO Portal.
     `;
 
     // Build email options
     const mailOptions: any = {
-      from: `"${data.config.senderName || 'Form Notifications'}" <${process.env.SMTP_USER}>`,
+      from: `"${data.config.senderName || 'SCAGO Portal'}" <${process.env.SMTP_USER}>`,
       to: data.config.recipients.join(', '),
       subject,
       text: textContent,
@@ -628,21 +650,22 @@ This is an automated notification from your feedback portal.
     };
 
     // Add PDF attachment if available and enabled
-    if (data.pdfBuffer && data.config.attachPdf !== false) {
-      // Create a descriptive filename
-      const { extractName } = await import('@/lib/submission-utils');
-      const submitterName = extractName(data.submissionData);
+    if (hasPdfAttachment) {
       const safeTitle = data.surveyTitle.replace(/[^a-z0-9]/gi, '_').substring(0, 25);
       const safeName = submitterName ? submitterName.replace(/[^a-z0-9]/gi, '_').substring(0, 20) : new Date().toISOString().split('T')[0];
       const filename = `${safeTitle}_${safeName}.pdf`;
 
+      console.log(`[sendSubmissionEmail] Attaching PDF: ${filename} (${data.pdfBuffer!.length} bytes)`);
+
       mailOptions.attachments = [
         {
           filename,
-          content: Buffer.from(data.pdfBuffer),
+          content: Buffer.from(data.pdfBuffer!),
           contentType: 'application/pdf',
         },
       ];
+    } else {
+      console.log(`[sendSubmissionEmail] No PDF attachment - pdfBuffer: ${!!data.pdfBuffer}, attachPdf config: ${data.config.attachPdf}`);
     }
 
     console.log(`[sendSubmissionEmail] Sending email to: ${data.config.recipients.join(', ')} for survey: ${data.surveyId}`);
