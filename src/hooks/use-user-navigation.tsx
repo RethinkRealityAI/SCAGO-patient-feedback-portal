@@ -100,7 +100,7 @@ export function useUserNavigation(): NavItem[] {
     navItems.push({
       id: 'dashboard',
       href: '/dashboard',
-      label: 'SCAGO Portal Forms Dashboard',
+      label: 'Forms Dashboard',
       icon: <LayoutDashboard className="h-4 w-4" fill="currentColor" />,
       permission: 'forms-dashboard',
     });

@@ -46,8 +46,8 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col min-h-screen">
           <Header />
           <main className="flex-1 relative">
-            <div className="p-4 sm:p-6">
-              <div className="mx-auto max-w-7xl w-full">
+            <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+              <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1920px]">
                 {children}
               </div>
             </div>

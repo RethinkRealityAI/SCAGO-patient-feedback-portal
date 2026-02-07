@@ -141,8 +141,8 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full px-4 pt-4 lg:pt-6 pb-2 pointer-events-none">
-      <div className="mx-auto max-w-7xl pointer-events-auto">
+    <header className="sticky top-0 z-50 w-full px-4 lg:px-6 xl:px-8 pt-4 lg:pt-6 pb-2 pointer-events-none">
+      <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1920px] pointer-events-auto">
         <div className="glass-premium rounded-2xl transition-all duration-500 hover:shadow-primary/5">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-4 lg:gap-8">
