@@ -77,6 +77,31 @@ export async function extractFieldLabels(surveyData: any): Promise<Record<string
 }
 
 /**
+ * Helper to extract field order from survey data
+ */
+export async function extractFieldOrder(surveyData: any): Promise<string[]> {
+    const order: string[] = [];
+    if (surveyData?.sections) {
+        for (const section of surveyData.sections) {
+            for (const field of section.fields || []) {
+                if (field.id) {
+                    order.push(field.id);
+                }
+                if (field.type === 'group' && field.fields) {
+                    for (const subField of field.fields) {
+                        if (subField.id) {
+                            order.push(subField.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return order;
+}
+
+
+/**
  * Sanitize text to remove characters unsupported by WinAnsi encoding (standard PDF fonts)
  */
 function sanitizeText(text: string): string {

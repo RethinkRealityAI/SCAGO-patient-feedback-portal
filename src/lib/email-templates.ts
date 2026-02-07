@@ -629,9 +629,16 @@ This is an automated notification from your feedback portal.
 
     // Add PDF attachment if available and enabled
     if (data.pdfBuffer && data.config.attachPdf !== false) {
+      // Create a descriptive filename
+      const { extractName } = await import('@/lib/submission-utils');
+      const submitterName = extractName(data.submissionData);
+      const safeTitle = data.surveyTitle.replace(/[^a-z0-9]/gi, '_').substring(0, 25);
+      const safeName = submitterName ? submitterName.replace(/[^a-z0-9]/gi, '_').substring(0, 20) : new Date().toISOString().split('T')[0];
+      const filename = `${safeTitle}_${safeName}.pdf`;
+
       mailOptions.attachments = [
         {
-          filename: `Submission_${data.surveyId}_${Date.now()}.pdf`,
+          filename,
           content: Buffer.from(data.pdfBuffer),
           contentType: 'application/pdf',
         },

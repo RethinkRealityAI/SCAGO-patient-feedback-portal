@@ -9,14 +9,14 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "glass-button bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-glass-lg backdrop-blur-md border border-primary/20",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_1px_3px_rgba(0,0,0,0.1)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.12)] border border-primary/20",
         destructive:
-          "glass-button bg-destructive/90 text-destructive-foreground hover:bg-destructive border border-destructive/20",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm border border-destructive/20",
         outline:
-          "glass-button border border-primary/50 bg-background/30 hover:bg-primary/20 hover:text-primary-foreground hover:border-primary/50",
+          "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-primary/50 shadow-sm",
         secondary:
-          "glass-button bg-secondary text-secondary-foreground hover:bg-secondary/90 border border-secondary/20",
-        ghost: "hover:bg-primary/20 hover:text-primary backdrop-blur-sm rounded-lg transition-all duration-300",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/90 shadow-sm border border-secondary/20",
+        ghost: "hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-primary rounded-lg transition-colors duration-200",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
@@ -35,7 +35,7 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   asChild?: boolean
 }
 

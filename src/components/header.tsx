@@ -147,11 +147,11 @@ export default function Header() {
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-4 lg:gap-8">
               <Link href="/" className="flex items-center space-x-3 group">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 backdrop-blur-md border border-primary/20 group-hover:from-primary/30 group-hover:to-primary/10 transition-all duration-500 shadow-sm group-hover:shadow-primary/20 group-hover:scale-105 active:scale-95">
+                <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 group-hover:bg-primary/15 transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-105 active:scale-95">
                   <HeartPulse className="h-6 w-6 text-primary animate-pulse-subtle" />
                 </div>
                 <div className="flex flex-col -space-y-1">
-                  <span className="font-extrabold text-xl bg-gradient-to-r from-primary via-primary/80 to-secondary bg-clip-text text-transparent drop-shadow-sm">
+                  <span className="font-extrabold text-xl text-primary">
                     {portalName}
                   </span>
                 </div>
@@ -173,7 +173,7 @@ export default function Header() {
                           <ChevronDown className="h-3 w-3 opacity-50" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 p-2 glass-premium border-border/50 shadow-2xl rounded-2xl backdrop-blur-3xl">
+                      <DropdownMenuContent align="end" className="w-56 p-2 bg-white dark:bg-gray-900 border border-gray-200/60 dark:border-gray-700/50 shadow-lg rounded-2xl">
                         {overflowItems.map((item) => {
                           const isItemActive = pathname === item.href || pathname?.startsWith(item.href + '/');
                           return (
@@ -229,11 +229,11 @@ export default function Header() {
                 {user && (
                   <Sheet open={isOpen} onOpenChange={setIsOpen}>
                     <SheetTrigger asChild>
-                      <Button variant="ghost" size="icon" className="lg:hidden rounded-full h-10 w-10 border border-border/50 bg-white/5 backdrop-blur-sm">
+                      <Button variant="ghost" size="icon" className="lg:hidden rounded-full h-10 w-10 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
                         <Menu className="h-5 w-5" />
                       </Button>
                     </SheetTrigger>
-                    <SheetContent side="right" className="p-0 glass-premium border-l border-border/50 w-[85%] sm:max-w-md">
+                    <SheetContent side="right" className="p-0 bg-white dark:bg-gray-900 border-l border-gray-200/60 dark:border-gray-700/50 w-[85%] sm:max-w-md shadow-xl">
                       <div className="flex flex-col h-full">
                         <SheetHeader className="p-6 border-b border-border/30">
                           <SheetTitle className="text-left flex items-center gap-3">
@@ -258,7 +258,7 @@ export default function Header() {
                           ))}
                         </div>
 
-                        <div className="p-8 border-t border-border/30 bg-primary/5 backdrop-blur-md">
+                        <div className="p-8 border-t border-gray-200/60 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/50">
                           {user?.email && (
                             <div className="mb-6 flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-ellipsis overflow-hidden">
                               <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">

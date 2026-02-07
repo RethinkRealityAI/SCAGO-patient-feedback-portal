@@ -627,6 +627,7 @@ export async function exportSubmissionPdf(params: {
   submission: FeedbackSubmission;
   fieldLabels?: Record<string, string>;
   fieldOrder?: string[];
+  surveyTitle?: string; // Optional survey title for better PDF naming
 }): Promise<{ error?: string; pdfBase64?: string }> {
   try {
     const { enforcePagePermission } = await getServerAuth();
@@ -634,6 +635,7 @@ export async function exportSubmissionPdf(params: {
 
     const sub = params.submission;
     const { generateSubmissionPdf } = await import('@/lib/pdf-generator');
+    const { extractName } = await import('@/lib/submission-utils');
 
     // We need to reorder the data object before passing it to generateSubmissionPdf
     // BUT generateSubmissionPdf uses Object.entries, so we should create an object with keys in order.
@@ -654,8 +656,14 @@ export async function exportSubmissionPdf(params: {
       Object.assign(orderedData, sub);
     }
 
+    // Create a descriptive title
+    const submitterName = extractName(sub);
+    const title = params.surveyTitle
+      ? `${params.surveyTitle}${submitterName ? ` - ${submitterName}` : ''}`
+      : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
+
     const pdfBytes = await generateSubmissionPdf({
-      title: 'Form Submission',
+      title,
       surveyId: sub.surveyId,
       submittedAt: new Date(sub.submittedAt),
       data: orderedData,

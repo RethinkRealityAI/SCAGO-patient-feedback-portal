@@ -1388,11 +1388,9 @@ export default function Dashboard() {
   // Show loading state
   if (initialLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-          <Loader className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <Loader className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading dashboard...</p>
       </div>
     )
   }
@@ -1400,24 +1398,22 @@ export default function Dashboard() {
   // Show error state
   if (fetchError) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error Loading Dashboard</AlertTitle>
-          <AlertDescription>
-            <p className="mb-2">{fetchError}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.location.reload()}
-              className="mt-2"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error Loading Dashboard</AlertTitle>
+        <AlertDescription>
+          <p className="mb-2">{fetchError}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.reload()}
+            className="mt-2"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
     )
   }
 
@@ -1437,7 +1433,7 @@ export default function Dashboard() {
         onRemove={removeNotification}
         onClearAll={clearAllNotifications}
       />
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-full overflow-x-hidden">
+      <div className="space-y-4 sm:space-y-6">
         <div className="grid gap-4 sm:gap-6">
           {/* Header with Enhanced Filters */}
           <div className="space-y-3 sm:space-y-4">
@@ -3031,11 +3027,13 @@ export default function Dashboard() {
                             setIsLoading(true)
                             const labels = surveyFieldLabelsMap.get(activeSubmission.surveyId) || {}
                             const order = surveyFieldOrderMap.get(activeSubmission.surveyId) || []
+                            const title = surveyTitleMap.get(activeSubmission.surveyId) || 'Form Submission'
 
                             const res = await exportSubmissionPdf({
                               submission: activeSubmission,
                               fieldLabels: labels,
-                              fieldOrder: order
+                              fieldOrder: order,
+                              surveyTitle: title
                             })
 
                             if (res.error || !res.pdfBase64) {
@@ -3043,11 +3041,16 @@ export default function Dashboard() {
                             } else {
                               const link = document.createElement('a')
                               link.href = `data:application/pdf;base64,${res.pdfBase64}`
-                              link.download = `submission-${activeSubmission.id}.pdf`
+                              // Create a descriptive filename
+                              const submitterName = extractName(activeSubmission)
+                              const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 30)
+                              const safeName = submitterName ? submitterName.replace(/[^a-z0-9]/gi, '_').substring(0, 20) : activeSubmission.id.substring(0, 8)
+                              link.download = `${safeTitle}-${safeName}.pdf`
                               link.click()
                             }
                           } catch (e) {
                             console.error("PDF Export error", e)
+                            setError("Failed to generate PDF. Please try again.")
                           } finally {
                             setIsLoading(false)
                           }

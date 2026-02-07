@@ -127,19 +127,41 @@ export async function submitFeedback(
     if (surveyData?.emailNotifications?.enabled) {
       try {
         const { sendSubmissionEmail } = await import('@/lib/email-templates');
-        const { generateSubmissionPdf, extractFieldLabels } = await import('@/lib/pdf-generator');
+        const { generateSubmissionPdf, extractFieldLabels, extractFieldOrder } = await import('@/lib/pdf-generator');
+        const { extractName } = await import('@/lib/submission-utils');
 
-        // Build field labels map from survey definition
+        // Build field labels and order from survey definition
         const fieldLabels = await extractFieldLabels(surveyData);
+        const fieldOrder = await extractFieldOrder(surveyData);
+
+        // Reorder form data to match survey field order
+        const orderedData: Record<string, any> = {};
+        for (const key of fieldOrder) {
+          if (formData[key] !== undefined) {
+            orderedData[key] = formData[key];
+          }
+        }
+        // Add any fields not in the order to the end
+        for (const [key, value] of Object.entries(formData)) {
+          if (!fieldOrder.includes(key) && !orderedData.hasOwnProperty(key)) {
+            orderedData[key] = value;
+          }
+        }
 
         // Generate PDF (don't let PDF failure block email)
         let pdfBuffer: Uint8Array | null = null;
         try {
+          // Create a descriptive PDF title
+          const submitterName = extractName(formData);
+          const title = surveyData.title
+            ? `${surveyData.title}${submitterName ? ` - ${submitterName}` : ''}`
+            : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
+
           pdfBuffer = await generateSubmissionPdf({
-            title: surveyData.title || 'Form Submission',
+            title,
             surveyId,
             submittedAt: submissionData.submittedAt,
-            data: formData,
+            data: orderedData,
             fieldLabels,
           });
         } catch (pdfError) {
