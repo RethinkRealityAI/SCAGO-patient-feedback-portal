@@ -7,7 +7,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { AuthContext } from '@/components/auth/auth-provider';
 import { signOut } from '@/lib/firebase-auth';
 import { useToast } from '@/hooks/use-toast';
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { useUserNavigation, NavItem } from '@/hooks/use-user-navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -57,6 +58,24 @@ export default function Header() {
     return () => window.removeEventListener('storage', loadPins);
   }, []);
 
+  // Dynamic threshold based on window width
+  const [threshold, setThreshold] = useState(5);
+
+  useEffect(() => {
+    const updateThreshold = () => {
+      const width = window.innerWidth;
+      if (width >= 1800) setThreshold(15);
+      else if (width >= 1536) setThreshold(9);
+      else if (width >= 1350) setThreshold(7);
+      else if (width >= 1200) setThreshold(6);
+      else setThreshold(5);
+    };
+
+    updateThreshold();
+    window.addEventListener('resize', updateThreshold);
+    return () => window.removeEventListener('resize', updateThreshold);
+  }, []);
+
   // Check if we're on the profile page to show "YEP Portal" instead
   const isProfilePage = pathname?.startsWith('/profile');
   const portalName = isProfilePage ? 'YEP Portal' : 'SCAGO Portal';
@@ -75,25 +94,26 @@ export default function Header() {
     }
   };
 
-  // Logic to split nav items based on pins
-  // If user has pins, show them first, then overflow the rest
-  // If no pins, default to first 5
-  const desktopThreshold = 5;
-
+  // Logic to split nav items based on pins vs threshold
   let visibleItems: NavItem[] = [];
   let overflowItems: NavItem[] = [];
 
   if (pinnedIds.length > 0) {
-    // Show pinned items that exist in current navItems, sorted by their order in pinnedIds
+    // Show pinned items first (respecting user preference)
     const availablePinned = navItems.filter(item => pinnedIds.includes(item.id));
-    visibleItems = [...availablePinned].sort((a, b) =>
+    const sortedPinned = [...availablePinned].sort((a, b) =>
       pinnedIds.indexOf(a.id) - pinnedIds.indexOf(b.id)
     );
-    // The rest go to overflow
-    overflowItems = navItems.filter(item => !pinnedIds.includes(item.id));
+
+    // Fill up remaining threshold slots with non-pinned items if any
+    const nonPinned = navItems.filter(item => !pinnedIds.includes(item.id));
+    const remainingSlots = Math.max(0, threshold - sortedPinned.length);
+
+    visibleItems = [...sortedPinned, ...nonPinned.slice(0, remainingSlots)];
+    overflowItems = nonPinned.slice(remainingSlots);
   } else {
-    visibleItems = navItems.slice(0, desktopThreshold);
-    overflowItems = navItems.slice(desktopThreshold);
+    visibleItems = navItems.slice(0, threshold);
+    overflowItems = navItems.slice(threshold);
   }
 
   const NavLink = ({ item, onClick, className, showLabel = true }: { item: NavItem, onClick?: () => void, className?: string, showLabel?: boolean }) => {
@@ -103,7 +123,7 @@ export default function Header() {
         href={item.href}
         onClick={onClick}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-300 relative group",
+          "flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-2 rounded-xl text-[11px] xl:text-xs 2xl:text-sm font-medium transition-all duration-300 relative group shrink-0",
           isActive
             ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
             : "text-muted-foreground hover:text-foreground hover:bg-white/10 dark:hover:bg-white/5",
@@ -111,9 +131,11 @@ export default function Header() {
         )}
       >
         <span className={cn("transition-transform duration-300 group-hover:scale-110", isActive ? "" : "text-primary/70")}>
-          {item.icon}
+          {item.icon && React.cloneElement(item.icon as React.ReactElement, {
+            className: cn((item.icon as any).props.className, "h-3.5 w-3.5 xl:h-4 xl:w-4")
+          })}
         </span>
-        {showLabel && <span>{item.label}</span>}
+        {showLabel && <span className="truncate max-w-[80px] xl:max-w-[120px] 2xl:max-w-none">{item.label}</span>}
       </Link>
     );
   };

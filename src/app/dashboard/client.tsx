@@ -29,7 +29,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet,
-  TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard, MapPin, Loader, AlertCircle, Calendar
+  TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard, MapPin, Loader, AlertCircle, Calendar,
+  Clock, Building2, ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare, Trash2, Hash, LogOut
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -44,7 +45,7 @@ import {
 } from '@/components/ui/chart'
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Bar, BarChart, Pie, PieChart, Cell, ResponsiveContainer, Tooltip, Legend, Area, AreaChart } from 'recharts'
 import { Card as UCard } from '@/components/ui/card'
-import { ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare, Trash2, Hash } from 'lucide-react'
+
 import { FeedbackSubmission } from './types'
 import { analyzeFeedback, generateAnalysisPdf, exportSubmissionsPdf, exportSubmissionPdf } from './actions'
 import ReactMarkdown from 'react-markdown'
@@ -62,7 +63,7 @@ import { getQuestionText, formatAnswerValue } from '@/lib/question-mapping'
 import { getSurveys } from '../actions'
 import { useAuth } from '@/hooks/use-auth'
 import { signOut } from '@/lib/firebase-auth'
-import { LogOut } from 'lucide-react'
+
 import { extractName } from '@/lib/submission-utils'
 
 const SUBMISSIONS_PER_PAGE = 20

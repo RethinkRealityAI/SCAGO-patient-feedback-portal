@@ -212,7 +212,7 @@ export async function generateSubmissionPdf(
                 cursorY = pageHeight - margin;
             }
 
-            const label = config.fieldLabels?.[key] || key;
+            const label = config.fieldLabels?.[key] || getQuestionText(key);
 
             // Handle file attachments separately
             if (isFileAttachmentArray(value)) {
