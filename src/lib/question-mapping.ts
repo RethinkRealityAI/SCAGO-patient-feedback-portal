@@ -71,12 +71,16 @@ export function formatAnswerValue(value: any): string | string[] {
     if (Array.isArray(value)) {
         // Skip file upload arrays (handled separately in the UI)
         if (value.length > 0 && typeof value[0] === 'object' && value[0]?.url) return 'N/A';
+
+        // If it's an array of strings/numbers, format them
+        if (value.every(v => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
+            return value.map(v => formatStringValue(String(v)));
+        }
+
+        // Otherwise format each item which might be an object
         return value.map(v => {
-            if (typeof v === 'object' && v !== null) {
-                if (v.selection) return v.selection === 'other' && v.other ? v.other : v.selection;
-                return JSON.stringify(v);
-            }
-            return formatStringValue(String(v));
+            const formatted = formatAnswerValue(v);
+            return Array.isArray(formatted) ? formatted.join(', ') : formatted;
         });
     }
 
@@ -87,15 +91,40 @@ export function formatAnswerValue(value: any): string | string[] {
     if (typeof value === 'object') {
         // Skip file upload objects (handled separately in the UI)
         if (value.url) return 'N/A';
+
         // Handle {selection: '...', other: '...'} from hospital-on/city-on/department-on
-        if (value.selection === 'other' && value.other) return value.other;
-        if (value.selection) return value.selection;
+        if (value.selection) {
+            if (value.selection === 'other' && value.other) return value.other;
+            return formatStringValue(String(value.selection));
+        }
+
         // Handle duration {hours, minutes} or {days, hours}
-        if (value.hours !== undefined && value.minutes !== undefined) return `${value.hours}h ${value.minutes}m`;
-        if (value.days !== undefined && value.hours !== undefined) return `${value.days}d ${value.hours}h`;
+        if (value.hours !== undefined && value.minutes !== undefined) {
+            const parts = [];
+            if (value.hours > 0) parts.push(`${value.hours}h`);
+            if (value.minutes > 0) parts.push(`${value.minutes}m`);
+            return parts.length > 0 ? parts.join(' ') : '0m';
+        }
+        if (value.days !== undefined && value.hours !== undefined) {
+            const parts = [];
+            if (value.days > 0) parts.push(`${value.days}d`);
+            if (value.hours > 0) parts.push(`${value.hours}h`);
+            return parts.length > 0 ? parts.join(' ') : '0h';
+        }
+
         // Handle time-amount {value, unit}
         if (value.value !== undefined && value.unit) return `${value.value} ${value.unit}`;
-        return JSON.stringify(value);
+
+        // Generic object: flatten it
+        const entries = Object.entries(value)
+            .filter(([k, v]) => v !== null && v !== undefined && v !== '')
+            .map(([k, v]) => {
+                const label = getQuestionText(k);
+                const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                return `${label}: ${val}`;
+            });
+
+        return entries.length > 0 ? entries.join(', ') : 'N/A';
     }
 
     return formatStringValue(String(value));

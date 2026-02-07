@@ -4,6 +4,8 @@
 import type { FeedbackSubmission } from './types';
 import { unstable_noStore as noStore } from 'next/cache';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { getQuestionText, formatAnswerValue } from '@/lib/question-mapping';
+import { extractName } from '@/lib/submission-utils';
 import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
 // NOTE: firebase-admin imports are loaded dynamically to prevent client bundling
 // DO NOT use static imports of firebase-admin or related modules
@@ -459,6 +461,212 @@ export async function generateAnalysisPdf(params: {
   } catch (e) {
     console.error('Error generating PDF:', e);
     return { error: 'Failed to generate PDF.' };
+  }
+}
+
+export async function exportSubmissionsPdf(params: {
+  title: string;
+  surveyId: string;
+  submissions: FeedbackSubmission[];
+  fieldLabels?: Record<string, string>;
+  fieldOrder?: string[];
+}): Promise<{ error?: string; pdfBase64?: string }> {
+  try {
+    const { enforcePagePermission } = await getServerAuth();
+    await enforcePagePermission('forms-dashboard');
+
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const margin = 50;
+    const pageWidth = 612;
+    const pageHeight = 792;
+    const maxTextWidth = pageWidth - margin * 2;
+    const lineHeight = 14;
+
+    let currentPage = doc.addPage([pageWidth, pageHeight]);
+    let cursorY = pageHeight - margin;
+
+    // Title
+    currentPage.drawText(`${params.title} Export`, {
+      x: margin,
+      y: cursorY,
+      size: 18,
+      font: boldFont,
+      color: rgb(0.1, 0.1, 0.1)
+    });
+    cursorY -= 25;
+
+    currentPage.drawText(`Total Submissions: ${params.submissions.length}`, {
+      x: margin,
+      y: cursorY,
+      size: 12,
+      font,
+      color: rgb(0.3, 0.3, 0.3)
+    });
+    cursorY -= 30;
+
+    for (const [idx, sub] of params.submissions.entries()) {
+      // Check for new page before starting a new submission
+      if (cursorY < margin + 100) {
+        currentPage = doc.addPage([pageWidth, pageHeight]);
+        cursorY = pageHeight - margin;
+      }
+
+      // Submission Divider/Header
+      currentPage.drawLine({
+        start: { x: margin, y: cursorY },
+        end: { x: pageWidth - margin, y: cursorY },
+        thickness: 1,
+        color: rgb(0.9, 0.9, 0.9)
+      });
+      cursorY -= 20;
+
+      const name = extractName(sub);
+      const headerText = `Submission #${idx + 1} - ${name || 'Anonymous'} - ${new Date(sub.submittedAt).toLocaleString()}`;
+      currentPage.drawText(headerText, {
+        x: margin,
+        y: cursorY,
+        size: 11,
+        font: boldFont,
+        color: rgb(0.2, 0.2, 0.2)
+      });
+      cursorY -= 20;
+
+      // Determine fields to display and their order
+      let fields = Object.entries(sub).filter(([k]) => !['id', 'surveyId', 'submittedAt', 'userId', 'sessionId'].includes(k));
+
+      if (params.fieldOrder) {
+        const order = params.fieldOrder;
+        fields.sort((a, b) => {
+          const indexA = order.indexOf(a[0]);
+          const indexB = order.indexOf(b[0]);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return a[0].localeCompare(b[0]);
+        });
+      }
+
+      for (const [key, value] of fields) {
+        if (value === null || value === undefined || value === '') continue;
+
+        const label = params.fieldLabels?.[key] || getQuestionText(key);
+        let displayValue = '';
+
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'url' in (value[0] as any)) {
+          // Keep file upload logic separate
+          displayValue = value.map((f: any) => f.name || f.url).join(', ');
+        } else {
+          const formatted = formatAnswerValue(value);
+          displayValue = Array.isArray(formatted) ? formatted.join(', ') : formatted;
+          if (displayValue === 'N/A') displayValue = '';
+        }
+
+        if (!displayValue.trim()) continue;
+
+        // Ensure we don't run off the page
+        if (cursorY < margin + 40) {
+          currentPage = doc.addPage([pageWidth, pageHeight]);
+          cursorY = pageHeight - margin;
+        }
+
+        // Draw label
+        currentPage.drawText(`${label}:`, {
+          x: margin,
+          y: cursorY,
+          size: 10,
+          font: boldFont,
+          color: rgb(0.3, 0.3, 0.3)
+        });
+        cursorY -= 12;
+
+        // Draw value with wrapping (simple wrapping)
+        const wrappedLines = [];
+        const words = displayValue.split(' ');
+        let currentLine = '';
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          if (font.widthOfTextAtSize(testLine, 9) < maxTextWidth - 20) {
+            currentLine = testLine;
+          } else {
+            wrappedLines.push(currentLine);
+            currentLine = word;
+          }
+        }
+        wrappedLines.push(currentLine);
+
+        for (const line of wrappedLines) {
+          if (cursorY < margin + 15) {
+            currentPage = doc.addPage([pageWidth, pageHeight]);
+            cursorY = pageHeight - margin;
+          }
+          currentPage.drawText(line, {
+            x: margin + 10,
+            y: cursorY,
+            size: 9,
+            font,
+            color: rgb(0.4, 0.4, 0.4)
+          });
+          cursorY -= 11;
+        }
+        cursorY -= 5; // Space between fields
+      }
+      cursorY -= 15; // Space between submissions
+    }
+
+    const pdfBytes = await doc.save();
+    return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
+  } catch (e) {
+    console.error('Error exporting PDF:', e);
+    return { error: 'Failed to generate export PDF' };
+  }
+}
+
+export async function exportSubmissionPdf(params: {
+  submission: FeedbackSubmission;
+  fieldLabels?: Record<string, string>;
+  fieldOrder?: string[];
+}): Promise<{ error?: string; pdfBase64?: string }> {
+  try {
+    const { enforcePagePermission } = await getServerAuth();
+    await enforcePagePermission('forms-dashboard');
+
+    const sub = params.submission;
+    const { generateSubmissionPdf } = await import('@/lib/pdf-generator');
+
+    // We need to reorder the data object before passing it to generateSubmissionPdf
+    // BUT generateSubmissionPdf uses Object.entries, so we should create an object with keys in order.
+    const orderedData: Record<string, any> = {};
+    if (params.fieldOrder) {
+      for (const key of params.fieldOrder) {
+        if (sub[key as keyof FeedbackSubmission] !== undefined) {
+          orderedData[key] = sub[key as keyof FeedbackSubmission];
+        }
+      }
+      // Add any other fields not in fieldOrder
+      for (const [key, value] of Object.entries(sub)) {
+        if (!params.fieldOrder.includes(key) && !['id', 'surveyId', 'submittedAt', 'userId', 'sessionId', 'rating', 'hospitalInteraction'].includes(key)) {
+          orderedData[key] = value;
+        }
+      }
+    } else {
+      Object.assign(orderedData, sub);
+    }
+
+    const pdfBytes = await generateSubmissionPdf({
+      title: 'Form Submission',
+      surveyId: sub.surveyId,
+      submittedAt: new Date(sub.submittedAt),
+      data: orderedData,
+      fieldLabels: params.fieldLabels
+    });
+
+    if (!pdfBytes) return { error: 'Failed to generate PDF' };
+    return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
+  } catch (e) {
+    console.error('Error exporting single PDF:', e);
+    return { error: 'Failed to generate PDF' };
   }
 }
 

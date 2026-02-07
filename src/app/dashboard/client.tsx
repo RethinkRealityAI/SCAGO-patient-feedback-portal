@@ -28,9 +28,8 @@ import {
 } from '@/components/ui/pagination'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
-  Loader, AlertCircle, Star, Calendar, Building2, Clock,
   Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet,
-  TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard, MapPin
+  TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard, MapPin, Loader, AlertCircle, Calendar
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -47,7 +46,7 @@ import { Line, LineChart, CartesianGrid, XAxis, YAxis, Bar, BarChart, Pie, PieCh
 import { Card as UCard } from '@/components/ui/card'
 import { ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare, Trash2, Hash } from 'lucide-react'
 import { FeedbackSubmission } from './types'
-import { analyzeFeedback, generateAnalysisPdf } from './actions'
+import { analyzeFeedback, generateAnalysisPdf, exportSubmissionsPdf, exportSubmissionPdf } from './actions'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
 import { useNotificationCenter, useAnalyticsNotifications } from '@/hooks/use-notifications'
@@ -64,6 +63,7 @@ import { getSurveys } from '../actions'
 import { useAuth } from '@/hooks/use-auth'
 import { signOut } from '@/lib/firebase-auth'
 import { LogOut } from 'lucide-react'
+import { extractName } from '@/lib/submission-utils'
 
 const SUBMISSIONS_PER_PAGE = 20
 
@@ -75,27 +75,7 @@ function safeFormatDateForExport(dateValue: any, dateOnly: boolean = false): str
   return dateOnly ? date.toISOString().split('T')[0] : date.toISOString()
 }
 
-// Helper to robustly extract name from various schema formats
-function extractName(sub: any): string {
-  if (!sub) return ''
-  // Try standard combinations
-  const first = sub.firstName || sub.first_name || sub.fname || ''
-  const last = sub.lastName || sub.last_name || sub.lname || ''
-  if (first || last) return `${first} ${last}`.trim()
 
-  // Try single fields
-  if (sub.name) return sub.name
-  if (sub.fullName) return sub.fullName
-  if (sub.full_name) return sub.full_name
-
-  // Try finding a field with 'Name' in key (risky but needed for custom forms)
-  const nameKey = Object.keys(sub).find(k =>
-    k.toLowerCase().includes('name') &&
-    !['hospital', 'survey', 'file', 'user', 'project'].some(ex => k.toLowerCase().includes(ex)) &&
-    typeof sub[k] === 'string'
-  )
-  return nameKey ? sub[nameKey] : ''
-}
 
 // Helper function to detect if submissions are from consent survey
 function isConsentSurvey(submissions: FeedbackSubmission[]): boolean {
@@ -157,7 +137,7 @@ function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: b
 export default function Dashboard() {
   const { user, loading: authLoading, isAdmin, isSuperAdmin, allowedForms } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
-  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string> }>>([])
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string>; fieldOrder?: string[] }>>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -234,6 +214,17 @@ export default function Dashboard() {
     surveys.forEach(survey => {
       if (survey.fieldLabels) {
         map.set(survey.id, survey.fieldLabels)
+      }
+    })
+    return map
+  }, [surveys])
+
+  // Map survey IDs to their field order
+  const surveyFieldOrderMap = useMemo(() => {
+    const map = new Map<string, string[]>()
+    surveys.forEach(survey => {
+      if (survey.fieldOrder) {
+        map.set(survey.id, survey.fieldOrder)
       }
     })
     return map
@@ -1138,7 +1129,98 @@ export default function Dashboard() {
   }
 
   // Export functionality
+  const exportToPDF = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const title = selectedSurvey === 'all' ? 'All Submissions' : (surveyTitleMap.get(selectedSurvey) || 'Submissions')
+      const fieldLabels = selectedSurvey !== 'all' ? surveyFieldLabelsMap.get(selectedSurvey) : undefined
+      const fieldOrder = selectedSurvey !== 'all' ? surveyFieldOrderMap.get(selectedSurvey) : undefined
+
+      const res = await exportSubmissionsPdf({
+        title,
+        surveyId: selectedSurvey,
+        submissions: filtered,
+        fieldLabels,
+        fieldOrder
+      })
+
+      if (res.error || !res.pdfBase64) {
+        setError(res.error || 'Failed to generate PDF')
+      } else {
+        const link = document.createElement('a')
+        link.href = `data:application/pdf;base64,${res.pdfBase64}`
+        link.download = `submissions-${selectedSurvey}-${new Date().toISOString().split('T')[0]}.pdf`
+        link.click()
+      }
+    } catch (e) {
+      console.error("Export PDF failed", e)
+      setError("Failed to export PDF")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [filtered, selectedSurvey, surveyTitleMap, surveyFieldLabelsMap, surveyFieldOrderMap])
+
   const exportToCSV = useCallback(() => {
+    // If a specific survey is selected, use its field order and labels
+    if (selectedSurvey !== 'all') {
+      const labels = surveyFieldLabelsMap.get(selectedSurvey) || {}
+      const order = surveyFieldOrderMap.get(selectedSurvey) || []
+
+      // Collect all keys from all submissions to ensure we don't miss anything that might not be in the order
+      const extraKeys = new Set<string>()
+      filtered.forEach(sub => {
+        Object.keys(sub).forEach(key => {
+          if (!['id', 'surveyId', 'submittedAt', 'userId', 'sessionId', 'rating', 'hospitalInteraction'].includes(key) && !order.includes(key)) {
+            extraKeys.add(key)
+          }
+        })
+      })
+
+      // Construct headers: Basic info + Ordered Fields + Extra Fields
+      const headers = ['Date', 'ID']
+
+      // Add rating and hospital interaction for feedback surveys if they exist
+      const hasRating = filtered.some(s => s.rating !== undefined);
+      if (hasRating) headers.push('Rating');
+
+      const hasInteraction = filtered.some(s => s.hospitalInteraction !== undefined);
+      if (hasInteraction) headers.push('Experience/Feedback');
+
+      headers.push(...order.map(key => labels[key] || key));
+      headers.push(...Array.from(extraKeys).map(key => labels[key] || key));
+
+      const rows = filtered.map(sub => {
+        const row = [
+          safeFormatDateForExport(sub.submittedAt, true),
+          sub.id
+        ];
+
+        if (hasRating) row.push(String(sub.rating ?? ''));
+        if (hasInteraction) row.push(sub.hospitalInteraction || '');
+
+        // Add ordered fields
+        order.forEach(key => {
+          const val = (sub as any)[key];
+          const formatted = formatAnswerValue(val);
+          const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
+          row.push(displayValue === 'N/A' ? '' : displayValue);
+        });
+
+        // Add extra fields
+        Array.from(extraKeys).forEach(key => {
+          const val = (sub as any)[key];
+          const formatted = formatAnswerValue(val);
+          const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
+          row.push(displayValue === 'N/A' ? '' : displayValue);
+        });
+
+        return row;
+      });
+
+      return exportCSVData(headers, rows, `submissions-${selectedSurvey}`);
+    }
+
+    // Default "All Surveys" or legacy export
     if (isHospitalFeedback) {
       // Hospital feedback-specific export
       const headers = ['Date', 'Name', 'Rating', 'Hospital', 'Department', 'Experience', 'Pain Score', 'Wait Time', 'Length of Stay']
@@ -1186,14 +1268,15 @@ export default function Dashboard() {
         })
       })
       const fieldKeys = Array.from(allKeys).sort()
-      const headers = ['Date', 'Survey', ...fieldKeys.map(key => getFieldLabel(key, selectedSurvey !== 'all' ? selectedSurvey : undefined))]
+      const headers = ['Date', 'Survey', 'ID', ...fieldKeys.map(key => getFieldLabel(key, undefined))]
       const rows = filtered.map(sub => [
         safeFormatDateForExport(sub.submittedAt, true),
         getSurveyDisplayName(sub.surveyId),
+        sub.id,
         ...fieldKeys.map(key => {
           const val = (sub as any)[key]
           if (val === null || val === undefined) return ''
-          if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join('; ')
+          if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? (v.name || v.url || JSON.stringify(v)) : String(v)).join('; ')
           if (typeof val === 'object') return extractStringValue(val)
           return String(val)
         })
@@ -1218,53 +1301,6 @@ export default function Dashboard() {
     }
   }, [filtered, isConsent, isHospitalFeedback, selectedSurvey, getFieldLabel, getSurveyDisplayName])
 
-  const exportToExcel = useCallback(() => {
-    import('@/lib/export-utils').then(({ exportToXLSX }) => {
-      // Prepare comprehensive data for Excel export
-      const exportData = filtered.map(sub => {
-        const row: any = {
-          'Submission ID': sub.id,
-          'Date': new Date(sub.submittedAt).toLocaleDateString(),
-          'Time': new Date(sub.submittedAt).toLocaleTimeString(),
-          'Survey ID': sub.surveyId || '',
-        }
-
-        // Add all submission fields dynamically
-        Object.entries(sub).forEach(([key, value]) => {
-          if (['id', 'submittedAt', 'surveyId'].includes(key)) return
-
-          let formattedValue = value
-          if (value === null || value === undefined) {
-            formattedValue = ''
-          } else if (Array.isArray(value)) {
-            formattedValue = value.join('; ')
-          } else if (typeof value === 'object' && value !== null) {
-            if (value.selection) {
-              formattedValue = value.other ? `${value.selection} (${value.other})` : value.selection
-            } else if (value.hours !== undefined || value.minutes !== undefined || value.days !== undefined) {
-              // Handle time objects
-              const parts = []
-              if (value.days) parts.push(`${value.days}d`)
-              if (value.hours) parts.push(`${value.hours}h`)
-              if (value.minutes) parts.push(`${value.minutes}m`)
-              formattedValue = parts.join(' ')
-            } else {
-              formattedValue = JSON.stringify(value)
-            }
-          }
-
-          // Format field name nicely
-          const fieldName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
-          row[fieldName] = formattedValue
-        })
-
-        return row
-      })
-
-      const filename = `${isConsent ? 'consent' : 'feedback'}_export_${new Date().toISOString().split('T')[0]}`
-      exportToXLSX(exportData, filename)
-    })
-  }, [filtered, isConsent])
 
   // Calculate trend compared to previous period
   const calculateTrend = useCallback((currentMetrics: any, previousPeriod: FeedbackSubmission[]) => {
@@ -2864,7 +2900,17 @@ export default function Dashboard() {
                         {/* All Submission Data - Question on top, Answer below */}
                         {Object.entries(activeSubmission)
                           .filter(([key]) => !['id', 'submittedAt', 'surveyId', 'rating', 'hospitalInteraction', 'userId', 'sessionId'].includes(key))
-                          .sort((a, b) => a[0].localeCompare(b[0]))
+                          .sort((a, b) => {
+                            const fieldOrder = surveyFieldOrderMap.get(activeSubmission.surveyId);
+                            if (fieldOrder) {
+                              const indexA = fieldOrder.indexOf(a[0]);
+                              const indexB = fieldOrder.indexOf(b[0]);
+                              if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                              if (indexA !== -1) return -1;
+                              if (indexB !== -1) return 1;
+                            }
+                            return a[0].localeCompare(b[0]);
+                          })
                           .map(([key, value]) => {
                             const question = getFieldLabel(key, activeSubmission.surveyId);
 
@@ -2976,22 +3022,73 @@ export default function Dashboard() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="flex-1 sm:flex-none border-[#C8262A] text-[#C8262A] hover:bg-[#C8262A]/5"
+                        disabled={isLoading}
+                        onClick={async () => {
+                          if (!activeSubmission) return
+                          try {
+                            setIsLoading(true)
+                            const labels = surveyFieldLabelsMap.get(activeSubmission.surveyId) || {}
+                            const order = surveyFieldOrderMap.get(activeSubmission.surveyId) || []
+
+                            const res = await exportSubmissionPdf({
+                              submission: activeSubmission,
+                              fieldLabels: labels,
+                              fieldOrder: order
+                            })
+
+                            if (res.error || !res.pdfBase64) {
+                              setError(res.error || 'Failed to generate PDF')
+                            } else {
+                              const link = document.createElement('a')
+                              link.href = `data:application/pdf;base64,${res.pdfBase64}`
+                              link.download = `submission-${activeSubmission.id}.pdf`
+                              link.click()
+                            }
+                          } catch (e) {
+                            console.error("PDF Export error", e)
+                          } finally {
+                            setIsLoading(false)
+                          }
+                        }}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        PDF Export
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="flex-1 sm:flex-none"
                         onClick={() => {
                           if (!activeSubmission) return
+                          const labels = surveyFieldLabelsMap.get(activeSubmission.surveyId) || {}
+                          const order = surveyFieldOrderMap.get(activeSubmission.surveyId) || []
+
+                          // Collect all fields
+                          const fields = Object.entries(activeSubmission).filter(([k]) => !['id', 'surveyId', 'submittedAt', 'userId', 'sessionId'].includes(k));
+
+                          // Sort fields
+                          fields.sort((a, b) => {
+                            const indexA = order.indexOf(a[0]);
+                            const indexB = order.indexOf(b[0]);
+                            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                            if (indexA !== -1) return -1;
+                            if (indexB !== -1) return 1;
+                            return a[0].localeCompare(b[0]);
+                          });
+
                           const csv = [
                             ['Field', 'Value'],
                             ['Date', safeFormatDateForExport(activeSubmission.submittedAt)],
-                            ...Object.entries(activeSubmission)
-                              .filter(([key]) => !['id', 'submittedAt', 'surveyId'].includes(key))
-                              .map(([key, value]) => [
+                            ['Submission ID', activeSubmission.id],
+                            ...fields.map(([key, value]) => {
+                              const formatted = formatAnswerValue(value);
+                              const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
+                              return [
                                 getFieldLabel(key, activeSubmission.surveyId),
-                                Array.isArray(value)
-                                  ? value.join('; ')
-                                  : typeof value === 'object'
-                                    ? JSON.stringify(value)
-                                    : String(value)
-                              ])
+                                displayValue
+                              ];
+                            })
                           ].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
 
                           const blob = new Blob([csv], { type: 'text/csv' })
@@ -3000,10 +3097,11 @@ export default function Dashboard() {
                           a.href = url
                           a.download = `submission-${activeSubmission.id}.csv`
                           a.click()
+                          URL.revokeObjectURL(url)
                         }}
                       >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        CSV Export
                       </Button>
                       <Button
                         onClick={closeSubmissionModal}
@@ -3096,17 +3194,17 @@ export default function Dashboard() {
               className="flex items-center gap-2"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              Export CSV
+              Download CSV
             </Button>
             <Button
-              onClick={() => {
-                exportToExcel()
+              onClick={async () => {
+                await exportToPDF()
                 setShowExportDialog(false)
               }}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 bg-[#C8262A] hover:bg-[#a51f22]"
             >
-              <Download className="h-4 w-4" />
-              Export Excel
+              <FileText className="h-4 w-4" />
+              Download PDF
             </Button>
           </DialogFooter>
         </DialogContent>

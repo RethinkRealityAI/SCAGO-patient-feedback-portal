@@ -210,3 +210,27 @@ export async function deleteSubmission(id: string, surveyId: string): Promise<vo
   const p2 = deleteDoc(doc(db, 'feedback', id));
   await Promise.all([p1, p2]);
 }
+
+/**
+ * Robustly extract name from various schema formats
+ */
+export function extractName(sub: any): string {
+  if (!sub) return ''
+  // Try standard combinations
+  const first = sub.firstName || sub.first_name || sub.fname || ''
+  const last = sub.lastName || sub.last_name || sub.lname || ''
+  if (first || last) return `${first} ${last}`.trim()
+
+  // Try single fields
+  if (sub.name) return sub.name
+  if (sub.fullName) return sub.fullName
+  if (sub.full_name) return sub.full_name
+
+  // Try finding a field with 'Name' in key (risky but needed for custom forms)
+  const nameKey = Object.keys(sub).find(k =>
+    k.toLowerCase().includes('name') &&
+    !['hospital', 'survey', 'file', 'user', 'project'].some(ex => k.toLowerCase().includes(ex)) &&
+    typeof sub[k] === 'string'
+  )
+  return nameKey ? sub[nameKey] : ''
+}

@@ -38,41 +38,18 @@ function isFileAttachmentArray(value: any): value is FileAttachment[] {
     );
 }
 
+import { getQuestionText, formatAnswerValue } from './question-mapping';
+import { extractName } from './submission-utils';
+
 /**
- * Format a field value for PDF display.
+ * Format a field value for PDF display using the centralized formatting utility.
  */
-function formatValue(value: any): string {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return String(value);
-    if (Array.isArray(value)) {
-        if (isFileAttachmentArray(value)) {
-            return ''; // Handled separately as links
-        }
-        return value.join(', ');
+function formatValueForPdf(value: any): string {
+    const formatted = formatAnswerValue(value);
+    if (Array.isArray(formatted)) {
+        return formatted.join(', ');
     }
-    if (typeof value === 'object') {
-        // Handle special objects like {selection: 'Toronto', other: ''}
-        if ('selection' in value) {
-            return value.selection === 'other' && value.other
-                ? `Other: ${value.other}`
-                : value.selection || '';
-        }
-        // Handle duration objects
-        if ('hours' in value && 'minutes' in value) {
-            return `${value.hours}h ${value.minutes}m`;
-        }
-        if ('days' in value && 'hours' in value) {
-            return `${value.days}d ${value.hours}h`;
-        }
-        // Handle date-time
-        if ('date' in value && 'time' in value) {
-            return `${value.date} ${value.time}`;
-        }
-        return JSON.stringify(value);
-    }
-    return String(value);
+    return formatted === 'N/A' ? '' : formatted;
 }
 
 /**
@@ -179,7 +156,19 @@ export async function generateSubmissionPdf(
         });
         cursorY -= 25;
 
-        // Survey ID & Submission Date
+        // Survey ID, Patient & Submission Date
+        const patientName = extractName(config.data);
+        if (patientName) {
+            page.drawText(`Patient: ${patientName}`, {
+                x: margin,
+                y: cursorY,
+                size: 11,
+                font: boldFont,
+                color: rgb(0.2, 0.2, 0.2),
+            });
+            cursorY -= 16;
+        }
+
         page.drawText(`Survey ID: ${config.surveyId}`, {
             x: margin,
             y: cursorY,
@@ -231,7 +220,7 @@ export async function generateSubmissionPdf(
                 continue;
             }
 
-            const formattedValue = formatValue(value);
+            const formattedValue = formatValueForPdf(value);
             if (!formattedValue && formattedValue !== '0') continue; // Skip empty values
 
             // Draw field label

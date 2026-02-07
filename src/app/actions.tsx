@@ -25,19 +25,26 @@ export async function getSurveys() {
     }
     return snapshot.docs.map((doc: DocumentData) => {
       const data = doc.data();
-      // Extract field label mapping from sections for use in dashboard
+      // Extract field label mapping and order from sections for use in dashboard
       const fieldLabels: Record<string, string> = {};
+      const fieldOrder: string[] = [];
       if (data.sections) {
         for (const section of data.sections) {
           for (const field of section.fields || []) {
-            if (field.id && field.label) {
-              fieldLabels[field.id] = field.label;
+            if (field.id) {
+              fieldOrder.push(field.id);
+              if (field.label) {
+                fieldLabels[field.id] = field.label;
+              }
             }
             // Handle grouped fields
             if (field.type === 'group' && field.fields) {
               for (const subField of field.fields) {
-                if (subField.id && subField.label) {
-                  fieldLabels[subField.id] = subField.label;
+                if (subField.id) {
+                  fieldOrder.push(subField.id);
+                  if (subField.label) {
+                    fieldLabels[subField.id] = subField.label;
+                  }
                 }
               }
             }
@@ -49,6 +56,7 @@ export async function getSurveys() {
         title: data.title || 'Untitled Survey',
         description: data.description || 'No description.',
         fieldLabels,
+        fieldOrder,
       };
     });
   } catch (e) {
