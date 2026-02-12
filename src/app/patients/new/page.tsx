@@ -137,8 +137,12 @@ export default function NewPatientPage() {
 
     const handleSelectCandidate = (c: ConsentCandidate) => {
         setSelectedCandidate(c);
+        // Consent candidates do not currently carry DOB; set a safe fallback so
+        // required schema validation does not block conversion.
+        const fallbackDob = new Date('2000-01-01');
         form.reset({
             fullName: c.fullName,
+            dateOfBirth: fallbackDob,
             hospital: c.primaryHospital || '',
             region: c.region,
             diagnosis: 'Sickle Cell Disease',
@@ -234,7 +238,12 @@ export default function NewPatientPage() {
                             )}
                             {selectedCandidate && (
                                 <div className="mt-3 flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
-                                    <p className="text-sm">Creating from: <strong>{selectedCandidate.fullName}</strong></p>
+                                    <div className="space-y-1">
+                                        <p className="text-sm">Creating from: <strong>{selectedCandidate.fullName}</strong></p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Date of birth was prefilled with a default value. Please confirm and update it before saving.
+                                        </p>
+                                    </div>
                                     <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCandidate(null)}>
                                         Clear selection
                                     </Button>

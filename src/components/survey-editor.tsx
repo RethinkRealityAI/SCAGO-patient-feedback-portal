@@ -1187,7 +1187,7 @@ function generateTestDataForField(field: any): any {
       return 8;
 
     case 'slider':
-      return field.max ? Math.floor((field.min || 0 + field.max) / 2) : 50;
+      return field.max ? Math.floor(((field.min ?? 0) + field.max) / 2) : 50;
 
     case 'province-ca':
       return 'ON';
