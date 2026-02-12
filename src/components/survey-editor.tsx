@@ -1032,13 +1032,12 @@ function EmailNotificationLog({ surveyId }: { surveyId: string }) {
                 {logs.map((log) => (
                   <div
                     key={log.id}
-                    className={`flex items-start gap-3 rounded-md border px-3 py-2 text-xs ${
-                      log.success
-                        ? 'border-green-200 bg-green-50/50'
-                        : log.skipped
-                          ? 'border-gray-200 bg-gray-50'
-                          : 'border-red-200 bg-red-50/50'
-                    }`}
+                    className={`flex items-start gap-3 rounded-md border px-3 py-2 text-xs ${log.success
+                      ? 'border-green-200 bg-green-50/50'
+                      : log.skipped
+                        ? 'border-gray-200 bg-gray-50'
+                        : 'border-red-200 bg-red-50/50'
+                      }`}
                   >
                     <div className="pt-0.5 shrink-0">
                       {log.success ? (
@@ -1135,6 +1134,224 @@ function TestEmailButton({ recipients }: { recipients: string[] }) {
     </div>
   );
 }
+
+/**
+ * Generate test data based on field type
+ */
+function generateTestDataForField(field: any): any {
+  const type = field.type;
+
+  switch (type) {
+    case 'text':
+      if (field.label?.toLowerCase().includes('name') || field.label?.toLowerCase().includes('first')) {
+        return 'Test User';
+      }
+      if (field.label?.toLowerCase().includes('last')) {
+        return 'McTestface';
+      }
+      return `Test ${field.label || 'value'}`;
+
+    case 'email':
+      return 'test@example.com';
+
+    case 'phone':
+      return '(416) 555-1234';
+
+    case 'textarea':
+      return `This is test feedback for the field "${field.label}". Generated automatically for testing purposes.`;
+
+    case 'number':
+      return field.min ?? 42;
+
+    case 'date':
+      return new Date().toISOString().split('T')[0];
+
+    case 'time':
+      return '10:30';
+
+    case 'datetime':
+      return new Date().toISOString();
+
+    case 'select':
+    case 'radio':
+      return field.options?.[0]?.value || 'option1';
+
+    case 'checkbox':
+      return field.options?.slice(0, 2).map((o: any) => o.value) || ['option1'];
+
+    case 'boolean-checkbox':
+      return true;
+
+    case 'rating':
+    case 'nps':
+      return 8;
+
+    case 'slider':
+      return field.max ? Math.floor((field.min || 0 + field.max) / 2) : 50;
+
+    case 'province-ca':
+      return 'ON';
+
+    case 'city-on':
+      return 'Toronto';
+
+    case 'hospital-on':
+      return 'Toronto General Hospital';
+
+    case 'department-on':
+      return 'Emergency';
+
+    case 'duration-hm':
+      return { hours: 2, minutes: 30 };
+
+    case 'duration-dh':
+      return { days: 1, hours: 4 };
+
+    case 'percentage':
+      return 75;
+
+    case 'currency':
+      return 100.00;
+
+    case 'likert-scale':
+    case 'pain-scale':
+      return 3;
+
+    case 'ranking':
+      return field.options?.map((o: any) => o.value) || [];
+
+    case 'matrix-single':
+    case 'matrix-multiple':
+    case 'matrix-text':
+      const matrixData: Record<string, any> = {};
+      field.rows?.forEach((row: any) => {
+        matrixData[row.value] = field.columns?.[0]?.value || 'column1';
+      });
+      return matrixData;
+
+    case 'multi-text':
+      return ['Test item 1', 'Test item 2'];
+
+    case 'anonymous-toggle':
+      return false;
+
+    case 'url':
+      return 'https://example.com';
+
+    case 'color':
+      return '#C8262A';
+
+    case 'range':
+      return { min: 25, max: 75 };
+
+    case 'group':
+      // Recursively generate data for nested fields
+      const groupData: Record<string, any> = {};
+      field.fields?.forEach((subField: any) => {
+        groupData[subField.id] = generateTestDataForField(subField);
+      });
+      return groupData;
+
+    default:
+      return `Test ${type}`;
+  }
+}
+
+function TestFormSubmissionButton({ surveyId, sections }: { surveyId: string; sections: any[] }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { toast } = useToast();
+
+  const handleTestSubmission = async () => {
+    setIsSubmitting(true);
+    setResult(null);
+
+    try {
+      // Generate test data based on form fields
+      const testData: Record<string, any> = {};
+
+      sections.forEach(section => {
+        section.fields?.forEach((field: any) => {
+          if (field.type === 'group' && field.fields) {
+            // Handle group fields
+            field.fields.forEach((subField: any) => {
+              testData[subField.id] = generateTestDataForField(subField);
+            });
+          } else if (field.type !== 'logo' && field.type !== 'text-block' && field.type !== 'calculated') {
+            testData[field.id] = generateTestDataForField(field);
+          }
+        });
+      });
+
+      // Add some common test fields if not present
+      if (!Object.keys(testData).some(k => k.toLowerCase().includes('name'))) {
+        testData['_testName'] = 'Test User';
+      }
+
+      console.log('[TestFormSubmission] Generated test data:', testData);
+
+      // Import and call submitFeedback
+      const { submitFeedback } = await import('@/app/actions');
+      const submitResult = await submitFeedback(surveyId, testData);
+
+      if (submitResult.error) {
+        setResult({ success: false, message: submitResult.error });
+        toast({
+          title: 'Test Submission Failed',
+          description: submitResult.error,
+          variant: 'destructive',
+        });
+      } else {
+        setResult({ success: true, message: 'Test submission sent! Check your email and server logs.' });
+        toast({
+          title: 'Test Submission Sent',
+          description: 'Check your email inbox and server logs to verify the full flow.',
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error occurred';
+      setResult({ success: false, message });
+      toast({
+        title: 'Test Submission Failed',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleTestSubmission}
+          disabled={isSubmitting}
+          className="shrink-0"
+        >
+          {isSubmitting ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Zap className="h-4 w-4 mr-2" />
+          )}
+          {isSubmitting ? 'Submitting...' : 'Send Test Submission'}
+        </Button>
+        <p className="text-xs text-muted-foreground pt-2">
+          Generates realistic test data for all form fields and submits it, triggering webhooks, email notifications, and PDF generation.
+        </p>
+      </div>
+      {result && (
+        <div className={`flex items-center gap-1.5 text-xs ${result.success ? 'text-green-700' : 'text-red-700'}`}>
+          {result.success ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+          {result.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default function SurveyEditor({ survey }: { survey: Record<string, any> }) {
   const [isMounted, setIsMounted] = useState(false);
@@ -1686,6 +1903,17 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                         <h4 className="text-sm font-semibold mb-2">Test Email Delivery</h4>
                         <p className="text-xs text-muted-foreground mb-3">Send a test email to verify your SMTP configuration is working. Enter a recipient and click Send Test.</p>
                         <TestEmailButton recipients={form.watch('emailNotifications.recipients') || []} />
+                      </div>
+
+                      <div className="rounded-lg border bg-amber-50 border-amber-200 p-4 shadow-sm">
+                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-amber-600" />
+                          Test Full Submission Flow
+                        </h4>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Submit test data to trigger the complete flow: form submission → webhook → email notification with PDF attachment.
+                        </p>
+                        <TestFormSubmissionButton surveyId={survey.id} sections={form.watch('sections') || []} />
                       </div>
 
                       <EmailNotificationLog surveyId={survey.id} />
