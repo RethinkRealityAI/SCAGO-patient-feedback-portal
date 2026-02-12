@@ -544,454 +544,475 @@ export function EnhancedUserManagement() {
           </CardContent>
         </Card>
 
-        {/* User Details Dialog */}
+        {/* User Details Dialog — wide landscape layout */}
         <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>User Details</DialogTitle>
-              <DialogDescription>
-                Detailed information for {selectedUser?.email}
-              </DialogDescription>
+          <DialogContent className="max-w-[95vw] w-full lg:max-w-5xl xl:max-w-6xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+            <DialogHeader className="px-6 pt-6 pb-3 border-b shrink-0">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg">User Details</DialogTitle>
+                  <DialogDescription className="truncate">
+                    {selectedUser?.email}
+                  </DialogDescription>
+                </div>
+                {selectedUser && (
+                  <Badge variant={selectedUser.disabled ? 'destructive' : 'default'} className="shrink-0">
+                    {selectedUser.disabled ? 'Disabled' : 'Active'}
+                  </Badge>
+                )}
+              </div>
             </DialogHeader>
+
             {selectedUser && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium">Email</p>
-                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">User ID</p>
-                    <p className="text-sm text-muted-foreground font-mono text-xs">{selectedUser.uid}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Created</p>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Last Login</p>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : 'Never'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Status</p>
-                    <Badge variant={selectedUser.disabled ? 'destructive' : 'default'}>
-                      {selectedUser.disabled ? 'Disabled' : 'Active'}
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Role</Label>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={editRole || selectedUser.role}
-                        onValueChange={(value) => setEditRole(value as AppRole)}
-                      >
-                        <SelectTrigger className="w-[220px] h-10">
-                          <SelectValue placeholder="Select a role">
-                            {(editRole || selectedUser.role) && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-primary">{roleDescriptions[(editRole || selectedUser.role) as AppRole].icon}</span>
-                                <span className="font-medium">{roleDescriptions[(editRole || selectedUser.role) as AppRole].label}</span>
-                              </div>
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent className="min-w-[280px]">
-                          {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
-                            const desc = roleDescriptions[role];
-                            return (
-                              <SelectItem
-                                key={role}
-                                value={role}
-                                className="py-3 cursor-pointer"
-                              >
-                                <div className="flex items-center gap-3 w-full">
-                                  <span className="text-primary">{desc.icon}</span>
-                                  <div className="flex-1">
-                                    <div className="font-medium">{desc.label}</div>
-                                    <div className="text-xs text-muted-foreground mt-0.5">{desc.description}</div>
-                                  </div>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          if (!editRole) return;
-                          setSavingAction(true);
-                          const res = await setUserRole(selectedUser.uid, editRole);
-                          setSavingAction(false);
-                          if ((res as any).success) {
-                            toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
-                            setSelectedUser({ ...selectedUser, role: editRole as AppRole });
-                            // refresh list
-                            loadData();
-                          } else {
-                            toast({ title: 'Error', description: (res as any).error || 'Failed to update role', variant: 'destructive' });
-                          }
-                        }}
-                        disabled={savingAction || editRole === selectedUser.role}
-                      >
-                        {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                        Save
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {roleDescriptions[(editRole || selectedUser.role) as AppRole].description}
-                    </p>
-                  </div>
-                </div>
+              <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+                <div className="p-6 space-y-6">
+                  {/* Top: User Info + Role — side-by-side on lg */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left — User info card */}
+                    <div className="rounded-lg border bg-card p-4 space-y-4">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Account Info</h3>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Email</p>
+                          <p className="text-sm font-medium break-all">{selectedUser.email}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">User ID</p>
+                          <p className="text-xs font-mono text-muted-foreground break-all">{selectedUser.uid}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Created</p>
+                          <p className="text-sm">{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Last Login</p>
+                          <p className="text-sm">{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : 'Never'}</p>
+                        </div>
+                      </div>
 
-                {selectedUser.role === 'admin' && (
-                  <div className="space-y-3 border-t pt-4">
-                    <Label className="text-base font-semibold">Quick Access Presets</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      {ACCESS_PRESETS.map((preset) => (
-                        <Button
-                          key={preset.id}
-                          type="button"
-                          variant="outline"
-                          className="justify-start h-auto py-2"
-                          onClick={() => applyEditPreset(preset.id)}
-                        >
-                          <span className="text-left">
-                            <span className="block text-sm font-medium">{preset.label}</span>
-                            <span className="block text-xs text-muted-foreground">{preset.description}</span>
-                          </span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      <Separator />
 
-                {selectedUser.role === 'admin' && (
-                  <div className="space-y-2 border-t pt-4">
-                    <Label className="text-base font-semibold">Effective Access Summary (Preview)</Label>
-                    <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
-                      <p><strong>Pages:</strong> {editRoutes.length === 0 ? 'None selected' : `${editRoutes.length} selected`}</p>
-                      <p><strong>Forms:</strong> {editForms.length === 0 ? 'All forms' : `${editForms.length} selected`}</p>
-                      <p><strong>Regions:</strong> {editRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions') : editRegions.join(', ')}</p>
-                      <p><strong>Unknown region patients:</strong> Always visible to admins</p>
-                    </div>
-                    {adminWarnings.length > 0 && (
-                      <Alert>
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          {adminWarnings[0]}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  <Label>Page Permissions</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedUser.role === 'super-admin'
-                      ? 'Super admins have access to all pages automatically.'
-                      : selectedUser.role === 'admin'
-                        ? 'Select which pages this admin can access. Hover over each option for details.'
-                        : 'Page permissions are only available for admin users.'}
-                  </p>
-                  <TooltipProvider>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {PAGE_PERMISSIONS.map((permission) => (
-                        <Tooltip key={permission.key}>
-                          <TooltipTrigger asChild>
-                            <label
-                              className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${editRoutes.includes(permission.key)
-                                ? 'border-primary bg-primary/5 hover:bg-primary/10'
-                                : 'border-border hover:border-primary/50 hover:bg-accent/30'
-                                } ${selectedUser.role !== 'admin'
-                                  ? 'opacity-60 cursor-not-allowed'
-                                  : ''
-                                }`}
+                      {/* Password & Status */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground font-medium">Reset Password</p>
+                          <div className="flex gap-2">
+                            <Input
+                              type="password"
+                              placeholder="New password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="h-9 text-sm"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                if (!newPassword) return;
+                                setSavingAction(true);
+                                const res = await updateUserPassword(selectedUser.uid, newPassword);
+                                setSavingAction(false);
+                                if ((res as any).success) {
+                                  setNewPassword('');
+                                  toast({ title: 'Password updated', description: 'User password has been changed' });
+                                } else {
+                                  toast({ title: 'Error', description: (res as any).error || 'Failed to update password', variant: 'destructive' });
+                                }
+                              }}
+                              disabled={savingAction || !newPassword}
                             >
-                              <Checkbox
-                                checked={editRoutes.includes(permission.key)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setEditRoutes((prev) => [...prev, permission.key]);
-                                  } else {
-                                    setEditRoutes((prev) => prev.filter(k => k !== permission.key));
-                                  }
-                                }}
-                                disabled={selectedUser.role !== 'admin'}
-                                className="h-5 w-5"
-                              />
-                              <div className="flex-1">
-                                <span className="text-sm font-medium">{permission.label}</span>
-                                {selectedUser.role === 'super-admin' && (
-                                  <Badge variant="secondary" className="text-xs ml-2">
-                                    Auto
-                                  </Badge>
-                                )}
-                              </div>
-                            </label>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-xs">
-                            <p className="text-xs">{permission.description}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Route: {permission.route}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  </TooltipProvider>
-                  {selectedUser.role === 'admin' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => saveSelectedUserPermissions('Permissions saved')}
-                      disabled={savingAction}
-                      className="w-full md:w-auto"
-                    >
-                      {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Save Permissions
-                    </Button>
-                  )}
-                </div>
-
-                {/* Region Assignment (Patient Access) */}
-                {selectedUser.role === 'admin' && (
-                  <div className="space-y-3 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                      <Label className="text-base font-semibold">Region Access</Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-xs">
-                            <p className="text-xs">Controls which patients this admin can see. Admins only see patients in their assigned regions. Patients with Unknown region are visible to all admins until region is assigned.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Select regions this admin can access. Leave empty for access to all regions (backward compatibility).
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setEditRegions([...ADMIN_REGIONS])}
-                      >
-                        Select all
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setEditRegions([])}
-                      >
-                        Clear all
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {ADMIN_REGIONS.map((region) => (
-                        <label
-                          key={region}
-                          className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-all ${
-                            editRegions.includes(region)
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-primary/30'
-                          }`}
-                        >
-                          <Checkbox
-                            checked={editRegions.includes(region)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setEditRegions((prev) => [...prev, region]);
+                              Update
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground font-medium">Account Status</p>
+                          <Button
+                            variant={selectedUser.disabled ? 'default' : 'outline'}
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            onClick={async () => {
+                              setSavingAction(true);
+                              const res = await setUserDisabled(selectedUser.uid, !selectedUser.disabled);
+                              setSavingAction(false);
+                              if ((res as any).success) {
+                                const updated = { ...selectedUser, disabled: !selectedUser.disabled } as PlatformUser;
+                                setSelectedUser(updated);
+                                setUsers((prev) => prev.map(u => u.uid === updated.uid ? updated : u));
                               } else {
-                                setEditRegions((prev) => prev.filter((r) => r !== region));
+                                toast({ title: 'Error', description: (res as any).error || 'Failed to update status', variant: 'destructive' });
                               }
                             }}
-                            className="h-4 w-4"
-                          />
-                          <span className="text-sm">{region}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {editRegions.length === 0
-                        ? (regionPolicyMode === 'strict' ? 'Current: Unknown-only visibility in strict mode' : 'Current: All regions (no restriction)')
-                        : `Current: ${editRegions.length} region${editRegions.length === 1 ? '' : 's'} selected`}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => saveSelectedUserPermissions('Regions saved')}
-                      disabled={savingAction}
-                    >
-                      {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Save Regions
-                    </Button>
-                  </div>
-                )}
-
-                {/* Form-Specific Access Control */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base font-semibold">Form Access Control</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {selectedUser.role === 'super-admin'
-                          ? 'Super admins have access to all forms automatically.'
-                          : selectedUser.role === 'admin'
-                            ? 'Restrict access to specific forms. If no forms are selected, the admin will see ALL forms by default.'
-                            : 'Form permissions are only available for admin users.'}
-                      </p>
-                    </div>
-                    {selectedUser.role === 'admin' && editForms.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditForms([])}
-                        className="h-8 text-xs hover:text-primary transition-colors"
-                      >
-                        Reset to All
-                      </Button>
-                    )}
-                  </div>
-
-                  {selectedUser.role === 'admin' && (
-                    <div className="space-y-3">
-                      <ScrollArea className="h-[200px] rounded-md border p-4 bg-accent/5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {surveys.map((survey) => (
-                            <label
-                              key={survey.id}
-                              className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${editForms.includes(survey.id)
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:border-primary/30 hover:bg-background'
-                                }`}
-                            >
-                              <Checkbox
-                                checked={editForms.includes(survey.id)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setEditForms((prev) => [...prev, survey.id]);
-                                  } else {
-                                    setEditForms((prev) => prev.filter(id => id !== survey.id));
-                                  }
-                                }}
-                                className="h-4 w-4"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{survey.title}</p>
-                                <p className="text-[10px] text-muted-foreground font-mono truncate">{survey.id}</p>
-                              </div>
-                            </label>
-                          ))}
+                            disabled={savingAction}
+                          >
+                            {selectedUser.disabled ? 'Enable User' : 'Disable User'}
+                          </Button>
                         </div>
-                        {surveys.length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground italic text-sm">
-                            <Info className="h-8 w-8 mb-2 opacity-20" />
-                            No surveys found
-                          </div>
-                        )}
-                      </ScrollArea>
+                      </div>
 
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="text-[10px] text-muted-foreground bg-accent/30 px-2 py-1 rounded">
-                          {editForms.length === 0
-                            ? "Current: Accessing ALL forms"
-                            : `Current: Limited to ${editForms.length} selected form${editForms.length === 1 ? '' : 's'}`
-                          }
+                      <Separator />
+
+                      {/* Recent Logins */}
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium mb-2">Recent Logins ({userLogins.length})</p>
+                        <div className="max-h-28 overflow-y-auto space-y-1">
+                          {userLogins.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">No login history</p>
+                          ) : (
+                            userLogins.map((login, index) => (
+                              <div key={index} className="text-xs text-muted-foreground flex items-center gap-2">
+                                <Clock className="h-3 w-3 shrink-0" />
+                                {login.toLocaleString()}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right — Role + Presets + Summary */}
+                    <div className="rounded-lg border bg-card p-4 space-y-4">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Role & Access</h3>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Role</Label>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={editRole || selectedUser.role}
+                            onValueChange={(value) => setEditRole(value as AppRole)}
+                          >
+                            <SelectTrigger className="w-full sm:w-[220px] h-10">
+                              <SelectValue placeholder="Select a role">
+                                {(editRole || selectedUser.role) && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-primary">{roleDescriptions[(editRole || selectedUser.role) as AppRole].icon}</span>
+                                    <span className="font-medium">{roleDescriptions[(editRole || selectedUser.role) as AppRole].label}</span>
+                                  </div>
+                                )}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className="min-w-[280px]">
+                              {(['super-admin', 'admin', 'mentor', 'participant'] as AppRole[]).map((role) => {
+                                const desc = roleDescriptions[role];
+                                return (
+                                  <SelectItem key={role} value={role} className="py-3 cursor-pointer">
+                                    <div className="flex items-center gap-3 w-full">
+                                      <span className="text-primary">{desc.icon}</span>
+                                      <div className="flex-1">
+                                        <div className="font-medium">{desc.label}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">{desc.description}</div>
+                                      </div>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              if (!editRole) return;
+                              setSavingAction(true);
+                              const res = await setUserRole(selectedUser.uid, editRole);
+                              setSavingAction(false);
+                              if ((res as any).success) {
+                                toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
+                                setSelectedUser({ ...selectedUser, role: editRole as AppRole });
+                                loadData();
+                              } else {
+                                toast({ title: 'Error', description: (res as any).error || 'Failed to update role', variant: 'destructive' });
+                              }
+                            }}
+                            disabled={savingAction || editRole === selectedUser.role}
+                          >
+                            {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                            Save
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {roleDescriptions[(editRole || selectedUser.role) as AppRole].description}
                         </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => saveSelectedUserPermissions('Permissions saved')}
-                          disabled={savingAction}
-                          className="h-8"
-                        >
-                          {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                          Save Access
-                        </Button>
+                      </div>
+
+                      {selectedUser.role === 'admin' && (
+                        <>
+                          <Separator />
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium">Quick Access Presets</Label>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {ACCESS_PRESETS.map((preset) => (
+                                <Button
+                                  key={preset.id}
+                                  type="button"
+                                  variant="outline"
+                                  className="justify-start h-auto py-2 text-left"
+                                  onClick={() => applyEditPreset(preset.id)}
+                                >
+                                  <span>
+                                    <span className="block text-xs font-medium">{preset.label}</span>
+                                    <span className="block text-[10px] text-muted-foreground leading-tight">{preset.description}</span>
+                                  </span>
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium">Effective Access Summary</Label>
+                            <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
+                              <p><strong>Pages:</strong> {editRoutes.length === 0 ? 'None selected' : `${editRoutes.length} selected`}</p>
+                              <p><strong>Forms:</strong> {editForms.length === 0 ? 'All forms' : `${editForms.length} selected`}</p>
+                              <p><strong>Regions:</strong> {editRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions (legacy)') : editRegions.join(', ')}</p>
+                              <p><strong>Unknown region patients:</strong> Always visible to admins</p>
+                            </div>
+                            {adminWarnings.length > 0 && (
+                              <Alert className="py-2">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                <AlertDescription className="text-xs">{adminWarnings[0]}</AlertDescription>
+                              </Alert>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Admin-only sections: Permissions, Regions, Forms — 2-column grid */}
+                  {selectedUser.role === 'admin' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Left column: Page Permissions + Region Access */}
+                      <div className="space-y-6">
+                        {/* Page Permissions */}
+                        <div className="rounded-lg border bg-card p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Page Permissions</h3>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => saveSelectedUserPermissions('Permissions saved')}
+                              disabled={savingAction}
+                              className="h-7 text-xs"
+                            >
+                              {savingAction ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                              Save Permissions
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Select which pages this admin can access.
+                          </p>
+                          <TooltipProvider>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {PAGE_PERMISSIONS.map((permission) => (
+                                <Tooltip key={permission.key}>
+                                  <TooltipTrigger asChild>
+                                    <label
+                                      className={`flex items-center gap-2.5 p-3 border-2 rounded-lg cursor-pointer transition-all ${editRoutes.includes(permission.key)
+                                        ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                                        : 'border-border hover:border-primary/50 hover:bg-accent/30'
+                                        }`}
+                                    >
+                                      <Checkbox
+                                        checked={editRoutes.includes(permission.key)}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setEditRoutes((prev) => [...prev, permission.key]);
+                                          } else {
+                                            setEditRoutes((prev) => prev.filter(k => k !== permission.key));
+                                          }
+                                        }}
+                                        className="h-4 w-4"
+                                      />
+                                      <span className="text-sm font-medium">{permission.label}</span>
+                                    </label>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs">
+                                    <p className="text-xs">{permission.description}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Route: {permission.route}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </TooltipProvider>
+                        </div>
+
+                        {/* Region Access */}
+                        <div className="rounded-lg border bg-card p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Region Access</h3>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs">
+                                    <p className="text-xs">Controls which patients this admin can see. Patients with Unknown region are always visible.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => saveSelectedUserPermissions('Regions saved')}
+                              disabled={savingAction}
+                              className="h-7 text-xs"
+                            >
+                              {savingAction ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                              Save Regions
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Choose which regions this admin can access, or leave with no regions for default behavior.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => setEditRegions([...ADMIN_REGIONS])}
+                            >
+                              Select all
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => setEditRegions([])}
+                            >
+                              Clear all
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {ADMIN_REGIONS.map((region) => (
+                              <label
+                                key={region}
+                                className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all text-sm ${
+                                  editRegions.includes(region)
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-border hover:border-primary/30'
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={editRegions.includes(region)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setEditRegions((prev) => [...prev, region]);
+                                    } else {
+                                      setEditRegions((prev) => prev.filter((r) => r !== region));
+                                    }
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                {region}
+                              </label>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground bg-accent/30 px-2 py-1 rounded inline-block">
+                            {editRegions.length === 0
+                              ? (regionPolicyMode === 'strict'
+                                  ? 'No regions assigned — Unknown-region patients only (strict mode)'
+                                  : 'No regions assigned — access to all regions (legacy mode)')
+                              : `${editRegions.length} region${editRegions.length === 1 ? '' : 's'} selected`}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right column: Form Access */}
+                      <div className="space-y-6">
+                        <div className="rounded-lg border bg-card p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Form Access</h3>
+                            <div className="flex items-center gap-2">
+                              {editForms.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditForms([])}
+                                  className="h-7 text-xs hover:text-primary"
+                                >
+                                  Reset to All
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => saveSelectedUserPermissions('Form access saved')}
+                                disabled={savingAction}
+                                className="h-7 text-xs"
+                              >
+                                {savingAction ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                                Save Access
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Restrict to specific forms, or leave empty for all forms.
+                          </p>
+
+                          <ScrollArea className="h-[240px] rounded-md border p-3 bg-accent/5">
+                            <div className="grid grid-cols-1 gap-2">
+                              {surveys.map((survey) => (
+                                <label
+                                  key={survey.id}
+                                  className={`flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer transition-all ${editForms.includes(survey.id)
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-border hover:border-primary/30 hover:bg-background'
+                                    }`}
+                                >
+                                  <Checkbox
+                                    checked={editForms.includes(survey.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setEditForms((prev) => [...prev, survey.id]);
+                                      } else {
+                                        setEditForms((prev) => prev.filter(id => id !== survey.id));
+                                      }
+                                    }}
+                                    className="h-4 w-4 shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{survey.title}</p>
+                                    <p className="text-[10px] text-muted-foreground font-mono truncate">{survey.id}</p>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                            {surveys.length === 0 && (
+                              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground italic text-sm">
+                                <Info className="h-8 w-8 mb-2 opacity-20" />
+                                No surveys found
+                              </div>
+                            )}
+                          </ScrollArea>
+
+                          <p className="text-[11px] text-muted-foreground bg-accent/30 px-2 py-1 rounded inline-block">
+                            {editForms.length === 0
+                              ? 'Accessing ALL forms'
+                              : `Limited to ${editForms.length} selected form${editForms.length === 1 ? '' : 's'}`
+                            }
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-sm font-medium mb-2">Reset Password</p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="password"
-                        placeholder="New password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          if (!newPassword) return;
-                          setSavingAction(true);
-                          const res = await updateUserPassword(selectedUser.uid, newPassword);
-                          setSavingAction(false);
-                          if ((res as any).success) {
-                            setNewPassword('');
-                            toast({ title: 'Password updated', description: 'User password has been changed' });
-                          } else {
-                            toast({ title: 'Error', description: (res as any).error || 'Failed to update password', variant: 'destructive' });
-                          }
-                        }}
-                        disabled={savingAction || !newPassword}
-                      >
-                        Update
-                      </Button>
+                  {/* Non-admin roles: read-only info about permissions */}
+                  {selectedUser.role !== 'admin' && (
+                    <div className="rounded-lg border bg-card p-4 space-y-2">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Permissions</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedUser.role === 'super-admin'
+                          ? 'Super admins have unrestricted access to all pages, forms, and patient data.'
+                          : 'Page and form permissions are only configurable for admin-role users.'}
+                      </p>
                     </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium mb-2">Status</p>
-                    <Button
-                      variant={selectedUser.disabled ? 'default' : 'outline'}
-                      onClick={async () => {
-                        setSavingAction(true);
-                        const res = await setUserDisabled(selectedUser.uid, !selectedUser.disabled);
-                        setSavingAction(false);
-                        if ((res as any).success) {
-                          const updated = { ...selectedUser, disabled: !selectedUser.disabled } as PlatformUser;
-                          setSelectedUser(updated);
-                          setUsers((prev) => prev.map(u => u.uid === updated.uid ? updated : u));
-                        } else {
-                          toast({ title: 'Error', description: (res as any).error || 'Failed to update status', variant: 'destructive' });
-                        }
-                      }}
-                      disabled={savingAction}
-                    >
-                      {selectedUser.disabled ? 'Enable User' : 'Disable User'}
-                    </Button>
-                  </div>
+                  )}
                 </div>
-
-                <div>
-                  <p className="text-sm font-medium mb-2">Recent Logins ({userLogins.length})</p>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {userLogins.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No login history</p>
-                    ) : (
-                      userLogins.map((login, index) => (
-                        <div key={index} className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Clock className="h-3 w-3" />
-                          {login.toLocaleString()}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+              </ScrollArea>
             )}
           </DialogContent>
         </Dialog>
@@ -1319,7 +1340,7 @@ export function EnhancedUserManagement() {
               {/* Region Access (for Create User - admin only) */}
               {createRole === 'admin' && (
                 <div className="space-y-4 border-t pt-4">
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Label>Region Access</Label>
                       <TooltipProvider>
@@ -1328,15 +1349,15 @@ export function EnhancedUserManagement() {
                             <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-xs">
-                            <p className="text-xs">Controls which patients this admin can see. Leave empty for access to all regions.</p>
+                            <p className="text-xs">Controls which patients this admin can see. Leave with no regions for default behavior based on policy mode. Patients with Unknown region are always visible.</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Select regions this admin can access. Patients with Unknown region are visible to all admins.
+                      Select specific regions, or leave with no regions selected for default access.
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         size="sm"
@@ -1360,7 +1381,7 @@ export function EnhancedUserManagement() {
                       {ADMIN_REGIONS.map((region) => (
                         <label
                           key={region}
-                          className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-all ${
+                          className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all text-sm ${
                             createRegions.includes(region)
                               ? 'border-primary bg-primary/5'
                               : 'border-border hover:border-primary/30'
@@ -1377,13 +1398,15 @@ export function EnhancedUserManagement() {
                             }}
                             className="h-4 w-4"
                           />
-                          <span className="text-sm">{region}</span>
+                          {region}
                         </label>
                       ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[11px] text-muted-foreground bg-accent/30 px-2 py-1 rounded inline-block">
                       {createRegions.length === 0
-                        ? (regionPolicyMode === 'strict' ? 'Will have Unknown-only visibility in strict mode' : 'Will have access to all regions')
+                        ? (regionPolicyMode === 'strict'
+                            ? 'No regions assigned — Unknown-region patients only (strict mode)'
+                            : 'No regions assigned — access to all regions (legacy mode)')
                         : `${createRegions.length} region${createRegions.length === 1 ? '' : 's'} selected`}
                     </p>
                   </div>
