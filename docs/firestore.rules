@@ -14,6 +14,11 @@ service cloud.firestore {
              (request.auth.token.role == 'admin' || request.auth.token.role == 'super-admin');
     }
     
+    // Helper function to check if user is super-admin (full access to all patient data)
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'super-admin';
+    }
+    
     // Helper function to check if user is YEP Manager
     function isYEPManager() {
       return isAuthenticated() &&
@@ -211,20 +216,26 @@ service cloud.firestore {
                        request.resource.data.submittedByUserId == request.auth.uid;
     }
     
-    // Patient Management Collections - Admin only
+    // Patient Management Collections - hardened boundary
+    // Direct client SDK access is denied; patient access is server-only via Admin SDK
+    // Region segmentation is enforced in server actions using config/page_permissions
     match /patients/{patientId} {
-      // Only admins can read and write patient data
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
     
     match /patient_interactions/{interactionId} {
-      // Only admins can read and write patient interactions
-      allow read, write: if isAdmin();
+      // Server-only access; enforce region checks in server actions
+      allow read, write: if false;
     }
     
     match /patient_documents/{documentId} {
-      // Only admins can read and write patient document metadata
-      allow read, write: if isAdmin();
+      // Server-only access; enforce region checks in server actions
+      allow read, write: if false;
+    }
+
+    match /patient_intake_conversions/{lockId} {
+      // Idempotency locks for consent-to-patient conversion; server-only via Admin SDK
+      allow read, write: if false;
     }
 
     match /program_reports/{reportId} {

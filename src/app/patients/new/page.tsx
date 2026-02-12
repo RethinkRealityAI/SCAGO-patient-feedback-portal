@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { ArrowLeft, UserPlus, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, UserPlus, Loader2, Save, ClipboardList, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createPatient } from '@/app/patients/actions';
+import { createPatient, getConsentCandidates, createPatientFromCandidate, type ConsentCandidate } from '@/app/patients/actions';
 import {
     patientSchema,
     Patient,
@@ -27,11 +27,26 @@ import {
 import { ontarioHospitals } from '@/lib/hospital-names';
 import { NeedsSelector } from '@/components/patients/NeedsSelector';
 import { EmergencyContactsForm } from '@/components/patients/EmergencyContactsForm';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function NewPatientPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(false);
+    const [candidates, setCandidates] = useState<ConsentCandidate[]>([]);
+    const [candidatesLoading, setCandidatesLoading] = useState(true);
+    const [selectedCandidate, setSelectedCandidate] = useState<ConsentCandidate | null>(null);
+    const [intakeOpen, setIntakeOpen] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        setCandidatesLoading(true);
+        getConsentCandidates().then((res) => {
+            if (!cancelled && res.success && res.data) setCandidates(res.data);
+        }).finally(() => { if (!cancelled) setCandidatesLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
 
     const form = useForm<Patient>({
         resolver: zodResolver(patientSchema),
@@ -74,7 +89,6 @@ export default function NewPatientPage() {
     const onSubmit = async (data: Patient) => {
         setIsLoading(true);
         try {
-            // Sanitize guardian data if adult
             const submissionData = { ...data };
             if (submissionData.guardianContact?.isAdult) {
                 submissionData.guardianContact = {
@@ -88,14 +102,19 @@ export default function NewPatientPage() {
                 };
             }
 
-            const result = await createPatient(submissionData);
+            const result = selectedCandidate
+                ? await createPatientFromCandidate(selectedCandidate, submissionData)
+                : await createPatient(submissionData);
 
             if (result.success) {
+                if (selectedCandidate) {
+                    setCandidates((prev) => prev.filter((c) => c.candidateKey !== selectedCandidate.candidateKey));
+                    setSelectedCandidate(null);
+                }
                 toast({
                     title: 'Patient Created',
                     description: 'New patient has been added to the system.',
                 });
-                // Navigate to the new patient's profile
                 router.push(`/patients/${result.id}`);
             } else {
                 toast({
@@ -114,6 +133,28 @@ export default function NewPatientPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSelectCandidate = (c: ConsentCandidate) => {
+        setSelectedCandidate(c);
+        form.reset({
+            fullName: c.fullName,
+            hospital: c.primaryHospital || '',
+            region: c.region,
+            diagnosis: 'Sickle Cell Disease',
+            contactInfo: { email: c.email, phone: c.phone, address: '' },
+            preferredCommunication: 'email',
+            consentStatus: 'on_file',
+            consentDate: c.signatureDate ? new Date(c.signatureDate) : new Date(),
+            caseStatus: 'active',
+            guardianContact: { name: '', relation: '', contactInfo: { email: '', phone: '' }, isAdult: true },
+            emergencyContacts: [],
+            needs: [],
+            painCrisisFrequency: '',
+            erUsageFrequency: '',
+            notes: '',
+            referral: { name: '', role: '', hospital: '', notes: '' },
+        });
     };
 
     const isAdult = form.watch('guardianContact.isAdult');
@@ -137,6 +178,72 @@ export default function NewPatientPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Create from Intake */}
+            <Collapsible open={intakeOpen} onOpenChange={setIntakeOpen}>
+                <Card>
+                    <CollapsibleTrigger asChild>
+                        <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <ClipboardList className="h-5 w-5" />
+                                    <CardTitle className="text-lg">Create from Intake / Consent</CardTitle>
+                                    {candidates.length > 0 && (
+                                        <span className="text-sm font-normal text-muted-foreground">({candidates.length} available)</span>
+                                    )}
+                                </div>
+                                {intakeOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </div>
+                            <CardDescription>
+                                Select someone who has filled out the consent form to prefill and create a patient profile. Their consent form will be attached automatically.
+                            </CardDescription>
+                        </CardHeader>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <CardContent className="pt-0">
+                            {candidatesLoading ? (
+                                <div className="flex items-center gap-2 py-4 text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading consent submissions...
+                                </div>
+                            ) : candidates.length === 0 ? (
+                                <p className="py-4 text-sm text-muted-foreground">No consent submissions available to convert. Add patient manually below.</p>
+                            ) : (
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {candidates.map((c) => (
+                                        <button
+                                            key={c.submissionId}
+                                            type="button"
+                                            onClick={() => handleSelectCandidate(c)}
+                                            className={`w-full flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
+                                                selectedCandidate?.candidateKey === c.candidateKey
+                                                    ? 'border-primary bg-primary/5'
+                                                    : 'hover:bg-muted/50 border-border'
+                                            }`}
+                                        >
+                                            <div>
+                                                <p className="font-medium">{c.fullName}</p>
+                                                <p className="text-sm text-muted-foreground">{c.email || c.phone || 'No contact'} · {c.city || 'No city'} · {c.region}</p>
+                                            </div>
+                                            {selectedCandidate?.candidateKey === c.candidateKey && (
+                                                <span className="text-xs font-medium text-primary">Selected</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            {selectedCandidate && (
+                                <div className="mt-3 flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
+                                    <p className="text-sm">Creating from: <strong>{selectedCandidate.fullName}</strong></p>
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCandidate(null)}>
+                                        Clear selection
+                                    </Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </CollapsibleContent>
+                </Card>
+            </Collapsible>
 
             {/* Form */}
             <Card>
@@ -229,8 +336,20 @@ export default function NewPatientPage() {
                                         name="region"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Region *</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <div className="flex items-center gap-2">
+                                                    <FormLabel>Region *</FormLabel>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="right" className="max-w-xs">
+                                                                <p className="text-xs">Region controls which admins can see this patient. Admins are assigned regions and only see patients in those regions.</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                                <Select onValueChange={field.onChange} value={field.value}>
                                                     <FormControl>
                                                         <SelectTrigger>
                                                             <SelectValue placeholder="Select region" />

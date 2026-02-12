@@ -2,8 +2,8 @@
 
 > **The Central Brain** — This document serves as the single source of truth for architecture decisions, development patterns, security requirements, and operational guidelines for the SCAGO Patient Feedback Response Portal.
 
-**Last Updated:** January 16, 2026  
-**Version:** 1.0.0  
+**Last Updated:** February 12, 2026  
+**Version:** 1.1.0  
 **Maintainers:** RethinkReality Development Team
 
 ---
@@ -359,7 +359,7 @@ export default async function NewFeatureLayout({ children }) {
 | `surveys/{id}/submissions` | Survey responses | Public create, Admin read |
 | `feedback` | Legacy survey responses | Admin only |
 | `users` | User profiles & tracking | Admin read, Auth write |
-| `config` | System configuration | Auth read, Admin write |
+| `config` | System configuration (incl. `page_permissions`: routes, forms, regions per admin) | Auth read, Admin write |
 | `yep_participants` | YEP participant data | Admin/YEP/Owner |
 | `yep_mentors` | YEP mentor data | Admin/YEP/Owner |
 | `yep_workshops` | Workshop records | Admin/YEP |
@@ -493,6 +493,8 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 FIREBASE_ADMIN_PROJECT_ID=
 FIREBASE_ADMIN_CLIENT_EMAIL=
 FIREBASE_ADMIN_PRIVATE_KEY=
+# Optional: Storage bucket for patient docs, etc. (default: projectId.appspot.com)
+# FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 
 # AI
 GOOGLE_GENAI_API_KEY=
@@ -879,6 +881,20 @@ Must pass with zero errors before deployment.
 - `PatientDocuments.tsx` — Document uploads
 - `NeedsSelector.tsx` — Needs assessment
 
+**Consent-to-Patient Conversion:**
+- Consent/intake submissions are deduplicated by full name + DOB (fallback: name + email when DOB missing).
+- Candidates already converted (patient has `sourceSubmissionId` or `intakeCandidateKey`) are excluded from the candidate list.
+- When creating a patient from a candidate: patient gets `sourceSubmissionId`, `sourceSurveyId`, `intakeRegionResolution`, `intakeCandidateKey` for traceability.
+- The consent form is automatically attached as a `patient_documents` record (from submission file or generated PDF if no upload).
+
+**Region-Based Access:**
+- Regions: GTA, Hamilton-Wentworth, East, West, North, Unknown.
+- Super-admin sees all patients. Admin sees only patients in their assigned regions plus Unknown-region patients.
+- Admin region assignment is stored in `config/page_permissions` under `regionsByEmail`.
+- If an admin has no regions assigned, they see all patients (backward compatibility).
+- City-to-region mapping lives in `src/lib/city-to-region.ts` (Ontario cities → SCAGO regions).
+- On region change when editing a patient, a confirmation modal warns if the editor may lose access.
+
 ---
 
 ## 🚨 Common Pitfalls & Solutions
@@ -957,6 +973,7 @@ const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2))
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-01-16 | 1.0.0 | Initial comprehensive architecture document |
+| 2026-02-12 | 1.1.0 | Consent-to-patient conversion, region-based access, admin region assignment |
 
 ---
 

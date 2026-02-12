@@ -2,8 +2,14 @@
 
 // Dynamic imports for server-only modules
 import { enforceAdminInAction } from '@/lib/server-auth';
+import { REGIONS, type Patient } from '@/types/patient';
+import { DEFAULT_CITY_TO_REGION } from '@/lib/city-to-region';
+import { ontarioCities } from '@/lib/location-data';
 
 export type AppRole = 'super-admin' | 'admin' | 'mentor' | 'participant';
+export type RegionAccessPolicyMode = 'legacy' | 'strict';
+export type RegionMappingDictionary = Record<string, Patient['region']>;
+export type RegionCityOption = { label: string; value: string };
 
 export interface PlatformUser {
   uid: string;
@@ -15,6 +21,39 @@ export interface PlatformUser {
   createdAt?: string;
   lastLoginAt?: string;
   allowedForms?: string[];
+}
+
+function normalizeCitySlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function sanitizeRegionMappings(mappings: Record<string, string>): RegionMappingDictionary {
+  const validRegions = new Set(REGIONS);
+  const sanitized: RegionMappingDictionary = {};
+  Object.entries(mappings || {}).forEach(([rawCity, rawRegion]) => {
+    const city = normalizeCitySlug(rawCity);
+    const region = rawRegion as Patient['region'];
+    if (!city || city === 'other') return;
+    if (region === 'Unknown') return;
+    if (!validRegions.has(region)) return;
+    sanitized[city] = region;
+  });
+  return sanitized;
+}
+
+function sanitizeCityOptions(cities: Array<{ label: string; value: string }>): RegionCityOption[] {
+  const bySlug = new Map<string, RegionCityOption>();
+  for (const city of cities || []) {
+    const label = (city.label || '').trim();
+    const value = normalizeCitySlug(city.value || city.label || '');
+    if (!label || !value || value === 'other') continue;
+    bySlug.set(value, { label, value });
+  }
+  return Array.from(bySlug.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }> {
@@ -49,6 +88,7 @@ export async function createPlatformUser(input: {
   role?: AppRole;
   pagePermissions?: string[]; // route keys
   allowedForms?: string[]; // form slugs/ids
+  allowedRegions?: string[]; // SCAGO region keys for patient access
 }): Promise<{ success: true; uid: string } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
@@ -86,18 +126,21 @@ export async function createPlatformUser(input: {
     await auth.setCustomUserClaims(user.uid, { ...existing, role });
 
     // Set page permissions if provided (for admin role)
-    if ((input.pagePermissions && input.pagePermissions.length > 0) || (input.allowedForms && input.allowedForms.length > 0)) {
+    if ((input.pagePermissions && input.pagePermissions.length > 0) || (input.allowedForms && input.allowedForms.length > 0) || (input.allowedRegions && input.allowedRegions.length > 0)) {
       const permsRef = firestore.collection('config').doc('page_permissions');
       const snap = await permsRef.get();
       const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
       const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
+      const currentRegions = snap.exists ? ((snap.data() as any)?.regionsByEmail || {}) : {};
 
       const updatedRoutes = { ...currentRoutes, [email]: input.pagePermissions || [] };
       const updatedForms = { ...currentForms, [email]: input.allowedForms || [] };
+      const updatedRegions = { ...currentRegions, [email]: input.allowedRegions || [] };
 
       await permsRef.set({
         routesByEmail: updatedRoutes,
-        formsByEmail: updatedForms
+        formsByEmail: updatedForms,
+        regionsByEmail: updatedRegions
       }, { merge: true });
     }
 
@@ -170,35 +213,64 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
   }
 }
 
-export async function setUserPagePermissions(email: string, routes: string[], allowedForms?: string[]): Promise<{ success: true } | { success: false; error: string }> {
+export async function setUserPagePermissions(email: string, routes: string[], allowedForms?: string[], allowedRegions?: string[]): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   const auth = getAdminAuth();
 
   try {
+    const normalizedEmail = email.toLowerCase();
     const permsRef = firestore.collection('config').doc('page_permissions');
     const snap = await permsRef.get();
 
     const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
     const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
+    const currentRegions = snap.exists ? ((snap.data() as any)?.regionsByEmail || {}) : {};
 
-    const updatedRoutes = { ...currentRoutes, [email.toLowerCase()]: routes };
+    const previousRoutes: string[] = currentRoutes[normalizedEmail] || [];
+    const previousForms: string[] = currentForms[normalizedEmail] || [];
+    const previousRegions: string[] = currentRegions[normalizedEmail] || [];
+    const nextForms = allowedForms !== undefined ? allowedForms : previousForms;
+    const nextRegions = allowedRegions !== undefined ? allowedRegions : previousRegions;
+
+    const updatedRoutes = { ...currentRoutes, [normalizedEmail]: routes };
     const updatedForms = allowedForms !== undefined
-      ? { ...currentForms, [email.toLowerCase()]: allowedForms }
+      ? { ...currentForms, [normalizedEmail]: allowedForms }
       : currentForms;
+    const updatedRegions = allowedRegions !== undefined
+      ? { ...currentRegions, [normalizedEmail]: allowedRegions }
+      : currentRegions;
 
     await permsRef.set({
       routesByEmail: updatedRoutes,
-      formsByEmail: updatedForms
+      formsByEmail: updatedForms,
+      regionsByEmail: updatedRegions
     }, { merge: true });
 
     // Log permission change
     try {
       const user = await auth.getUserByEmail(email);
+      const arrayDiff = (before: string[], after: string[]) => ({
+        added: after.filter((item) => !before.includes(item)),
+        removed: before.filter((item) => !after.includes(item)),
+      });
       await logUserActivity(user.uid, email, 'permissions_changed', {
-        permissions: routes,
-        allowedForms: allowedForms || []
+        before: {
+          permissions: previousRoutes,
+          allowedForms: previousForms,
+          allowedRegions: previousRegions,
+        },
+        after: {
+          permissions: routes,
+          allowedForms: nextForms,
+          allowedRegions: nextRegions,
+        },
+        delta: {
+          permissions: arrayDiff(previousRoutes, routes),
+          allowedForms: arrayDiff(previousForms, nextForms),
+          allowedRegions: arrayDiff(previousRegions, nextRegions),
+        },
       });
     } catch (err) {
       console.error('Failed to log permission change:', err);
@@ -210,10 +282,99 @@ export async function setUserPagePermissions(email: string, routes: string[], al
   }
 }
 
+export async function getRegionAccessPolicy(): Promise<{ success: true; mode: RegionAccessPolicyMode } | { success: false; error: string }> {
+  await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  try {
+    const snap = await firestore.collection('config').doc('page_permissions').get();
+    if (!snap.exists) return { success: true, mode: 'legacy' };
+    const data = snap.data() as any;
+    const mode = data?.regionAccessPolicy?.mode;
+    return { success: true, mode: mode === 'strict' ? 'strict' : 'legacy' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to get region access policy' };
+  }
+}
+
+export async function setRegionAccessPolicy(mode: RegionAccessPolicyMode): Promise<{ success: true } | { success: false; error: string }> {
+  await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  const session = await (await import('@/lib/server-auth')).getServerSession();
+  try {
+    await firestore.collection('config').doc('page_permissions').set({
+      regionAccessPolicy: {
+        mode,
+        updatedAt: new Date().toISOString(),
+        updatedBy: session?.email || 'unknown',
+      }
+    }, { merge: true });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to set region access policy' };
+  }
+}
+
+export async function getRegionMappings(): Promise<
+  { success: true; mappings: RegionMappingDictionary; cities: RegionCityOption[] } |
+  { success: false; error: string }
+> {
+  await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  try {
+    const snap = await firestore.collection('config').doc('region_mappings').get();
+    const defaultCities = sanitizeCityOptions(ontarioCities as Array<{ label: string; value: string }>);
+    if (!snap.exists) {
+      return {
+        success: true,
+        mappings: { ...DEFAULT_CITY_TO_REGION },
+        cities: defaultCities,
+      };
+    }
+    const data = snap.data() as any;
+    const mappings = sanitizeRegionMappings((data?.mappings || {}) as Record<string, string>);
+    const cities = sanitizeCityOptions((data?.cities || defaultCities) as Array<{ label: string; value: string }>);
+    return {
+      success: true,
+      mappings: Object.keys(mappings).length > 0 ? mappings : { ...DEFAULT_CITY_TO_REGION },
+      cities,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to get region mappings' };
+  }
+}
+
+export async function setRegionMappings(input: {
+  mappings: Record<string, string>;
+  cities?: Array<{ label: string; value: string }>;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  const session = await (await import('@/lib/server-auth')).getServerSession();
+  try {
+    const mappings = sanitizeRegionMappings(input?.mappings || {});
+    const defaultCities = sanitizeCityOptions(ontarioCities as Array<{ label: string; value: string }>);
+    const suppliedCities = input?.cities && input.cities.length > 0 ? input.cities : defaultCities;
+    const cities = sanitizeCityOptions(suppliedCities);
+    await firestore.collection('config').doc('region_mappings').set({
+      mappings,
+      cities,
+      updatedAt: new Date().toISOString(),
+      updatedBy: session?.email || 'unknown',
+    }, { merge: true });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to set region mappings' };
+  }
+}
+
 /**
  * Get page and form permissions for a user by email
  */
-export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; allowedForms?: string[]; error?: string }> {
+export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; allowedForms?: string[]; allowedRegions?: string[]; error?: string }> {
   await enforceAdminInAction();
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
@@ -229,11 +390,13 @@ export async function getUserPagePermissions(email: string): Promise<{ permissio
     const data = snap.data() as any;
     const routesByEmail = data?.routesByEmail || {};
     const formsByEmail = data?.formsByEmail || {};
+    const regionsByEmail = data?.regionsByEmail || {};
 
     const permissions = routesByEmail[email.toLowerCase()] || [];
     const allowedForms = formsByEmail[email.toLowerCase()] || [];
+    const allowedRegions = regionsByEmail[email.toLowerCase()] || [];
 
-    return { permissions, allowedForms };
+    return { permissions, allowedForms, allowedRegions };
   } catch (err: any) {
     return { error: err?.message || 'Failed to get permissions' };
   }

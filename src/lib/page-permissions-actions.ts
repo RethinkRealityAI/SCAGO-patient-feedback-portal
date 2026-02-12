@@ -6,16 +6,18 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 export interface PagePermissions {
   routesByEmail: Record<string, string[]>;
   formsByEmail: Record<string, string[]>;
+  regionsByEmail: Record<string, string[]>;
 }
 
 export async function getPagePermissions(): Promise<PagePermissions> {
   const ref = doc(db, 'config', 'page_permissions');
   const snap = await getDoc(ref);
-  if (!snap.exists()) return { routesByEmail: {}, formsByEmail: {} };
+  if (!snap.exists()) return { routesByEmail: {}, formsByEmail: {}, regionsByEmail: {} };
   const data = snap.data() as any;
   return {
     routesByEmail: data.routesByEmail || {},
-    formsByEmail: data.formsByEmail || {}
+    formsByEmail: data.formsByEmail || {},
+    regionsByEmail: data.regionsByEmail || {}
   };
 }
 

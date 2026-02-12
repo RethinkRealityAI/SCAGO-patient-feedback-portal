@@ -14,6 +14,7 @@
  * 5. yep_mentors: createdAt (descending)
  * 6. yep_advisor_meetings: meetingDate (descending)
  * 7. yep_workshop_attendance: workshopId + attendedAt (descending)
+ * 8. patients: region + createdAt (descending) - for region-based patient access
  */
 
 const { execSync } = require('child_process');
@@ -76,6 +77,14 @@ const indexes = [
       { field: 'attendedAt', order: 'DESCENDING' }
     ],
     description: 'Attendance by workshop and attendance date'
+  },
+  {
+    collection: 'patients',
+    fields: [
+      { field: 'region', order: 'ASCENDING' },
+      { field: 'createdAt', order: 'DESCENDING' }
+    ],
+    description: 'Patients by region for region-based admin access'
   }
 ];
 

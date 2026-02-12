@@ -136,6 +136,15 @@ The storage rules organize files as follows:
 - **`profile-images/`** - User profile images (public read, user write)
 - **`temp/`** - Temporary files (authenticated users)
 
+## 🔧 Server-Side Storage Bucket (Admin SDK)
+
+For patient document uploads and other server-side Firebase Storage operations, the Admin SDK needs a bucket name. The app resolves it as follows:
+
+1. **Explicit env vars** (optional): `FIREBASE_STORAGE_BUCKET` or `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` (e.g. `projectId.appspot.com` or `projectId.firebasestorage.app`)
+2. **Fallback**: If not set, derived from project ID as `projectId.appspot.com`
+
+Set `FIREBASE_STORAGE_BUCKET` or `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` explicitly if your project uses the newer `.firebasestorage.app` format instead of `.appspot.com`.
+
 ## 🔒 Security Notes
 
 - YEP files are protected and only accessible by admins and YEP managers

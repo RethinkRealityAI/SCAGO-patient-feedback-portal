@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 // Enums and Constants
-export const REGIONS = ['GTA', 'East', 'West', 'North'] as const;
+// SCAGO region taxonomy: GTA, Hamilton-Wentworth, East (Ottawa/Kingston), West (London/Windsor), North (Sudbury/Thunder Bay/etc), Unknown (unmapped city)
+export const REGIONS = ['GTA', 'Hamilton-Wentworth', 'East', 'West', 'North', 'Unknown'] as const;
 export const CLINIC_TYPES = ['adult', 'paediatric'] as const;
 export const COMMUNICATION_METHODS = ['text', 'call', 'email'] as const;
 export const CONSENT_STATUSES = ['on_file', 'not_obtained', 'withdrawn', 'expired'] as const;
@@ -127,6 +128,13 @@ export const patientSchema = z.object({
     }).optional(),
     createdAt: z.date().optional(),
     updatedAt: z.date().optional(),
+    createdBy: z.string().optional(),
+    createdByUid: z.string().optional(),
+    // Intake linkage – when patient was created from consent form submission
+    sourceSubmissionId: z.string().optional(),
+    sourceSurveyId: z.string().optional(),
+    intakeRegionResolution: z.string().optional(),
+    intakeCandidateKey: z.string().optional(),
 });
 
 export type Patient = z.infer<typeof patientSchema>;

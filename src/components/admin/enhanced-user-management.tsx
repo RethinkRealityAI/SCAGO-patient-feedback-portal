@@ -29,6 +29,9 @@ import {
   updateUserPassword,
   setUserPagePermissions,
   getUserPagePermissions,
+  getRegionAccessPolicy,
+  setRegionAccessPolicy,
+  type RegionAccessPolicyMode,
   type PlatformUser,
   type AppRole,
 } from '@/app/admin/user-actions';
@@ -37,6 +40,38 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { getSurveys } from '@/app/actions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { REGIONS } from '@/types/patient';
+import { useAuth } from '@/hooks/use-auth';
+
+// Admin-assignable regions (exclude Unknown - all admins see Unknown-region patients automatically)
+const ADMIN_REGIONS = REGIONS.filter((r) => r !== 'Unknown');
+type AccessPreset = {
+  id: string;
+  label: string;
+  description: string;
+  routes: string[];
+};
+
+const ACCESS_PRESETS: AccessPreset[] = [
+  {
+    id: 'regional-single',
+    label: 'Regional Admin (Single Region)',
+    description: 'Patient-focused access with one selected region.',
+    routes: ['patient-management'],
+  },
+  {
+    id: 'regional-multi',
+    label: 'Regional Admin (Multi-Region)',
+    description: 'Patient-focused access with multiple selected regions.',
+    routes: ['patient-management'],
+  },
+  {
+    id: 'form-admin',
+    label: 'Form Admin',
+    description: 'Survey/dashboard access without patient visibility.',
+    routes: ['forms-dashboard', 'forms-editor', 'yep-forms'],
+  },
+];
 
 export function EnhancedUserManagement() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
@@ -59,12 +94,27 @@ export function EnhancedUserManagement() {
   const [editRoutes, setEditRoutes] = useState<string[]>([]);
   const [editForms, setEditForms] = useState<string[]>([]);
   const [createForms, setCreateForms] = useState<string[]>([]);
+  const [editRegions, setEditRegions] = useState<string[]>([]);
+  const [createRegions, setCreateRegions] = useState<string[]>([]);
   const [surveys, setSurveys] = useState<Array<{ id: string; title: string }>>([]);
+  const [adminWarnings, setAdminWarnings] = useState<string[]>([]);
+  const [regionPolicyMode, setRegionPolicyMode] = useState<RegionAccessPolicyMode>('legacy');
+  const [policySaving, setPolicySaving] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (selectedUser?.role === 'admin') {
+      setAdminWarnings(getAdminConfigWarnings(editRoutes, editForms, editRegions));
+    } else {
+      setAdminWarnings([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser?.uid, selectedUser?.role, editRoutes, editForms, editRegions]);
 
   const loadData = async () => {
     setLoading(true);
@@ -84,6 +134,12 @@ export function EnhancedUserManagement() {
     // Load surveys for form access control
     const surveysResult = await getSurveys();
     setSurveys(surveysResult || []);
+
+    // Load region access policy mode
+    const policyRes = await getRegionAccessPolicy();
+    if (policyRes.success) {
+      setRegionPolicyMode(policyRes.mode);
+    }
   };
 
   const handleViewUser = async (user: PlatformUser) => {
@@ -95,13 +151,16 @@ export function EnhancedUserManagement() {
         const res = await getUserPagePermissions(user.email);
         setEditRoutes(res.permissions || []);
         setEditForms(res.allowedForms || []);
+        setEditRegions(res.allowedRegions || []);
       } catch {
         setEditRoutes([]);
         setEditForms([]);
+        setEditRegions([]);
       }
     } else {
       setEditRoutes([]);
       setEditForms([]);
+      setEditRegions([]);
     }
 
     // Load user's login history
@@ -189,6 +248,88 @@ export function EnhancedUserManagement() {
   // Validate email format
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+  const createAdminWarnings = createRole === 'admin'
+    ? getAdminConfigWarnings(createRoutes, createForms, createRegions)
+    : [];
+
+  function getAdminConfigWarnings(routes: string[], forms: string[], regions: string[]) {
+    const warnings: string[] = [];
+    if (routes.length === 0) warnings.push('No page permissions selected. Admin users need at least one page permission.');
+    if (routes.includes('patient-management') && regions.length === 0) {
+      warnings.push(
+        regionPolicyMode === 'strict'
+          ? 'Strict mode: no regions assigned means this admin will only see Unknown-region patients.'
+          : 'Legacy mode: no regions assigned means this admin will see all patient regions.'
+      );
+    }
+    if (!routes.includes('patient-management') && regions.length > 0) {
+      warnings.push('Regions are selected but Patient Management is not enabled, so region selection will have no effect.');
+    }
+    if (forms.length > 0 && !routes.includes('forms-dashboard')) {
+      warnings.push('Form restrictions are configured, but Forms Dashboard permission is not enabled.');
+    }
+    return warnings;
+  }
+
+  const applyCreatePreset = (presetId: string) => {
+    const preset = ACCESS_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setCreateRole('admin');
+    setCreateRoutes(preset.routes);
+    if (preset.id === 'form-admin') {
+      setCreateRegions([]);
+    }
+  };
+
+  const applyEditPreset = (presetId: string) => {
+    const preset = ACCESS_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setEditRole('admin');
+    setEditRoutes(preset.routes);
+    if (preset.id === 'form-admin') {
+      setEditRegions([]);
+    }
+  };
+
+  const saveSelectedUserPermissions = async (actionLabel: string = 'Permissions saved') => {
+    if (!selectedUser) return;
+    const warnings = getAdminConfigWarnings(editRoutes, editForms, editRegions);
+    setAdminWarnings(warnings);
+    if (editRoutes.length === 0) {
+      toast({
+        title: 'Validation error',
+        description: 'Please select at least one page permission for this admin.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const currentEmail = user?.email?.toLowerCase();
+    const targetEmail = selectedUser.email.toLowerCase();
+    const isSelf = currentEmail && currentEmail === targetEmail;
+    if (isSelf && !editRoutes.includes('user-management')) {
+      const proceed = confirm('You are removing your own User Management access. You may lose access to this admin panel. Continue?');
+      if (!proceed) return;
+    }
+
+    if (editRoutes.includes('patient-management') && editRegions.length === 0) {
+      const proceed = confirm(
+        regionPolicyMode === 'strict'
+          ? 'Strict mode is enabled: no regions selected means this admin will only see Unknown-region patients. Continue?'
+          : 'No regions selected means this admin can access all patient regions. Continue?'
+      );
+      if (!proceed) return;
+    }
+
+    setSavingAction(true);
+    const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms, editRegions);
+    setSavingAction(false);
+    if ((res as any).success) {
+      toast({ title: actionLabel, description: `Updated access for ${selectedUser.email}` });
+    } else {
+      toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
+    }
   };
 
   return (
@@ -279,6 +420,57 @@ export function EnhancedUserManagement() {
                   className="pl-10"
                 />
               </div>
+            </div>
+
+            <div className="mb-4 rounded-md border p-3 bg-accent/10 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Region Access Policy Mode</p>
+                  <p className="text-xs text-muted-foreground">
+                    Controls what happens when an admin has no assigned regions.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={regionPolicyMode}
+                    onValueChange={(value) => setRegionPolicyMode(value as RegionAccessPolicyMode)}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="legacy">Legacy-compatible (empty = all regions)</SelectItem>
+                      <SelectItem value="strict">Strict (empty = Unknown only)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={policySaving}
+                    onClick={async () => {
+                      setPolicySaving(true);
+                      const res = await setRegionAccessPolicy(regionPolicyMode);
+                      setPolicySaving(false);
+                      if ((res as any).success) {
+                        toast({ title: 'Policy updated', description: `Region policy is now ${regionPolicyMode === 'strict' ? 'Strict' : 'Legacy-compatible'}.` });
+                      } else {
+                        toast({ title: 'Error', description: (res as any).error || 'Failed to update policy', variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    {policySaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Save
+                  </Button>
+                </div>
+              </div>
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  <strong>Legacy-compatible:</strong> admins with no regions can see all patient regions.{' '}
+                  <strong>Strict:</strong> admins with no regions can only see Unknown-region patients.
+                </AlertDescription>
+              </Alert>
             </div>
 
             {loading ? (
@@ -456,6 +648,48 @@ export function EnhancedUserManagement() {
                   </div>
                 </div>
 
+                {selectedUser.role === 'admin' && (
+                  <div className="space-y-3 border-t pt-4">
+                    <Label className="text-base font-semibold">Quick Access Presets</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      {ACCESS_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          type="button"
+                          variant="outline"
+                          className="justify-start h-auto py-2"
+                          onClick={() => applyEditPreset(preset.id)}
+                        >
+                          <span className="text-left">
+                            <span className="block text-sm font-medium">{preset.label}</span>
+                            <span className="block text-xs text-muted-foreground">{preset.description}</span>
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedUser.role === 'admin' && (
+                  <div className="space-y-2 border-t pt-4">
+                    <Label className="text-base font-semibold">Effective Access Summary (Preview)</Label>
+                    <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
+                      <p><strong>Pages:</strong> {editRoutes.length === 0 ? 'None selected' : `${editRoutes.length} selected`}</p>
+                      <p><strong>Forms:</strong> {editForms.length === 0 ? 'All forms' : `${editForms.length} selected`}</p>
+                      <p><strong>Regions:</strong> {editRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions') : editRegions.join(', ')}</p>
+                      <p><strong>Unknown region patients:</strong> Always visible to admins</p>
+                    </div>
+                    {adminWarnings.length > 0 && (
+                      <Alert>
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          {adminWarnings[0]}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   <Label>Page Permissions</Label>
                   <p className="text-xs text-muted-foreground">
@@ -513,16 +747,7 @@ export function EnhancedUserManagement() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={async () => {
-                        setSavingAction(true);
-                        const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms);
-                        setSavingAction(false);
-                        if ((res as any).success) {
-                          toast({ title: 'Permissions saved', description: `Updated permissions for ${selectedUser.email}` });
-                        } else {
-                          toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
-                        }
-                      }}
+                      onClick={async () => saveSelectedUserPermissions('Permissions saved')}
                       disabled={savingAction}
                       className="w-full md:w-auto"
                     >
@@ -531,6 +756,87 @@ export function EnhancedUserManagement() {
                     </Button>
                   )}
                 </div>
+
+                {/* Region Assignment (Patient Access) */}
+                {selectedUser.role === 'admin' && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-base font-semibold">Region Access</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">Controls which patients this admin can see. Admins only see patients in their assigned regions. Patients with Unknown region are visible to all admins until region is assigned.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Select regions this admin can access. Leave empty for access to all regions (backward compatibility).
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setEditRegions([...ADMIN_REGIONS])}
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setEditRegions([])}
+                      >
+                        Clear all
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {ADMIN_REGIONS.map((region) => (
+                        <label
+                          key={region}
+                          className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-all ${
+                            editRegions.includes(region)
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/30'
+                          }`}
+                        >
+                          <Checkbox
+                            checked={editRegions.includes(region)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setEditRegions((prev) => [...prev, region]);
+                              } else {
+                                setEditRegions((prev) => prev.filter((r) => r !== region));
+                              }
+                            }}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">{region}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {editRegions.length === 0
+                        ? (regionPolicyMode === 'strict' ? 'Current: Unknown-only visibility in strict mode' : 'Current: All regions (no restriction)')
+                        : `Current: ${editRegions.length} region${editRegions.length === 1 ? '' : 's'} selected`}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => saveSelectedUserPermissions('Regions saved')}
+                      disabled={savingAction}
+                    >
+                      {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      Save Regions
+                    </Button>
+                  </div>
+                )}
 
                 {/* Form-Specific Access Control */}
                 <div className="space-y-4 pt-4 border-t">
@@ -550,7 +856,7 @@ export function EnhancedUserManagement() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setEditForms([])}
-                        className="h-8 text-xs hovr:text-primary transition-colors"
+                        className="h-8 text-xs hover:text-primary transition-colors"
                       >
                         Reset to All
                       </Button>
@@ -605,16 +911,7 @@ export function EnhancedUserManagement() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={async () => {
-                            setSavingAction(true);
-                            const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms);
-                            setSavingAction(false);
-                            if ((res as any).success) {
-                              toast({ title: 'Permissions saved', description: `Updated form access for ${selectedUser.email}` });
-                            } else {
-                              toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
-                            }
-                          }}
+                          onClick={async () => saveSelectedUserPermissions('Permissions saved')}
                           disabled={savingAction}
                           className="h-8"
                         >
@@ -922,6 +1219,46 @@ export function EnhancedUserManagement() {
                 </div>
               </div>
 
+              {createRole === 'admin' && (
+                <div className="space-y-4 border-t pt-4">
+                  <Label className="text-base font-semibold">Quick Access Presets</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {ACCESS_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        type="button"
+                        variant="outline"
+                        className="justify-start h-auto py-2"
+                        onClick={() => applyCreatePreset(preset.id)}
+                      >
+                        <span className="text-left">
+                          <span className="block text-sm font-medium">{preset.label}</span>
+                          <span className="block text-xs text-muted-foreground">{preset.description}</span>
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {createRole === 'admin' && (
+                <div className="space-y-2 border-t pt-4">
+                  <Label className="text-base font-semibold">Effective Access Summary (Preview)</Label>
+                  <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
+                    <p><strong>Pages:</strong> {createRoutes.length === 0 ? 'None selected' : `${createRoutes.length} selected`}</p>
+                    <p><strong>Forms:</strong> {createForms.length === 0 ? 'All forms' : `${createForms.length} selected`}</p>
+                    <p><strong>Regions:</strong> {createRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions') : createRegions.join(', ')}</p>
+                    <p><strong>Unknown region patients:</strong> Always visible to admins</p>
+                  </div>
+                  {createAdminWarnings.length > 0 && (
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>{createAdminWarnings[0]}</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
               {/* Page Permissions */}
               {(createRole === 'admin' || createRole === 'super-admin') && (
                 <div className="space-y-4 border-t pt-4">
@@ -975,6 +1312,80 @@ export function EnhancedUserManagement() {
                         </AlertDescription>
                       </Alert>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Region Access (for Create User - admin only) */}
+              {createRole === 'admin' && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label>Region Access</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">Controls which patients this admin can see. Leave empty for access to all regions.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Select regions this admin can access. Patients with Unknown region are visible to all admins.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setCreateRegions([...ADMIN_REGIONS])}
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setCreateRegions([])}
+                      >
+                        Clear all
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {ADMIN_REGIONS.map((region) => (
+                        <label
+                          key={region}
+                          className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-all ${
+                            createRegions.includes(region)
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/30'
+                          }`}
+                        >
+                          <Checkbox
+                            checked={createRegions.includes(region)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setCreateRegions((prev) => [...prev, region]);
+                              } else {
+                                setCreateRegions((prev) => prev.filter((r) => r !== region));
+                              }
+                            }}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">{region}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {createRegions.length === 0
+                        ? (regionPolicyMode === 'strict' ? 'Will have Unknown-only visibility in strict mode' : 'Will have access to all regions')
+                        : `${createRegions.length} region${createRegions.length === 1 ? '' : 's'} selected`}
+                    </p>
                   </div>
                 </div>
               )}
@@ -1040,6 +1451,18 @@ export function EnhancedUserManagement() {
                       setCreateError('Password must be at least 6 characters');
                       return;
                     }
+                    if (createRole === 'admin' && createRoutes.length === 0) {
+                      setCreateError('Please assign at least one page permission for admin users.');
+                      return;
+                    }
+                    if (createRole === 'admin' && createRoutes.includes('patient-management') && createRegions.length === 0) {
+                      const proceed = confirm(
+                        regionPolicyMode === 'strict'
+                          ? 'Strict mode is enabled: no regions selected means this admin will only see Unknown-region patients. Continue?'
+                          : 'No regions selected means this admin can access all patient regions. Continue?'
+                      );
+                      if (!proceed) return;
+                    }
 
                     setCreateError(null);
                     setSavingAction(true);
@@ -1052,6 +1475,7 @@ export function EnhancedUserManagement() {
                         role: createRole,
                         pagePermissions: createRoutes,
                         allowedForms: createForms,
+                        allowedRegions: createRegions.length > 0 ? createRegions : undefined,
                       });
 
                       if ((res as any).success) {
@@ -1066,6 +1490,7 @@ export function EnhancedUserManagement() {
                         setCreateRole('participant');
                         setCreateRoutes([]);
                         setCreateForms([]);
+                        setCreateRegions([]);
                         setCreateError(null);
                         // Reload user list
                         loadData();

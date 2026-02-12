@@ -35,6 +35,11 @@ function initializeFirebaseAdmin(): admin.app.App {
   // Prefer explicit FIREBASE_* variables, fall back to NEXT_PUBLIC_* for projectId
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+  const resolveStorageBucket = (pId: string | undefined) =>
+    process.env.FIREBASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    (pId ? `${pId}.appspot.com` : undefined);
   const privateKeyEnv = process.env.FIREBASE_PRIVATE_KEY;
   const privateKeyB64 = process.env.FIREBASE_PRIVATE_KEY_BASE64;
 
@@ -49,12 +54,14 @@ function initializeFirebaseAdmin(): admin.app.App {
         ? normalizePrivateKey(privateKeyEnv)
         : normalizePrivateKey(Buffer.from(privateKeyB64 as string, 'base64').toString('utf8'));
 
+      const storageBucket = resolveStorageBucket(projectId);
       return admin.initializeApp({
         credential: admin.credential.cert({
           projectId,
           clientEmail,
           privateKey,
         }),
+        ...(storageBucket && { storageBucket }),
       });
     }
 
@@ -69,15 +76,19 @@ function initializeFirebaseAdmin(): admin.app.App {
         parsed.private_key = normalizePrivateKey(parsed.private_key);
       }
 
+      const storageBucket = resolveStorageBucket(parsed.project_id);
       return admin.initializeApp({
         credential: admin.credential.cert(parsed),
+        ...(storageBucket && { storageBucket }),
       });
     }
 
     // 3) Application default credentials (GOOGLE_APPLICATION_CREDENTIALS points to JSON file)
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      const storageBucket = resolveStorageBucket(projectId);
       return admin.initializeApp({
         credential: admin.credential.applicationDefault(),
+        ...(storageBucket && { storageBucket }),
       });
     }
 

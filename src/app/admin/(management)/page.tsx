@@ -20,6 +20,7 @@ import { YEPInvites } from '@/components/admin/yep-invites';
 import { YEPBackfill } from '@/components/admin/yep-backfill';
 import { WebhookSettings } from '@/components/admin/webhook-settings';
 import { NavCustomization } from '@/components/admin/nav-customization';
+import { RegionConfigEditor } from '@/components/admin/region-config-editor';
 
 export default function AdminPage() {
   const { user, isAdmin, loading } = useAuth();
@@ -368,6 +369,7 @@ export default function AdminPage() {
 
         {/* Platform Settings Tab */}
         <TabsContent value="settings" className="space-y-4">
+          <RegionConfigEditor />
           <NavCustomization />
           <WebhookSettings />
         </TabsContent>

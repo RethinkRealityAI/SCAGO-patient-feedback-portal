@@ -12,8 +12,11 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { createPatient, updatePatient } from '@/app/patients/actions';
+import { createPatient, updatePatient, checkRegionChangeWarning } from '@/app/patients/actions';
 import { patientSchema, Patient, REGIONS, CLINIC_TYPES, COMMUNICATION_METHODS, CONSENT_STATUSES, CASE_STATUSES, FREQUENCIES } from '@/types/patient';
 import { ontarioHospitals } from '@/lib/hospital-names';
 import { NeedsSelector } from '@/components/patients/NeedsSelector';
@@ -28,6 +31,8 @@ interface PatientFormProps {
 
 export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientFormProps) {
     const [isLoading, setIsLoading] = useState(false);
+    const [showRegionWarning, setShowRegionWarning] = useState(false);
+    const [pendingRegionValue, setPendingRegionValue] = useState<string | null>(null);
     const { toast } = useToast();
 
     const form = useForm<Patient>({
@@ -177,6 +182,7 @@ export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientForm
     const isAdult = form.watch('guardianContact.isAdult');
 
     return (
+        <>
         <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -271,26 +277,52 @@ export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientForm
                                 <FormField
                                     control={form.control}
                                     name="region"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Region *</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select region" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {REGIONS.map((region) => (
-                                                        <SelectItem key={region} value={region}>
-                                                            {region}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
+                                    render={({ field }) => {
+                                        const handleRegionChange = async (newValue: string) => {
+                                            if (newValue === field.value) return;
+                                            if (patient) {
+                                                const { wouldLoseAccess } = await checkRegionChangeWarning(newValue);
+                                                if (wouldLoseAccess) {
+                                                    setPendingRegionValue(newValue);
+                                                    setShowRegionWarning(true);
+                                                    return;
+                                                }
+                                            }
+                                            field.onChange(newValue);
+                                        };
+                                        return (
+                                            <FormItem>
+                                                <div className="flex items-center gap-2">
+                                                    <FormLabel>Region *</FormLabel>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="right" className="max-w-xs">
+                                                                <p className="text-xs">Region controls which admins can see this patient. Admins are assigned regions and only see patients in those regions.</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                                <Select onValueChange={handleRegionChange} value={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select region" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {REGIONS.map((region) => (
+                                                            <SelectItem key={region} value={region}>
+                                                                {region}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        );
+                                    }}
                                 />
 
                                 <FormField
@@ -750,5 +782,31 @@ export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientForm
                 </Form>
             </DialogContent>
         </Dialog>
+
+        <AlertDialog open={showRegionWarning} onOpenChange={(open) => !open && (setShowRegionWarning(false), setPendingRegionValue(null))}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Region change may affect your access</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Changing this patient&apos;s region to {pendingRegionValue} may mean you will no longer be able to see them, if you are not assigned to that region. Do you want to continue?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => {
+                            if (pendingRegionValue) {
+                                form.setValue('region', pendingRegionValue as Patient['region']);
+                            }
+                            setShowRegionWarning(false);
+                            setPendingRegionValue(null);
+                        }}
+                    >
+                        Continue
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        </>
     );
 }
