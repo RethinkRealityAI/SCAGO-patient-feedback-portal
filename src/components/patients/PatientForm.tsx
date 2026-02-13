@@ -17,7 +17,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createPatient, updatePatient, checkRegionChangeWarning } from '@/app/patients/actions';
-import { patientSchema, Patient, REGIONS, CLINIC_TYPES, COMMUNICATION_METHODS, CONSENT_STATUSES, CASE_STATUSES, FREQUENCIES } from '@/types/patient';
+import { patientSchema, Patient, DEFAULT_REGIONS, CLINIC_TYPES, COMMUNICATION_METHODS, CONSENT_STATUSES, CASE_STATUSES, FREQUENCIES, getRegionDisplayLabel } from '@/types/patient';
+import { getRegions } from '@/app/admin/user-actions';
 import { ontarioHospitals } from '@/lib/hospital-names';
 import { NeedsSelector } from '@/components/patients/NeedsSelector';
 import { EmergencyContactsForm } from '@/components/patients/EmergencyContactsForm';
@@ -33,7 +34,12 @@ export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientForm
     const [isLoading, setIsLoading] = useState(false);
     const [showRegionWarning, setShowRegionWarning] = useState(false);
     const [pendingRegionValue, setPendingRegionValue] = useState<string | null>(null);
+    const [regions, setRegions] = useState<string[]>([]);
     const { toast } = useToast();
+
+    useEffect(() => {
+        getRegions().then(setRegions);
+    }, []);
 
     const form = useForm<Patient>({
         resolver: zodResolver(patientSchema),
@@ -312,9 +318,9 @@ export function PatientForm({ patient, isOpen, onClose, onSuccess }: PatientForm
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        {REGIONS.map((region) => (
+                                                        {(regions.length ? regions : DEFAULT_REGIONS).map((region) => (
                                                             <SelectItem key={region} value={region}>
-                                                                {region}
+                                                                {getRegionDisplayLabel(region)}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>

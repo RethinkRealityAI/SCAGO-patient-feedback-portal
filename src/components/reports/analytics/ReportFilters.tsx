@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { ontarioHospitals } from '@/lib/hospital-names';
-import { REGIONS, Patient } from '@/types/patient';
+import { DEFAULT_REGIONS, Patient, getRegionDisplayLabel } from '@/types/patient';
+import { getRegions } from '@/app/admin/user-actions';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { getPatients, searchPatients } from '@/app/patients/actions';
 import { Search, User } from 'lucide-react';
@@ -28,6 +29,11 @@ export function ReportFilters({ filters, setFilters, disabled }: ReportFiltersPr
     const [patients, setPatients] = useState<Patient[]>([]);
     const [initialPatients, setInitialPatients] = useState<Patient[]>([]);
     const [searching, setSearching] = useState(false);
+    const [regions, setRegions] = useState<string[]>([]);
+
+    useEffect(() => {
+        getRegions().then(setRegions);
+    }, []);
 
     // Preload initial patients
     useEffect(() => {
@@ -165,7 +171,7 @@ export function ReportFilters({ filters, setFilters, disabled }: ReportFiltersPr
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Regions</SelectItem>
-                                {REGIONS.map((r) => (
+                                {(regions.length ? regions : DEFAULT_REGIONS).map((r) => (
                                     <SelectItem key={r} value={r}>{r}</SelectItem>
                                 ))}
                             </SelectContent>

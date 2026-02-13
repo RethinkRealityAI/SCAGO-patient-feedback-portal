@@ -14,7 +14,9 @@
  * 5. yep_mentors: createdAt (descending)
  * 6. yep_advisor_meetings: meetingDate (descending)
  * 7. yep_workshop_attendance: workshopId + attendedAt (descending)
- * 8. patients: region + createdAt (descending) - for region-based patient access
+ * 8. patients: region + createdAt (descending) - for region-based patient access (in/== + orderBy)
+ * 9. patients: hospital + createdAt (descending) - for hospital filter + orderBy
+ * 10. patients: caseStatus + createdAt (descending) - for status filter + orderBy
  */
 
 const { execSync } = require('child_process');
@@ -84,7 +86,23 @@ const indexes = [
       { field: 'region', order: 'ASCENDING' },
       { field: 'createdAt', order: 'DESCENDING' }
     ],
-    description: 'Patients by region for region-based admin access'
+    description: 'Patients by region for region-based admin access (in/== + orderBy)'
+  },
+  {
+    collection: 'patients',
+    fields: [
+      { field: 'hospital', order: 'ASCENDING' },
+      { field: 'createdAt', order: 'DESCENDING' }
+    ],
+    description: 'Patients by hospital filter with creation date ordering'
+  },
+  {
+    collection: 'patients',
+    fields: [
+      { field: 'caseStatus', order: 'ASCENDING' },
+      { field: 'createdAt', order: 'DESCENDING' }
+    ],
+    description: 'Patients by case status filter with creation date ordering'
   }
 ];
 

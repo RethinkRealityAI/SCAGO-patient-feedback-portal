@@ -18,7 +18,7 @@ import { PatientForm } from '@/components/patients/PatientForm';
 import { PatientInteractions } from '@/components/patients/PatientInteractions';
 import { PatientDocuments } from '@/components/patients/PatientDocuments';
 import { getPatient, getPatientInteractions, getPatientDocuments } from '@/app/patients/actions';
-import { Patient, PatientInteraction, PatientDocument } from '@/types/patient';
+import { Patient, PatientInteraction, PatientDocument, getRegionDisplayWithCity } from '@/types/patient';
 import { cn } from '@/lib/utils';
 
 interface PatientProfileProps {
@@ -177,7 +177,7 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                             <span>•</span>
                             <span>MRN: {patient.mrn || 'N/A'}</span>
                             <span>•</span>
-                            <span className="capitalize">{patient.region}</span>
+                            <span className="capitalize">{getRegionDisplayWithCity(patient.region, patient.intakeCity ?? patient.intakeRegionResolution)}</span>
                             {patient.referral?.name && (
                                 <>
                                     <span>•</span>

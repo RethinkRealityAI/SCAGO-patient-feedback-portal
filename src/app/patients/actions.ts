@@ -8,8 +8,8 @@ import {
     Patient,
     PatientInteraction,
     PatientDocument,
-    REGIONS,
 } from '@/types/patient';
+import { getRegions } from '@/app/admin/user-actions';
 import { getServerSession, type ServerSession } from '@/lib/server-auth';
 import { revalidatePath } from 'next/cache';
 import { interactionSchema } from '@/types/patient';
@@ -144,6 +144,13 @@ export async function createPatient(data: Patient) {
         const firestore = getAdminFirestore();
 
         const validatedData = patientSchema.parse(data);
+
+        // Normalize region against configured regions
+        const configuredRegions = await getRegions();
+        if (!configuredRegions.includes(validatedData.region)) {
+            validatedData.region = 'Unknown';
+        }
+
         const docRef = firestore.collection(PATIENTS_COLLECTION).doc();
 
         const patientData = {
@@ -179,6 +186,14 @@ export async function updatePatient(id: string, data: Partial<Patient>) {
         delete safeData.createdByUid;
         delete safeData.createdAt;
         delete safeData.id;
+
+        // Normalize region against configured regions if being updated
+        if (safeData.region) {
+            const configuredRegions = await getRegions();
+            if (!configuredRegions.includes(safeData.region)) {
+                safeData.region = 'Unknown';
+            }
+        }
 
         const updateData = {
             ...safeData,
@@ -773,13 +788,14 @@ function hashDocKey(value: string): string {
 
 async function getRegionMappingsForResolution(firestore: Firestore): Promise<CityToRegionMap> {
     try {
+        const regions = await getRegions();
+        const validRegions = new Set<string>(regions.filter((r) => r !== 'Unknown'));
         const snap = await firestore.collection('config').doc(REGION_MAPPINGS_DOC).get();
         if (!snap.exists) return { ...DEFAULT_CITY_TO_REGION };
         const rawMappings = (snap.data() as any)?.mappings || {};
-        const validRegions = new Set<string>(REGIONS.filter((region) => region !== 'Unknown'));
         const normalizedEntries = Object.entries(rawMappings).flatMap(([rawCity, rawRegion]) => {
             const city = rawCity.toString().trim().toLowerCase();
-            const region = rawRegion as Patient['region'];
+            const region = (typeof rawRegion === 'string' ? rawRegion : '').trim();
             if (!city || city === 'other') return [];
             if (!validRegions.has(region)) return [];
             return [[city, region] as const];
@@ -955,7 +971,8 @@ export async function createPatientFromCandidate(
         }
 
         const region = overrides.region ?? canonicalCandidate.region;
-        const validRegion = REGIONS.includes(region) ? region : 'Unknown';
+        const regions = await getRegions();
+        const validRegion = regions.includes(region) ? region : 'Unknown';
 
         const patientData = {
             ...overrides,
@@ -976,6 +993,7 @@ export async function createPatientFromCandidate(
             sourceSubmissionId: canonicalCandidate.submissionId,
             sourceSurveyId: canonicalCandidate.surveyId,
             intakeCandidateKey: canonicalCandidate.candidateKey,
+            intakeCity: canonicalCandidate.city || undefined,
             intakeRegionResolution: canonicalCandidate.city || undefined,
         };
 

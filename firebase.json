@@ -4,7 +4,8 @@
     "runtime": "nodejs18"
   },
   "firestore": {
-    "rules": "docs/firestore.rules"
+    "rules": "docs/firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "storage": {
     "rules": "docs/storage.rules"

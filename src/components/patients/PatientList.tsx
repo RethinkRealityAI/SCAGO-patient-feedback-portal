@@ -19,13 +19,14 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
     DropdownMenuCheckboxItem
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-    MoreHorizontal,
+    Pencil,
+    MoreVertical,
     Search,
     Filter,
     Plus,
@@ -38,7 +39,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getPatients } from '@/app/patients/actions';
-import { Patient, REGIONS, CASE_STATUSES, PATIENT_NEEDS } from '@/types/patient';
+import { Patient, DEFAULT_REGIONS, CASE_STATUSES, PATIENT_NEEDS, getRegionDisplayLabel, getRegionDisplayWithCity } from '@/types/patient';
+import { getRegions } from '@/app/admin/user-actions';
 import { format, differenceInDays, subDays } from 'date-fns';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
@@ -58,9 +60,14 @@ export function PatientList() {
     const [needsFilter, setNeedsFilter] = useState<string>('all');
     const [timeFilter, setTimeFilter] = useState<string>('all'); // all, new_7_days, overdue_30_days
     const [ageFilter, setAgeFilter] = useState<string>('all'); // all, pediatric, adult
+    const [regions, setRegions] = useState<string[]>([]);
 
     useEffect(() => {
         loadPatients();
+    }, []);
+
+    useEffect(() => {
+        getRegions().then(setRegions);
     }, []);
 
     useEffect(() => {
@@ -358,8 +365,8 @@ export function PatientList() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Regions</SelectItem>
-                                {REGIONS.map(region => (
-                                    <SelectItem key={region} value={region}>{region}</SelectItem>
+                                {(regions.length ? regions : DEFAULT_REGIONS).map(region => (
+                                    <SelectItem key={region} value={region}>{getRegionDisplayLabel(region)}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
@@ -443,7 +450,7 @@ export function PatientList() {
                                         </TableCell>
                                         <TableCell>
                                             <div>{patient.hospital}</div>
-                                            <div className="text-xs text-muted-foreground">{patient.region}</div>
+                                            <div className="text-xs text-muted-foreground">{getRegionDisplayWithCity(patient.region, patient.intakeCity ?? patient.intakeRegionResolution)}</div>
                                         </TableCell>
                                         <TableCell>{getStatusBadge(patient.caseStatus)}</TableCell>
                                         <TableCell>{getConsentBadge(patient.consentStatus)}</TableCell>
@@ -461,36 +468,53 @@ export function PatientList() {
                                                 <span className="text-muted-foreground text-xs">-</span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
-                                                        <span className="sr-only">Open menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); patient.id && handleViewProfile(patient.id); }}>
-                                                        <User className="mr-2 h-4 w-4 text-primary/70" fill="currentColor" />
-                                                        View Profile
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* Add interaction handler */ }}>
-                                                        <Calendar className="mr-2 h-4 w-4 text-primary/70" fill="currentColor" />
-                                                        Log Interaction
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        className="text-destructive"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            patient.id && handleDeleteClick(patient.id);
-                                                        }}
-                                                    >
-                                                        Delete Patient
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-end gap-0.5">
+                                                <TooltipProvider delayDuration={300}>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                                onClick={() => patient.id && handleViewProfile(patient.id)}
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                                <span className="sr-only">View profile / Edit</span>
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="left">View profile / Edit</TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                                            <span className="sr-only">More actions</span>
+                                                            <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); patient.id && handleViewProfile(patient.id); }}>
+                                                            <User className="mr-2 h-4 w-4" />
+                                                            View Profile
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* Add interaction handler */ }}>
+                                                            <Calendar className="mr-2 h-4 w-4" />
+                                                            Log Interaction
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            className="text-destructive focus:text-destructive"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                patient.id && handleDeleteClick(patient.id);
+                                                            }}
+                                                        >
+                                                            Delete Patient
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))

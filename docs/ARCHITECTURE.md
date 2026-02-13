@@ -359,7 +359,7 @@ export default async function NewFeatureLayout({ children }) {
 | `surveys/{id}/submissions` | Survey responses | Public create, Admin read |
 | `feedback` | Legacy survey responses | Admin only |
 | `users` | User profiles & tracking | Admin read, Auth write |
-| `config` | System configuration (incl. `page_permissions`: routes, forms, regions per admin) | Auth read, Admin write |
+| `config` | System configuration (incl. `page_permissions`, `regions`, `region_mappings`) | Auth read, Admin write |
 | `yep_participants` | YEP participant data | Admin/YEP/Owner |
 | `yep_mentors` | YEP mentor data | Admin/YEP/Owner |
 | `yep_workshops` | Workshop records | Admin/YEP |
@@ -888,11 +888,11 @@ Must pass with zero errors before deployment.
 - The consent form is automatically attached as a `patient_documents` record (from submission file or generated PDF if no upload).
 
 **Region-Based Access:**
-- Regions: GTA, Hamilton-Wentworth, East, West, North, Unknown.
+- Regions are configurable in Firestore (`config/regions`). Default: GTA, Hamilton-Wentworth, East, West, North, Unknown.
 - Super-admin sees all patients. Admin sees only patients in their assigned regions plus Unknown-region patients.
 - Admin region assignment is stored in `config/page_permissions` under `regionsByEmail`.
 - If an admin has no regions assigned, they see all patients (backward compatibility).
-- City-to-region mapping lives in `src/lib/city-to-region.ts` (Ontario cities → SCAGO regions).
+- City-to-region mapping is in `config/region_mappings`; managed via Admin > Region Configuration.
 - On region change when editing a patient, a confirmation modal warns if the editor may lose access.
 
 ---

@@ -31,6 +31,7 @@ import {
   getUserPagePermissions,
   getRegionAccessPolicy,
   setRegionAccessPolicy,
+  getRegions,
   type RegionAccessPolicyMode,
   type PlatformUser,
   type AppRole,
@@ -40,11 +41,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { getSurveys } from '@/app/actions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { REGIONS } from '@/types/patient';
 import { useAuth } from '@/hooks/use-auth';
+import { DEFAULT_REGIONS } from '@/types/patient';
 
-// Admin-assignable regions (exclude Unknown - all admins see Unknown-region patients automatically)
-const ADMIN_REGIONS = REGIONS.filter((r) => r !== 'Unknown');
+// Fallback when regions not yet loaded
+const FALLBACK_ADMIN_REGIONS = DEFAULT_REGIONS.filter((r) => r !== 'Unknown');
 type AccessPreset = {
   id: string;
   label: string;
@@ -99,6 +100,7 @@ export function EnhancedUserManagement() {
   const [surveys, setSurveys] = useState<Array<{ id: string; title: string }>>([]);
   const [adminWarnings, setAdminWarnings] = useState<string[]>([]);
   const [regionPolicyMode, setRegionPolicyMode] = useState<RegionAccessPolicyMode>('legacy');
+  const [adminRegions, setAdminRegions] = useState<string[]>([]);
   const [policySaving, setPolicySaving] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -140,6 +142,10 @@ export function EnhancedUserManagement() {
     if (policyRes.success) {
       setRegionPolicyMode(policyRes.mode);
     }
+
+    // Load regions (admin-assignable, exclude Unknown)
+    const regions = await getRegions();
+    setAdminRegions(regions.filter((r) => r !== 'Unknown'));
   };
 
   const handleViewUser = async (user: PlatformUser) => {
@@ -250,6 +256,7 @@ export function EnhancedUserManagement() {
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
+  const regionsForAdmin = adminRegions.length > 0 ? adminRegions : FALLBACK_ADMIN_REGIONS;
   const createAdminWarnings = createRole === 'admin'
     ? getAdminConfigWarnings(createRoutes, createForms, createRegions)
     : [];
@@ -896,7 +903,7 @@ export function EnhancedUserManagement() {
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs"
-                              onClick={() => setEditRegions([...ADMIN_REGIONS])}
+                              onClick={() => setEditRegions([...regionsForAdmin])}
                             >
                               Select all
                             </Button>
@@ -911,7 +918,7 @@ export function EnhancedUserManagement() {
                             </Button>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            {ADMIN_REGIONS.map((region) => (
+                            {regionsForAdmin.map((region) => (
                               <label
                                 key={region}
                                 className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all text-sm ${
@@ -1387,7 +1394,7 @@ export function EnhancedUserManagement() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2 text-xs"
-                        onClick={() => setCreateRegions([...ADMIN_REGIONS])}
+                        onClick={() => setCreateRegions([...regionsForAdmin])}
                       >
                         Select all
                       </Button>
@@ -1402,7 +1409,7 @@ export function EnhancedUserManagement() {
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {ADMIN_REGIONS.map((region) => (
+                      {regionsForAdmin.map((region) => (
                         <label
                           key={region}
                           className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg cursor-pointer transition-all text-sm ${

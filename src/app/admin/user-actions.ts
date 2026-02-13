@@ -2,14 +2,89 @@
 
 // Dynamic imports for server-only modules
 import { enforceAdminInAction } from '@/lib/server-auth';
-import { REGIONS, type Patient } from '@/types/patient';
+import { DEFAULT_REGIONS, type Patient } from '@/types/patient';
 import { DEFAULT_CITY_TO_REGION } from '@/lib/city-to-region';
 import { ontarioCities } from '@/lib/location-data';
 
 export type AppRole = 'super-admin' | 'admin' | 'mentor' | 'participant';
 export type RegionAccessPolicyMode = 'legacy' | 'strict';
-export type RegionMappingDictionary = Record<string, Patient['region']>;
+export type RegionMappingDictionary = Record<string, string>;
 export type RegionCityOption = { label: string; value: string };
+
+const REGIONS_CONFIG_DOC = 'regions';
+
+/**
+ * Get the list of regions from Firestore config. Returns default regions if not configured.
+ * Unknown is always included and cannot be removed.
+ * Requires an authenticated admin session (uses Admin SDK via server action).
+ */
+export async function getRegions(): Promise<string[]> {
+  // Auth guard — callers must be an authenticated admin (or super-admin).
+  // We use a soft check: if no valid session exists we still return defaults
+  // so that the server-side consent-to-patient flow (already behind its own
+  // auth) doesn't break. But we verify session when one is available.
+  try {
+    await enforceAdminInAction();
+  } catch {
+    // Fallback: if called from an already-authenticated server action context
+    // where enforceAdminInAction cannot resolve the cookie (e.g. nested call),
+    // return defaults safely rather than throwing.
+    return [...DEFAULT_REGIONS];
+  }
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  try {
+    const snap = await firestore.collection('config').doc(REGIONS_CONFIG_DOC).get();
+    if (!snap.exists) return [...DEFAULT_REGIONS];
+    const data = snap.data() as { regions?: string[] };
+    const regions = Array.isArray(data?.regions) ? data.regions : [...DEFAULT_REGIONS];
+    const unknownIncluded = regions.includes('Unknown');
+    const filtered = regions.filter((r) => typeof r === 'string' && r.trim().length > 0);
+    const unique = [...new Set(filtered)];
+    if (!unknownIncluded) unique.push('Unknown');
+    return unique;
+  } catch {
+    return [...DEFAULT_REGIONS];
+  }
+}
+
+/**
+ * Set the list of regions. Unknown is always appended if not present.
+ */
+export async function setRegions(regions: string[]): Promise<{ success: true } | { success: false; error: string }> {
+  await enforceAdminInAction();
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  const session = await (await import('@/lib/server-auth')).getServerSession();
+  try {
+    const valid = regions
+      .filter((r) => typeof r === 'string' && r.trim().length > 0 && r !== 'Unknown')
+      .map((r) => r.trim());
+    const unique = [...new Set(valid)];
+    unique.push('Unknown');
+    await firestore.collection('config').doc(REGIONS_CONFIG_DOC).set({
+      regions: unique,
+      updatedAt: new Date().toISOString(),
+      updatedBy: session?.email || 'unknown',
+    });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save regions' };
+  }
+}
+
+function sanitizeRegionMappings(mappings: Record<string, string>, validRegions: Set<string>): RegionMappingDictionary {
+  const sanitized: RegionMappingDictionary = {};
+  Object.entries(mappings || {}).forEach(([rawCity, rawRegion]) => {
+    const city = normalizeCitySlug(rawCity);
+    const region = (rawRegion || '').trim();
+    if (!city || city === 'other') return;
+    if (region === 'Unknown') return;
+    if (!validRegions.has(region)) return;
+    sanitized[city] = region;
+  });
+  return sanitized;
+}
 
 export interface PlatformUser {
   uid: string;
@@ -29,20 +104,6 @@ function normalizeCitySlug(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-function sanitizeRegionMappings(mappings: Record<string, string>): RegionMappingDictionary {
-  const validRegions = new Set(REGIONS);
-  const sanitized: RegionMappingDictionary = {};
-  Object.entries(mappings || {}).forEach(([rawCity, rawRegion]) => {
-    const city = normalizeCitySlug(rawCity);
-    const region = rawRegion as Patient['region'];
-    if (!city || city === 'other') return;
-    if (region === 'Unknown') return;
-    if (!validRegions.has(region)) return;
-    sanitized[city] = region;
-  });
-  return sanitized;
 }
 
 function sanitizeCityOptions(cities: Array<{ label: string; value: string }>): RegionCityOption[] {
@@ -317,13 +378,15 @@ export async function setRegionAccessPolicy(mode: RegionAccessPolicyMode): Promi
 }
 
 export async function getRegionMappings(): Promise<
-  { success: true; mappings: RegionMappingDictionary; cities: RegionCityOption[] } |
+  { success: true; mappings: RegionMappingDictionary; cities: RegionCityOption[]; regions: string[] } |
   { success: false; error: string }
 > {
   await enforceAdminInAction();
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
   try {
+    const regions = await getRegions();
+    const validRegions = new Set(regions);
     const snap = await firestore.collection('config').doc('region_mappings').get();
     const defaultCities = sanitizeCityOptions(ontarioCities as Array<{ label: string; value: string }>);
     if (!snap.exists) {
@@ -331,15 +394,17 @@ export async function getRegionMappings(): Promise<
         success: true,
         mappings: { ...DEFAULT_CITY_TO_REGION },
         cities: defaultCities,
+        regions,
       };
     }
     const data = snap.data() as any;
-    const mappings = sanitizeRegionMappings((data?.mappings || {}) as Record<string, string>);
+    const mappings = sanitizeRegionMappings((data?.mappings || {}) as Record<string, string>, validRegions);
     const cities = sanitizeCityOptions((data?.cities || defaultCities) as Array<{ label: string; value: string }>);
     return {
       success: true,
       mappings: Object.keys(mappings).length > 0 ? mappings : { ...DEFAULT_CITY_TO_REGION },
       cities,
+      regions,
     };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to get region mappings' };
@@ -355,7 +420,9 @@ export async function setRegionMappings(input: {
   const firestore = getAdminFirestore();
   const session = await (await import('@/lib/server-auth')).getServerSession();
   try {
-    const mappings = sanitizeRegionMappings(input?.mappings || {});
+    const regions = await getRegions();
+    const validRegions = new Set(regions);
+    const mappings = sanitizeRegionMappings(input?.mappings || {}, validRegions);
     const defaultCities = sanitizeCityOptions(ontarioCities as Array<{ label: string; value: string }>);
     const suppliedCities = input?.cities && input.cities.length > 0 ? input.cities : defaultCities;
     const cities = sanitizeCityOptions(suppliedCities);

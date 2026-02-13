@@ -17,14 +17,17 @@ import { createPatient, getConsentCandidates, createPatientFromCandidate, type C
 import {
     patientSchema,
     Patient,
-    REGIONS,
+    DEFAULT_REGIONS,
     CLINIC_TYPES,
     COMMUNICATION_METHODS,
     CONSENT_STATUSES,
     CASE_STATUSES,
-    FREQUENCIES
+    FREQUENCIES,
+    getRegionDisplayLabel,
+    getRegionDisplayWithCity
 } from '@/types/patient';
 import { ontarioHospitals } from '@/lib/hospital-names';
+import { getRegions } from '@/app/admin/user-actions';
 import { NeedsSelector } from '@/components/patients/NeedsSelector';
 import { EmergencyContactsForm } from '@/components/patients/EmergencyContactsForm';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -38,6 +41,7 @@ export default function NewPatientPage() {
     const [candidatesLoading, setCandidatesLoading] = useState(true);
     const [selectedCandidate, setSelectedCandidate] = useState<ConsentCandidate | null>(null);
     const [intakeOpen, setIntakeOpen] = useState(true);
+    const [regions, setRegions] = useState<string[]>([]);
 
     useEffect(() => {
         let cancelled = false;
@@ -46,6 +50,10 @@ export default function NewPatientPage() {
             if (!cancelled && res.success && res.data) setCandidates(res.data);
         }).finally(() => { if (!cancelled) setCandidatesLoading(false); });
         return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        getRegions().then((r) => setRegions(r));
     }, []);
 
     const form = useForm<Patient>({
@@ -227,7 +235,7 @@ export default function NewPatientPage() {
                                         >
                                             <div>
                                                 <p className="font-medium">{c.fullName}</p>
-                                                <p className="text-sm text-muted-foreground">{c.email || c.phone || 'No contact'} · {c.city || 'No city'} · {c.region}</p>
+                                                <p className="text-sm text-muted-foreground">{c.email || c.phone || 'No contact'} · {c.city || 'No city'} · {getRegionDisplayWithCity(c.region, c.city)}</p>
                                             </div>
                                             {selectedCandidate?.candidateKey === c.candidateKey && (
                                                 <span className="text-xs font-medium text-primary">Selected</span>
@@ -365,9 +373,9 @@ export default function NewPatientPage() {
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        {REGIONS.map((region) => (
+                                                        {(regions.length ? regions : DEFAULT_REGIONS).map((region: string) => (
                                                             <SelectItem key={region} value={region}>
-                                                                {region}
+                                                                {getRegionDisplayLabel(region)}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
