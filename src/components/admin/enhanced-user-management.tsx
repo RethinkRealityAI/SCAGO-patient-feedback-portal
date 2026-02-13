@@ -421,8 +421,9 @@ export function EnhancedUserManagement() {
   const saveSelectedUserDefaultView = async () => {
     if (!selectedUser || !editRole) return;
     setSavingAction(true);
-    const routesForRole = editRole === 'admin' ? editRoutes : [];
-    const res = await setUserPagePermissions(selectedUser.email, routesForRole, undefined, undefined, editDefaultView);
+    // Pass undefined for routes/forms/regions so only defaultView is updated,
+    // preserving existing permissions regardless of the user's current role.
+    const res = await setUserPagePermissions(selectedUser.email, undefined, undefined, undefined, editDefaultView);
     setSavingAction(false);
     if ((res as any).success) {
       toast({

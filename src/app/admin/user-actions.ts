@@ -299,7 +299,7 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
 
 export async function setUserPagePermissions(
   email: string,
-  routes: string[],
+  routes?: string[],
   allowedForms?: string[],
   allowedRegions?: string[],
   defaultView?: string
@@ -323,19 +323,26 @@ export async function setUserPagePermissions(
     const previousForms: string[] = currentForms[normalizedEmail] || [];
     const previousRegions: string[] = currentRegions[normalizedEmail] || [];
     const previousDefaultView: string = currentDefaultViews[normalizedEmail] || '';
+    const nextRoutes = routes !== undefined ? routes : previousRoutes;
     const nextForms = allowedForms !== undefined ? allowedForms : previousForms;
     const nextRegions = allowedRegions !== undefined ? allowedRegions : previousRegions;
-    const normalizedDefaultView = defaultView !== undefined && defaultView.startsWith('/') ? defaultView : previousDefaultView;
+    // Normalize defaultView consistently with createPlatformUser: only valid
+    // when it starts with '/'. Empty strings or other values are treated as
+    // "not provided" so the previous value is preserved.
+    const shouldUpdateDefaultView = defaultView !== undefined && defaultView.startsWith('/');
+    const nextDefaultView = shouldUpdateDefaultView ? defaultView : previousDefaultView;
 
-    const updatedRoutes = { ...currentRoutes, [normalizedEmail]: routes };
+    const updatedRoutes = routes !== undefined
+      ? { ...currentRoutes, [normalizedEmail]: routes }
+      : currentRoutes;
     const updatedForms = allowedForms !== undefined
       ? { ...currentForms, [normalizedEmail]: allowedForms }
       : currentForms;
     const updatedRegions = allowedRegions !== undefined
       ? { ...currentRegions, [normalizedEmail]: allowedRegions }
       : currentRegions;
-    const updatedDefaultViews = defaultView !== undefined
-      ? { ...currentDefaultViews, [normalizedEmail]: normalizedDefaultView }
+    const updatedDefaultViews = shouldUpdateDefaultView
+      ? { ...currentDefaultViews, [normalizedEmail]: defaultView }
       : currentDefaultViews;
 
     await permsRef.set({
@@ -360,16 +367,16 @@ export async function setUserPagePermissions(
           defaultView: previousDefaultView,
         },
         after: {
-          permissions: routes,
+          permissions: nextRoutes,
           allowedForms: nextForms,
           allowedRegions: nextRegions,
-          defaultView: normalizedDefaultView,
+          defaultView: nextDefaultView,
         },
         delta: {
-          permissions: arrayDiff(previousRoutes, routes),
+          permissions: arrayDiff(previousRoutes, nextRoutes),
           allowedForms: arrayDiff(previousForms, nextForms),
           allowedRegions: arrayDiff(previousRegions, nextRegions),
-          defaultViewChanged: previousDefaultView !== normalizedDefaultView,
+          defaultViewChanged: previousDefaultView !== nextDefaultView,
         },
       });
     } catch (err) {
