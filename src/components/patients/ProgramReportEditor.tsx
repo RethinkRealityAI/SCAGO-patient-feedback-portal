@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { exportProgramReportPdf } from '@/app/patients/actions';
+import { generateProgramReportPdf } from '@/lib/program-report-pdf';
 import { exportToCSV } from '@/lib/export-utils';
 import type { ProgramReportData, ProgramReportSupportCounts } from '@/types/program-report';
 import { PROGRAM_REPORT_SUPPORT_LABELS } from '@/types/program-report';
@@ -99,23 +99,28 @@ export function ProgramReportEditor({ initialData }: ProgramReportEditorProps) {
     const handleExportPdf = async () => {
         setIsExportingPdf(true);
         try {
-            const result = await exportProgramReportPdf(reportData);
-            if (!result.pdfBase64 || result.error) {
+            const pdfBytes = await generateProgramReportPdf(reportData);
+            if (!pdfBytes) {
                 toast({
                     title: 'Export failed',
-                    description: result.error || 'Failed to generate PDF.',
+                    description: 'Failed to generate PDF.',
                     variant: 'destructive',
                 });
                 return;
             }
 
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = `data:application/pdf;base64,${result.pdfBase64}`;
+            link.href = url;
             const patientTag = reportData.patientDisplayName
                 ? reportData.patientDisplayName.toLowerCase().replace(/\s+/g, '-')
                 : 'roster';
             link.download = `program-report-${patientTag}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+            document.body.appendChild(link);
             link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Failed to export program report PDF:', error);
             toast({
