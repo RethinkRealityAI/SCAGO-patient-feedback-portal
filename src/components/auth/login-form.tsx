@@ -23,6 +23,24 @@ export default function LoginForm() {
   // Get the redirect URL from query parameters
   const redirectUrl = searchParams.get('redirect');
 
+  const resolveSafeRedirectTarget = (rawRedirect: string | null): string | null => {
+    if (!rawRedirect) return null;
+
+    let decoded = rawRedirect;
+    try {
+      decoded = decodeURIComponent(rawRedirect);
+    } catch {
+      // Keep original if query value was not URI-encoded.
+    }
+
+    const trimmed = decoded.trim();
+    if (!trimmed.startsWith('/')) return null;
+    if (trimmed.startsWith('//')) return null;
+    if (trimmed.includes('..')) return null;
+    if (trimmed === '/login' || trimmed.startsWith('/login?') || trimmed.startsWith('/api/auth')) return null;
+    return trimmed;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -102,20 +120,23 @@ export default function LoginForm() {
 
         // Handle redirect URL if present
         if (redirectUrl) {
-          const destination = decodeURIComponent(redirectUrl);
-          const safeDestination = destination.startsWith('/') && !destination.includes('..') ? destination : '/profile';
-          console.log('[Login] Redirecting to:', safeDestination, 'from redirect parameter');
-          window.location.href = safeDestination;
-          return;
+          const safeDestination = resolveSafeRedirectTarget(redirectUrl);
+          if (safeDestination) {
+            console.log('[Login] Redirecting to:', safeDestination, 'from redirect parameter');
+            window.location.href = safeDestination;
+            return;
+          }
+          console.warn('[Login] Ignoring unsafe redirect parameter:', redirectUrl);
         }
 
-        // Get the appropriate redirect URL based on role and permissions
+        // Get the appropriate default redirect URL based on role and permissions
         try {
           const redirectResponse = await fetch('/api/auth/redirect-url');
           if (redirectResponse.ok) {
             const { redirectUrl: defaultRedirect } = await redirectResponse.json();
-            console.log('[Login] Redirecting to:', defaultRedirect, 'based on role and permissions');
-            window.location.href = defaultRedirect;
+            const safeDefaultRedirect = resolveSafeRedirectTarget(defaultRedirect) || '/profile';
+            console.log('[Login] Redirecting to:', safeDefaultRedirect, 'based on role and permissions');
+            window.location.href = safeDefaultRedirect;
             return;
           }
         } catch (error) {

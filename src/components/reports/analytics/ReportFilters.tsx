@@ -172,7 +172,7 @@ export function ReportFilters({ filters, setFilters, disabled }: ReportFiltersPr
                             <SelectContent>
                                 <SelectItem value="all">All Regions</SelectItem>
                                 {(regions.length ? regions : DEFAULT_REGIONS).map((r) => (
-                                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                                    <SelectItem key={r} value={r}>{getRegionDisplayLabel(r)}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>

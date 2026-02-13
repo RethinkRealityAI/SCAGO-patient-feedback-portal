@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { format, differenceInDays } from 'date-fns';
 import {
     User, Calendar, MapPin, Phone, Mail, FileText, Activity,
@@ -27,6 +27,7 @@ interface PatientProfileProps {
 
 export function PatientProfile({ patientId }: PatientProfileProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { toast } = useToast();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [interactions, setInteractions] = useState<PatientInteraction[]>([]);
@@ -162,6 +163,9 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
         return null;
     };
 
+    const requestedTab = searchParams.get('tab');
+    const activeTab = requestedTab === 'interactions' || requestedTab === 'documents' ? requestedTab : 'overview';
+
     return (
         <div className="space-y-6 p-6">
             {/* Header */}
@@ -211,7 +215,7 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                 {getLastInteractionAlert()}
             </div>
 
-            <Tabs defaultValue="overview" className="space-y-4">
+            <Tabs defaultValue={activeTab} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="interactions">Interactions ({interactions.length})</TabsTrigger>

@@ -25,10 +25,12 @@ export async function getRegions(): Promise<string[]> {
   // auth) doesn't break. But we verify session when one is available.
   try {
     await enforceAdminInAction();
-  } catch {
+  } catch (authError) {
     // Fallback: if called from an already-authenticated server action context
     // where enforceAdminInAction cannot resolve the cookie (e.g. nested call),
-    // return defaults safely rather than throwing.
+    // return defaults safely rather than throwing. We log explicitly so this
+    // path is observable during debugging/audits.
+    console.warn('getRegions auth check failed; using default regions fallback.', authError);
     return [...DEFAULT_REGIONS];
   }
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
@@ -96,6 +98,7 @@ export interface PlatformUser {
   createdAt?: string;
   lastLoginAt?: string;
   allowedForms?: string[];
+  defaultView?: string;
 }
 
 function normalizeCitySlug(value: string): string {
@@ -119,23 +122,31 @@ function sanitizeCityOptions(cities: Array<{ label: string; value: string }>): R
 
 export async function listPlatformUsers(): Promise<{ users: PlatformUser[] }> {
   await enforceAdminInAction();
-  const { getAdminAuth } = await import('@/lib/firebase-admin');
+  const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const auth = getAdminAuth();
+  const firestore = getAdminFirestore();
 
   const result = await auth.listUsers(1000);
+  const permissionsDoc = await firestore.collection('config').doc('page_permissions').get();
+  const defaultViewByEmail = permissionsDoc.exists
+    ? (((permissionsDoc.data() as any)?.defaultViewByEmail || {}) as Record<string, string>)
+    : {};
+
   const users: PlatformUser[] = result.users.map((u) => {
     const claims = (u.customClaims || {}) as Record<string, any>;
     // Default to 'participant' if no role is set (should rarely happen)
     const role: AppRole = (claims.role as AppRole) || 'participant';
+    const email = u.email || '';
     return {
       uid: u.uid,
-      email: u.email || '',
+      email,
       displayName: u.displayName,
       disabled: u.disabled,
       emailVerified: !!u.emailVerified,
       role,
       createdAt: u.metadata?.creationTime || undefined,
       lastLoginAt: u.metadata?.lastSignInTime || undefined,
+      defaultView: defaultViewByEmail[email.toLowerCase()] || undefined,
     };
   });
 
@@ -150,6 +161,7 @@ export async function createPlatformUser(input: {
   pagePermissions?: string[]; // route keys
   allowedForms?: string[]; // form slugs/ids
   allowedRegions?: string[]; // SCAGO region keys for patient access
+  defaultView?: string; // route path for post-login landing
 }): Promise<{ success: true; uid: string } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
@@ -186,22 +198,33 @@ export async function createPlatformUser(input: {
     const existing = (await auth.getUser(user.uid)).customClaims || {};
     await auth.setCustomUserClaims(user.uid, { ...existing, role });
 
-    // Set page permissions if provided (for admin role)
-    if ((input.pagePermissions && input.pagePermissions.length > 0) || (input.allowedForms && input.allowedForms.length > 0) || (input.allowedRegions && input.allowedRegions.length > 0)) {
+    // Set page-level config values when provided
+    const normalizedDefaultView = (input.defaultView || '').startsWith('/') ? input.defaultView : undefined;
+    if (
+      (input.pagePermissions && input.pagePermissions.length > 0) ||
+      (input.allowedForms && input.allowedForms.length > 0) ||
+      (input.allowedRegions && input.allowedRegions.length > 0) ||
+      normalizedDefaultView !== undefined
+    ) {
       const permsRef = firestore.collection('config').doc('page_permissions');
       const snap = await permsRef.get();
       const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
       const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
       const currentRegions = snap.exists ? ((snap.data() as any)?.regionsByEmail || {}) : {};
+      const currentDefaultViews = snap.exists ? ((snap.data() as any)?.defaultViewByEmail || {}) : {};
 
       const updatedRoutes = { ...currentRoutes, [email]: input.pagePermissions || [] };
       const updatedForms = { ...currentForms, [email]: input.allowedForms || [] };
       const updatedRegions = { ...currentRegions, [email]: input.allowedRegions || [] };
+      const updatedDefaultViews = normalizedDefaultView !== undefined
+        ? { ...currentDefaultViews, [email]: normalizedDefaultView }
+        : currentDefaultViews;
 
       await permsRef.set({
         routesByEmail: updatedRoutes,
         formsByEmail: updatedForms,
-        regionsByEmail: updatedRegions
+        regionsByEmail: updatedRegions,
+        defaultViewByEmail: updatedDefaultViews
       }, { merge: true });
     }
 
@@ -274,7 +297,13 @@ export async function deleteUserById(uid: string): Promise<{ success: true } | {
   }
 }
 
-export async function setUserPagePermissions(email: string, routes: string[], allowedForms?: string[], allowedRegions?: string[]): Promise<{ success: true } | { success: false; error: string }> {
+export async function setUserPagePermissions(
+  email: string,
+  routes: string[],
+  allowedForms?: string[],
+  allowedRegions?: string[],
+  defaultView?: string
+): Promise<{ success: true } | { success: false; error: string }> {
   await enforceAdminInAction();
   const { getAdminAuth, getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
@@ -288,12 +317,15 @@ export async function setUserPagePermissions(email: string, routes: string[], al
     const currentRoutes = snap.exists ? ((snap.data() as any)?.routesByEmail || {}) : {};
     const currentForms = snap.exists ? ((snap.data() as any)?.formsByEmail || {}) : {};
     const currentRegions = snap.exists ? ((snap.data() as any)?.regionsByEmail || {}) : {};
+    const currentDefaultViews = snap.exists ? ((snap.data() as any)?.defaultViewByEmail || {}) : {};
 
     const previousRoutes: string[] = currentRoutes[normalizedEmail] || [];
     const previousForms: string[] = currentForms[normalizedEmail] || [];
     const previousRegions: string[] = currentRegions[normalizedEmail] || [];
+    const previousDefaultView: string = currentDefaultViews[normalizedEmail] || '';
     const nextForms = allowedForms !== undefined ? allowedForms : previousForms;
     const nextRegions = allowedRegions !== undefined ? allowedRegions : previousRegions;
+    const normalizedDefaultView = defaultView !== undefined && defaultView.startsWith('/') ? defaultView : previousDefaultView;
 
     const updatedRoutes = { ...currentRoutes, [normalizedEmail]: routes };
     const updatedForms = allowedForms !== undefined
@@ -302,11 +334,15 @@ export async function setUserPagePermissions(email: string, routes: string[], al
     const updatedRegions = allowedRegions !== undefined
       ? { ...currentRegions, [normalizedEmail]: allowedRegions }
       : currentRegions;
+    const updatedDefaultViews = defaultView !== undefined
+      ? { ...currentDefaultViews, [normalizedEmail]: normalizedDefaultView }
+      : currentDefaultViews;
 
     await permsRef.set({
       routesByEmail: updatedRoutes,
       formsByEmail: updatedForms,
-      regionsByEmail: updatedRegions
+      regionsByEmail: updatedRegions,
+      defaultViewByEmail: updatedDefaultViews
     }, { merge: true });
 
     // Log permission change
@@ -321,16 +357,19 @@ export async function setUserPagePermissions(email: string, routes: string[], al
           permissions: previousRoutes,
           allowedForms: previousForms,
           allowedRegions: previousRegions,
+          defaultView: previousDefaultView,
         },
         after: {
           permissions: routes,
           allowedForms: nextForms,
           allowedRegions: nextRegions,
+          defaultView: normalizedDefaultView,
         },
         delta: {
           permissions: arrayDiff(previousRoutes, routes),
           allowedForms: arrayDiff(previousForms, nextForms),
           allowedRegions: arrayDiff(previousRegions, nextRegions),
+          defaultViewChanged: previousDefaultView !== normalizedDefaultView,
         },
       });
     } catch (err) {
@@ -441,7 +480,7 @@ export async function setRegionMappings(input: {
 /**
  * Get page and form permissions for a user by email
  */
-export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; allowedForms?: string[]; allowedRegions?: string[]; error?: string }> {
+export async function getUserPagePermissions(email: string): Promise<{ permissions?: string[]; allowedForms?: string[]; allowedRegions?: string[]; defaultView?: string; error?: string }> {
   await enforceAdminInAction();
   const { getAdminFirestore } = await import('@/lib/firebase-admin');
   const firestore = getAdminFirestore();
@@ -458,12 +497,14 @@ export async function getUserPagePermissions(email: string): Promise<{ permissio
     const routesByEmail = data?.routesByEmail || {};
     const formsByEmail = data?.formsByEmail || {};
     const regionsByEmail = data?.regionsByEmail || {};
+    const defaultViewByEmail = data?.defaultViewByEmail || {};
 
     const permissions = routesByEmail[email.toLowerCase()] || [];
     const allowedForms = formsByEmail[email.toLowerCase()] || [];
     const allowedRegions = regionsByEmail[email.toLowerCase()] || [];
+    const defaultView = defaultViewByEmail[email.toLowerCase()] || undefined;
 
-    return { permissions, allowedForms, allowedRegions };
+    return { permissions, allowedForms, allowedRegions, defaultView };
   } catch (err: any) {
     return { error: err?.message || 'Failed to get permissions' };
   }

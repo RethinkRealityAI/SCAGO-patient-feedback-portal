@@ -304,6 +304,13 @@ const SidebarLink = ({
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(href + '/');
 
+  const iconClass = isActive ? '' : 'text-primary/70';
+  const iconWrapper = (
+    <span className={cn('shrink-0 [&>svg]:h-4 [&>svg]:w-4', iconClass)}>
+      {icon}
+    </span>
+  );
+
   if (isCollapsed) {
     return (
       <TooltipProvider>
@@ -316,7 +323,7 @@ const SidebarLink = ({
                 'w-full justify-start'
               )}
             >
-              {icon}
+              {iconWrapper}
             </Link>
           </TooltipTrigger>
           <TooltipContent side="right">{label}</TooltipContent>
@@ -333,7 +340,7 @@ const SidebarLink = ({
         'w-full justify-start'
       )}
     >
-      {icon}
+      {iconWrapper}
       <span className="ml-4 whitespace-nowrap overflow-hidden transition-opacity duration-200">
         {label}
       </span>

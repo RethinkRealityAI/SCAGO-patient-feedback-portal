@@ -52,6 +52,16 @@ type AccessPreset = {
   description: string;
   routes: string[];
 };
+type DefaultViewOption = {
+  value: string;
+  label: string;
+};
+
+const COMMON_DEFAULT_VIEW_LABELS: Record<string, string> = {
+  '/': 'Surveys',
+  '/profile': 'Profile',
+  '/resources': 'Resources',
+};
 
 const ACCESS_PRESETS: AccessPreset[] = [
   {
@@ -88,11 +98,13 @@ export function EnhancedUserManagement() {
   const [createDisplayName, setCreateDisplayName] = useState('');
   const [createRole, setCreateRole] = useState<AppRole>('participant');
   const [createRoutes, setCreateRoutes] = useState<string[]>([]);
+  const [createDefaultView, setCreateDefaultView] = useState('/');
   const [savingAction, setSavingAction] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong'>('weak');
   const [editRole, setEditRole] = useState<AppRole | null>(null);
   const [editRoutes, setEditRoutes] = useState<string[]>([]);
+  const [editDefaultView, setEditDefaultView] = useState('/');
   const [editForms, setEditForms] = useState<string[]>([]);
   const [createForms, setCreateForms] = useState<string[]>([]);
   const [editRegions, setEditRegions] = useState<string[]>([]);
@@ -152,22 +164,25 @@ export function EnhancedUserManagement() {
     setSelectedUser(user);
     setEditRole(user.role);
     setNewPassword(''); // Clear any leftover password from a previous user
-    // Load page permissions for editing (only for admin users)
-    if (user.role === 'admin') {
-      try {
-        const res = await getUserPagePermissions(user.email);
-        setEditRoutes(res.permissions || []);
+
+    try {
+      const res = await getUserPagePermissions(user.email);
+      const loadedRoutes = res.permissions || [];
+      if (user.role === 'admin') {
+        setEditRoutes(loadedRoutes);
         setEditForms(res.allowedForms || []);
         setEditRegions(res.allowedRegions || []);
-      } catch {
+      } else {
         setEditRoutes([]);
         setEditForms([]);
         setEditRegions([]);
       }
-    } else {
+      setEditDefaultView(getSafeDefaultView(user.role, loadedRoutes, res.defaultView || user.defaultView));
+    } catch {
       setEditRoutes([]);
       setEditForms([]);
       setEditRegions([]);
+      setEditDefaultView(getSafeDefaultView(user.role, [], user.defaultView));
     }
 
     // Load user's login history
@@ -252,6 +267,23 @@ export function EnhancedUserManagement() {
     else setPasswordStrength('weak');
   }, [createPassword]);
 
+  useEffect(() => {
+    const safeDefault = getSafeDefaultView(createRole, createRoutes, createDefaultView);
+    if (safeDefault !== createDefaultView) {
+      setCreateDefaultView(safeDefault);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createRole, createRoutes]);
+
+  useEffect(() => {
+    if (!selectedUser || !editRole) return;
+    const safeDefault = getSafeDefaultView(editRole, editRoutes, editDefaultView);
+    if (safeDefault !== editDefaultView) {
+      setEditDefaultView(safeDefault);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser?.uid, editRole, editRoutes]);
+
   // Validate email format
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -260,6 +292,11 @@ export function EnhancedUserManagement() {
   const createAdminWarnings = createRole === 'admin'
     ? getAdminConfigWarnings(createRoutes, createForms, createRegions)
     : [];
+  const createDefaultViewOptions = getDefaultViewOptions(createRole, createRoutes);
+  const activeEditRole = (editRole || selectedUser?.role || 'participant') as AppRole;
+  const editDefaultViewOptions = selectedUser
+    ? getDefaultViewOptions(activeEditRole, activeEditRole === 'admin' ? editRoutes : [])
+    : [];
 
   function getAdminConfigWarnings(routes: string[], forms: string[], regions: string[]) {
     const warnings: string[] = [];
@@ -267,7 +304,7 @@ export function EnhancedUserManagement() {
     if (routes.includes('patient-management') && regions.length === 0) {
       warnings.push(
         regionPolicyMode === 'strict'
-          ? 'Strict mode: no regions assigned means this admin will only see Unknown-region patients.'
+          ? 'Strict mode: no regions assigned means this admin will only see Not assigned region patients.'
           : 'Legacy mode: no regions assigned means this admin will see all patient regions.'
       );
     }
@@ -278,6 +315,47 @@ export function EnhancedUserManagement() {
       warnings.push('Form restrictions are configured, but Forms Dashboard permission is not enabled.');
     }
     return warnings;
+  }
+
+  function getDefaultViewOptions(role: AppRole, routes: string[]): DefaultViewOption[] {
+    const options: DefaultViewOption[] = [
+      { value: '/', label: 'Surveys' },
+      { value: '/profile', label: 'Profile' },
+      { value: '/resources', label: 'Resources' },
+    ];
+
+    if (role === 'admin' || role === 'super-admin') {
+      const routeSet = new Set<string>();
+      if (role === 'super-admin') {
+        PAGE_PERMISSIONS.forEach((permission) => routeSet.add(permission.route));
+      } else {
+        routes.forEach((key) => {
+          const match = PAGE_PERMISSIONS.find((permission) => permission.key === key);
+          if (match) routeSet.add(match.route);
+        });
+      }
+      routeSet.forEach((route) => {
+        const label = PAGE_PERMISSIONS.find((permission) => permission.route === route)?.label || route;
+        options.push({ value: route, label });
+      });
+    }
+
+    return options;
+  }
+
+  function getSafeDefaultView(role: AppRole, routes: string[], currentDefaultView?: string) {
+    const options = getDefaultViewOptions(role, routes);
+    if (currentDefaultView && options.some((option) => option.value === currentDefaultView)) {
+      return currentDefaultView;
+    }
+    return options[0]?.value || '/';
+  }
+
+  function getDefaultViewLabel(route?: string) {
+    if (!route) return 'Surveys';
+    if (COMMON_DEFAULT_VIEW_LABELS[route]) return COMMON_DEFAULT_VIEW_LABELS[route];
+    const permissionMatch = PAGE_PERMISSIONS.find((permission) => permission.route === route);
+    return permissionMatch?.label || route;
   }
 
   const applyCreatePreset = (presetId: string) => {
@@ -324,19 +402,37 @@ export function EnhancedUserManagement() {
     if (editRoutes.includes('patient-management') && editRegions.length === 0) {
       const proceed = confirm(
         regionPolicyMode === 'strict'
-          ? 'Strict mode is enabled: no regions selected means this admin will only see Unknown-region patients. Continue?'
+          ? 'Strict mode is enabled: no regions selected means this admin will only see Not assigned region patients. Continue?'
           : 'No regions selected means this admin can access all patient regions. Continue?'
       );
       if (!proceed) return;
     }
 
     setSavingAction(true);
-    const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms, editRegions);
+    const res = await setUserPagePermissions(selectedUser.email, editRoutes, editForms, editRegions, editDefaultView);
     setSavingAction(false);
     if ((res as any).success) {
       toast({ title: actionLabel, description: `Updated access for ${selectedUser.email}` });
     } else {
       toast({ title: 'Error', description: (res as any).error || 'Failed to save permissions', variant: 'destructive' });
+    }
+  };
+
+  const saveSelectedUserDefaultView = async () => {
+    if (!selectedUser || !editRole) return;
+    setSavingAction(true);
+    const routesForRole = editRole === 'admin' ? editRoutes : [];
+    const res = await setUserPagePermissions(selectedUser.email, routesForRole, undefined, undefined, editDefaultView);
+    setSavingAction(false);
+    if ((res as any).success) {
+      toast({
+        title: 'Default view saved',
+        description: `${selectedUser.email} will land on ${editDefaultView} after login.`,
+      });
+      setSelectedUser((prev) => (prev ? { ...prev, defaultView: editDefaultView } : prev));
+      setUsers((prev) => prev.map((u) => (u.uid === selectedUser.uid ? { ...u, defaultView: editDefaultView } : u)));
+    } else {
+      toast({ title: 'Error', description: (res as any).error || 'Failed to save default view', variant: 'destructive' });
     }
   };
 
@@ -448,7 +544,7 @@ export function EnhancedUserManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="legacy">Legacy-compatible (empty = all regions)</SelectItem>
-                      <SelectItem value="strict">Strict (empty = Unknown only)</SelectItem>
+                      <SelectItem value="strict">Strict (empty = Not assigned region only)</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -476,7 +572,7 @@ export function EnhancedUserManagement() {
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
                   <strong>Legacy-compatible:</strong> admins with no regions can see all patient regions.{' '}
-                  <strong>Strict:</strong> admins with no regions can only see Unknown-region patients.
+                  <strong>Strict:</strong> admins with no regions can only see Not assigned region patients.
                 </AlertDescription>
               </Alert>
             </div>
@@ -509,6 +605,9 @@ export function EnhancedUserManagement() {
                           <p className="font-medium">{user.email}</p>
                           <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
                             {user.role}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            Default: {getDefaultViewLabel(user.defaultView)}
                           </Badge>
                           {user.disabled && <Badge variant="destructive">Disabled</Badge>}
                         </div>
@@ -600,6 +699,10 @@ export function EnhancedUserManagement() {
                         <div>
                           <p className="text-xs text-muted-foreground">Last Login</p>
                           <p className="text-sm">{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString() : 'Never'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Default View</p>
+                          <p className="text-sm">{getDefaultViewLabel(editDefaultView)}</p>
                         </div>
                       </div>
 
@@ -731,22 +834,24 @@ export function EnhancedUserManagement() {
                                 toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
                                 const updatedUser = { ...selectedUser, role: editRole as AppRole };
                                 setSelectedUser(updatedUser);
-                                // Reload permissions for the new role to avoid stale state
-                                if (editRole === 'admin') {
-                                  try {
-                                    const permsRes = await getUserPagePermissions(selectedUser.email);
+                                // Reload routing-related settings for the updated role.
+                                try {
+                                  const permsRes = await getUserPagePermissions(selectedUser.email);
+                                  if (editRole === 'admin') {
                                     setEditRoutes(permsRes.permissions || []);
                                     setEditForms(permsRes.allowedForms || []);
                                     setEditRegions(permsRes.allowedRegions || []);
-                                  } catch {
+                                  } else {
                                     setEditRoutes([]);
                                     setEditForms([]);
                                     setEditRegions([]);
                                   }
-                                } else {
+                                  setEditDefaultView(getSafeDefaultView(editRole as AppRole, permsRes.permissions || [], permsRes.defaultView || updatedUser.defaultView));
+                                } catch {
                                   setEditRoutes([]);
                                   setEditForms([]);
                                   setEditRegions([]);
+                                  setEditDefaultView(getSafeDefaultView(editRole as AppRole, [], updatedUser.defaultView));
                                 }
                                 loadData();
                               } else {
@@ -764,23 +869,55 @@ export function EnhancedUserManagement() {
                         </p>
                       </div>
 
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label className="text-xs">Default View After Login</Label>
+                        <div className="flex items-center gap-2">
+                          <Select value={editDefaultView} onValueChange={setEditDefaultView}>
+                            <SelectTrigger className="w-full sm:w-[260px] h-10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {editDefaultViewOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label} ({option.value})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={saveSelectedUserDefaultView}
+                            disabled={savingAction}
+                          >
+                            {savingAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                            Save
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Users still keep deep-link redirects when logging in from a protected shared URL.
+                        </p>
+                      </div>
+
                       {selectedUser.role === 'admin' && (
                         <>
                           <Separator />
-                          <div className="space-y-2">
+                          <div className="space-y-2 min-w-0">
                             <Label className="text-xs font-medium">Quick Access Presets</Label>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 min-w-0">
                               {ACCESS_PRESETS.map((preset) => (
                                 <Button
                                   key={preset.id}
                                   type="button"
                                   variant="outline"
-                                  className="justify-start h-auto py-2 text-left"
+                                  className="justify-start h-auto py-2 px-3 text-left min-w-0 w-full"
                                   onClick={() => applyEditPreset(preset.id)}
                                 >
-                                  <span>
-                                    <span className="block text-xs font-medium">{preset.label}</span>
-                                    <span className="block text-[10px] text-muted-foreground leading-tight">{preset.description}</span>
+                                  <span className="min-w-0 w-full block">
+                                    <span className="block text-xs font-medium truncate">{preset.label}</span>
+                                    <span className="block text-[10px] text-muted-foreground leading-tight line-clamp-2">{preset.description}</span>
                                   </span>
                                 </Button>
                               ))}
@@ -791,11 +928,11 @@ export function EnhancedUserManagement() {
 
                           <div className="space-y-2">
                             <Label className="text-xs font-medium">Effective Access Summary</Label>
-                            <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
+                            <div className="rounded-md border border-green-700 bg-green-600 text-white p-3 text-xs space-y-1">
                               <p><strong>Pages:</strong> {editRoutes.length === 0 ? 'None selected' : `${editRoutes.length} selected`}</p>
                               <p><strong>Forms:</strong> {editForms.length === 0 ? 'All forms' : `${editForms.length} selected`}</p>
-                              <p><strong>Regions:</strong> {editRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions (legacy)') : editRegions.join(', ')}</p>
-                              <p><strong>Unknown region patients:</strong> Always visible to admins</p>
+                              <p><strong>Regions:</strong> {editRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Not assigned region only (strict mode)' : 'All regions (legacy)') : editRegions.join(', ')}</p>
+                              <p><strong>Not assigned region patients:</strong> Always visible to admins</p>
                             </div>
                             {adminWarnings.length > 0 && (
                               <Alert className="py-2">
@@ -878,7 +1015,7 @@ export function EnhancedUserManagement() {
                                     <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="max-w-xs">
-                                    <p className="text-xs">Controls which patients this admin can see. Patients with Unknown region are always visible.</p>
+                                    <p className="text-xs">Controls which patients this admin can see. Patients with Not assigned region are always visible.</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -945,7 +1082,7 @@ export function EnhancedUserManagement() {
                           <p className="text-[11px] text-muted-foreground bg-accent/30 px-2 py-1 rounded inline-block">
                             {editRegions.length === 0
                               ? (regionPolicyMode === 'strict'
-                                  ? 'No regions assigned — Unknown-region patients only (strict mode)'
+                                  ? 'No regions assigned — Not assigned region patients only (strict mode)'
                                   : 'No regions assigned — access to all regions (legacy mode)')
                               : `${editRegions.length} region${editRegions.length === 1 ? '' : 's'} selected`}
                           </p>
@@ -1268,24 +1405,48 @@ export function EnhancedUserManagement() {
                       </p>
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="create-default-view">
+                      Default View After Login <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={createDefaultView}
+                      onValueChange={setCreateDefaultView}
+                    >
+                      <SelectTrigger id="create-default-view" className="h-11">
+                        <SelectValue placeholder="Select a default view" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {createDefaultViewOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label} ({option.value})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Applied when this user logs in directly; protected deep links still take priority.
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {createRole === 'admin' && (
-                <div className="space-y-4 border-t pt-4">
+                <div className="space-y-4 border-t pt-4 min-w-0">
                   <Label className="text-base font-semibold">Quick Access Presets</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 min-w-0">
                     {ACCESS_PRESETS.map((preset) => (
                       <Button
                         key={preset.id}
                         type="button"
                         variant="outline"
-                        className="justify-start h-auto py-2"
+                        className="justify-start h-auto py-2 px-3 text-left min-w-0 w-full"
                         onClick={() => applyCreatePreset(preset.id)}
                       >
-                        <span className="text-left">
-                          <span className="block text-sm font-medium">{preset.label}</span>
-                          <span className="block text-xs text-muted-foreground">{preset.description}</span>
+                        <span className="text-left min-w-0 w-full block">
+                          <span className="block text-sm font-medium truncate">{preset.label}</span>
+                          <span className="block text-xs text-muted-foreground line-clamp-2">{preset.description}</span>
                         </span>
                       </Button>
                     ))}
@@ -1296,11 +1457,11 @@ export function EnhancedUserManagement() {
               {createRole === 'admin' && (
                 <div className="space-y-2 border-t pt-4">
                   <Label className="text-base font-semibold">Effective Access Summary (Preview)</Label>
-                  <div className="rounded-md border bg-accent/20 p-3 text-xs space-y-1">
+                  <div className="rounded-md border border-green-700 bg-green-600 text-white p-3 text-xs space-y-1">
                     <p><strong>Pages:</strong> {createRoutes.length === 0 ? 'None selected' : `${createRoutes.length} selected`}</p>
                     <p><strong>Forms:</strong> {createForms.length === 0 ? 'All forms' : `${createForms.length} selected`}</p>
-                    <p><strong>Regions:</strong> {createRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Unknown only (strict mode)' : 'All regions') : createRegions.join(', ')}</p>
-                    <p><strong>Unknown region patients:</strong> Always visible to admins</p>
+                    <p><strong>Regions:</strong> {createRegions.length === 0 ? (regionPolicyMode === 'strict' ? 'Not assigned region only (strict mode)' : 'All regions') : createRegions.join(', ')}</p>
+                    <p><strong>Not assigned region patients:</strong> Always visible to admins</p>
                   </div>
                   {createAdminWarnings.length > 0 && (
                     <Alert>
@@ -1380,7 +1541,7 @@ export function EnhancedUserManagement() {
                             <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-xs">
-                            <p className="text-xs">Controls which patients this admin can see. Leave with no regions for default behavior based on policy mode. Patients with Unknown region are always visible.</p>
+                            <p className="text-xs">Controls which patients this admin can see. Leave with no regions for default behavior based on policy mode. Patients with Not assigned region are always visible.</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -1436,7 +1597,7 @@ export function EnhancedUserManagement() {
                     <p className="text-[11px] text-muted-foreground bg-accent/30 px-2 py-1 rounded inline-block">
                       {createRegions.length === 0
                         ? (regionPolicyMode === 'strict'
-                            ? 'No regions assigned — Unknown-region patients only (strict mode)'
+                            ? 'No regions assigned — Not assigned region patients only (strict mode)'
                             : 'No regions assigned — access to all regions (legacy mode)')
                         : `${createRegions.length} region${createRegions.length === 1 ? '' : 's'} selected`}
                     </p>
@@ -1512,7 +1673,7 @@ export function EnhancedUserManagement() {
                     if (createRole === 'admin' && createRoutes.includes('patient-management') && createRegions.length === 0) {
                       const proceed = confirm(
                         regionPolicyMode === 'strict'
-                          ? 'Strict mode is enabled: no regions selected means this admin will only see Unknown-region patients. Continue?'
+                          ? 'Strict mode is enabled: no regions selected means this admin will only see Not assigned region patients. Continue?'
                           : 'No regions selected means this admin can access all patient regions. Continue?'
                       );
                       if (!proceed) return;
@@ -1530,12 +1691,13 @@ export function EnhancedUserManagement() {
                         pagePermissions: createRoutes,
                         allowedForms: createForms,
                         allowedRegions: createRegions.length > 0 ? createRegions : undefined,
+                        defaultView: createDefaultView,
                       });
 
                       if ((res as any).success) {
                         toast({
                           title: 'User Created Successfully',
-                          description: `${createEmail} has been created with ${roleDescriptions[createRole].label} role`,
+                          description: `${createEmail} has been created with ${roleDescriptions[createRole].label} role. Default view: ${getDefaultViewLabel(createDefaultView)}.`,
                         });
                         // Reset form
                         setCreateEmail('');
@@ -1545,6 +1707,7 @@ export function EnhancedUserManagement() {
                         setCreateRoutes([]);
                         setCreateForms([]);
                         setCreateRegions([]);
+                        setCreateDefaultView('/');
                         setCreateError(null);
                         // Reload user list
                         loadData();

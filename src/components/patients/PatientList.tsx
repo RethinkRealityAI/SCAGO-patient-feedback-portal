@@ -23,9 +23,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuCheckboxItem
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-    Pencil,
     MoreVertical,
     Search,
     Filter,
@@ -159,6 +157,10 @@ export function PatientList() {
 
     const handleViewProfile = (patientId: string) => {
         router.push(`/patients/${patientId}`);
+    };
+
+    const handleQuickLogInteraction = (patientId: string) => {
+        router.push(`/patients/${patientId}?tab=interactions`);
     };
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -470,22 +472,16 @@ export function PatientList() {
                                         </TableCell>
                                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex items-center justify-end gap-0.5">
-                                                <TooltipProvider delayDuration={300}>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                                onClick={() => patient.id && handleViewProfile(patient.id)}
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                                <span className="sr-only">View profile / Edit</span>
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="left">View profile / Edit</TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                    onClick={() => patient.id && handleQuickLogInteraction(patient.id)}
+                                                    title="Log interaction"
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                    <span className="sr-only">Log interaction</span>
+                                                </Button>
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
@@ -498,7 +494,7 @@ export function PatientList() {
                                                             <User className="mr-2 h-4 w-4" />
                                                             View Profile
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* Add interaction handler */ }}>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); patient.id && handleQuickLogInteraction(patient.id); }}>
                                                             <Calendar className="mr-2 h-4 w-4" />
                                                             Log Interaction
                                                         </DropdownMenuItem>
