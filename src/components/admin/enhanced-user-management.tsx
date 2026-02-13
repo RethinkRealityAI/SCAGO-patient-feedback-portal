@@ -145,6 +145,7 @@ export function EnhancedUserManagement() {
   const handleViewUser = async (user: PlatformUser) => {
     setSelectedUser(user);
     setEditRole(user.role);
+    setNewPassword(''); // Clear any leftover password from a previous user
     // Load page permissions for editing (only for admin users)
     if (user.role === 'admin') {
       try {
@@ -545,7 +546,12 @@ export function EnhancedUserManagement() {
         </Card>
 
         {/* User Details Dialog — wide landscape layout */}
-        <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+        <Dialog open={!!selectedUser} onOpenChange={(open) => {
+          if (!open) {
+            setSelectedUser(null);
+            setNewPassword('');
+          }
+        }}>
           <DialogContent className="max-w-[95vw] w-full lg:max-w-5xl xl:max-w-6xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
             <DialogHeader className="px-6 pt-6 pb-3 border-b shrink-0">
               <div className="flex items-center justify-between gap-4">
@@ -716,7 +722,25 @@ export function EnhancedUserManagement() {
                               setSavingAction(false);
                               if ((res as any).success) {
                                 toast({ title: 'Role updated', description: `${selectedUser.email} is now ${roleDescriptions[editRole as AppRole].label}` });
-                                setSelectedUser({ ...selectedUser, role: editRole as AppRole });
+                                const updatedUser = { ...selectedUser, role: editRole as AppRole };
+                                setSelectedUser(updatedUser);
+                                // Reload permissions for the new role to avoid stale state
+                                if (editRole === 'admin') {
+                                  try {
+                                    const permsRes = await getUserPagePermissions(selectedUser.email);
+                                    setEditRoutes(permsRes.permissions || []);
+                                    setEditForms(permsRes.allowedForms || []);
+                                    setEditRegions(permsRes.allowedRegions || []);
+                                  } catch {
+                                    setEditRoutes([]);
+                                    setEditForms([]);
+                                    setEditRegions([]);
+                                  }
+                                } else {
+                                  setEditRoutes([]);
+                                  setEditForms([]);
+                                  setEditRegions([]);
+                                }
                                 loadData();
                               } else {
                                 toast({ title: 'Error', description: (res as any).error || 'Failed to update role', variant: 'destructive' });
