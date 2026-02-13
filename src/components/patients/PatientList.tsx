@@ -42,6 +42,7 @@ import { getRegions } from '@/app/admin/user-actions';
 import { format, differenceInDays, subDays } from 'date-fns';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
+import { CreateReportDialog } from '@/components/patients/CreateReportDialog';
 
 export function PatientList() {
     const router = useRouter();
@@ -302,6 +303,15 @@ export function PatientList() {
                         </div>
                     </div>
                     <div className="flex gap-3 w-full sm:w-auto">
+                        <CreateReportDialog
+                            scope="roster"
+                            patientIds={filteredPatients.map((p) => p.id).filter(Boolean) as string[]}
+                            defaultHospital={hospitalFilter !== 'all' ? hospitalFilter : undefined}
+                            buttonLabel="Create Report"
+                            buttonVariant="outline"
+                            className="flex-1 sm:flex-none rounded-xl h-11 border-primary/20 hover:bg-primary/5 transition-colors"
+                            disabled={filteredPatients.length === 0}
+                        />
                         <Button variant="outline" onClick={handleExportCSV} className="flex-1 sm:flex-none rounded-xl h-11 border-primary/20 hover:bg-primary/5 transition-colors">
                             <Download className="h-4 w-4 mr-2" />
                             Export Data

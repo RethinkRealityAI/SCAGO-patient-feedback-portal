@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PatientForm } from '@/components/patients/PatientForm';
 import { PatientInteractions } from '@/components/patients/PatientInteractions';
 import { PatientDocuments } from '@/components/patients/PatientDocuments';
+import { CreateReportDialog } from '@/components/patients/CreateReportDialog';
 import { getPatient, getPatientInteractions, getPatientDocuments } from '@/app/patients/actions';
 import { Patient, PatientInteraction, PatientDocument, getRegionDisplayWithCity } from '@/types/patient';
 import { cn } from '@/lib/utils';
@@ -194,6 +195,15 @@ export function PatientProfile({ patientId }: PatientProfileProps) {
                 <div className="flex items-center gap-2">
                     <div className={`h-3 w-3 rounded-full ${getStatusColor(patient.caseStatus)}`} />
                     <span className="capitalize font-medium text-sm">{patient.caseStatus}</span>
+                    <CreateReportDialog
+                        scope="single"
+                        patientId={patientId}
+                        defaultHospital={patient.hospital}
+                        patientDisplayName={patient.fullName}
+                        buttonLabel="Create Report"
+                        buttonVariant="outline"
+                        className="ml-4"
+                    />
                     <Button onClick={() => setIsEditOpen(true)} className="ml-4">
                         <Edit className="mr-2 h-4 w-4" />
                         Edit Profile

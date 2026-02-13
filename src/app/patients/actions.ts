@@ -24,6 +24,7 @@ import { ontarioHospitals } from '@/lib/hospital-names';
 import { ontarioCities } from '@/lib/location-data';
 import { createHash } from 'crypto';
 import type { RegionAccessPolicyMode } from '@/app/admin/user-actions';
+import type { CollateProgramReportInput, ProgramReportData, ProgramReportSupportCounts } from '@/types/program-report';
 
 // Collection References
 const PATIENTS_COLLECTION = 'patients';
@@ -786,6 +787,138 @@ function hashDocKey(value: string): string {
     return createHash('sha256').update(value).digest('hex');
 }
 
+function createEmptySupportCounts(): ProgramReportSupportCounts {
+    return {
+        advocacySupport: 0,
+        infoAboutScagoServices: 0,
+        referralToCommunityConnections: 0,
+        psychosocialSupport: 0,
+        employmentSupport: 0,
+        immigrationOrLegalSupport: 0,
+        connectionToFinancialSupportsBenefits: 0,
+        socialPrescribingBasicNeeds: 0,
+        other: 0,
+    };
+}
+
+function getReportRange(month: number, year: number): { start: Date; end: Date; label: string } {
+    const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const end = new Date(year, month, 1, 0, 0, 0, 0);
+    const label = `${start.toLocaleString('default', { month: 'long' })} ${year}`;
+    return { start, end, label };
+}
+
+function isDateInRange(value: unknown, start: Date, end: Date): boolean {
+    if (!value) return false;
+    const date = value instanceof Date ? value : new Date(value as any);
+    const time = date.getTime();
+    if (Number.isNaN(time)) return false;
+    return time >= start.getTime() && time < end.getTime();
+}
+
+function isAdultPatient(patient: Patient, referenceDate: Date): boolean {
+    if (patient.dateOfBirth) {
+        const dob = new Date(patient.dateOfBirth);
+        if (!Number.isNaN(dob.getTime())) {
+            const years = (referenceDate.getTime() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+            return years >= 18;
+        }
+    }
+    return patient.clinicType === 'adult';
+}
+
+function normalizeSupportType(type: string): keyof ProgramReportSupportCounts {
+    const normalized = type.toLowerCase().trim();
+    if (normalized.includes('advocacy')) return 'advocacySupport';
+    if (normalized.includes('info about scago')) return 'infoAboutScagoServices';
+    if (normalized.includes('community connection') || normalized.includes('community referral')) return 'referralToCommunityConnections';
+    if (normalized.includes('psychosocial')) return 'psychosocialSupport';
+    if (normalized.includes('employment')) return 'employmentSupport';
+    if (normalized.includes('immigration') || normalized.includes('legal')) return 'immigrationOrLegalSupport';
+    if (normalized.includes('financial supports') || normalized.includes('financial support') || normalized.includes('benefits')) return 'connectionToFinancialSupportsBenefits';
+    if (normalized.includes('social prescribing')) return 'socialPrescribingBasicNeeds';
+    return 'other';
+}
+
+function incrementSupportCounts(
+    target: ProgramReportSupportCounts,
+    supportTypes: string[] | undefined
+): void {
+    for (const supportType of supportTypes || []) {
+        target[normalizeSupportType(supportType)] += 1;
+    }
+}
+
+function classifyInteraction(interaction: PatientInteraction): {
+    isEr: boolean;
+    isAdmission: boolean;
+    isRoutine: boolean;
+    isAfterDischarge: boolean;
+} {
+    const type = (interaction.type || '').toLowerCase();
+    const category = (interaction.category || '').toLowerCase();
+    const notes = (interaction.notes || '').toLowerCase();
+    const outcome = (interaction.outcome || '').toLowerCase();
+
+    const isEr =
+        type === 'er_visit' ||
+        category.includes('er') ||
+        category.includes('ed') ||
+        category.includes('emergency');
+    const isAdmission =
+        type === 'inpatient_support' ||
+        type === 'admission_support' ||
+        category.includes('inpatient') ||
+        category.includes('admission');
+    const isRoutine =
+        type === 'routine_clinic_visit' ||
+        category.includes('routine') ||
+        category.includes('hemoglobinopathy clinic');
+    const isAfterDischarge =
+        type === 'follow_up' ||
+        category.includes('discharge') ||
+        notes.includes('discharge') ||
+        outcome.includes('discharge');
+
+    return { isEr, isAdmission, isRoutine, isAfterDischarge };
+}
+
+async function fetchInteractionsForPatientIds(
+    firestore: Firestore,
+    patientIds: string[]
+): Promise<PatientInteraction[]> {
+    if (patientIds.length === 0) return [];
+    const unique = Array.from(new Set(patientIds));
+    const batchSize = 10; // Firestore "in" clause limit
+    const interactions: PatientInteraction[] = [];
+
+    for (let i = 0; i < unique.length; i += batchSize) {
+        const idsBatch = unique.slice(i, i + batchSize);
+        try {
+            const snapshot = await firestore
+                .collection(INTERACTIONS_COLLECTION)
+                .where('patientId', 'in', idsBatch)
+                .get();
+            interactions.push(
+                ...snapshot.docs.map((doc) => ({ id: doc.id, ...convertDates(doc.data()) } as PatientInteraction))
+            );
+        } catch (error) {
+            // Fallback path when "in" query limitations or index constraints occur.
+            for (const patientId of idsBatch) {
+                const snapshot = await firestore
+                    .collection(INTERACTIONS_COLLECTION)
+                    .where('patientId', '==', patientId)
+                    .get();
+                interactions.push(
+                    ...snapshot.docs.map((doc) => ({ id: doc.id, ...convertDates(doc.data()) } as PatientInteraction))
+                );
+            }
+        }
+    }
+
+    return interactions;
+}
+
 async function getRegionMappingsForResolution(firestore: Firestore): Promise<CityToRegionMap> {
     try {
         const regions = await getRegions();
@@ -1149,6 +1282,242 @@ export async function createPatientFromCandidate(
 }
 
 // --- Export Actions ---
+
+export async function collateProgramReport(input: CollateProgramReportInput): Promise<{ success: boolean; data?: ProgramReportData; error?: string }> {
+    try {
+        const user = await getCurrentUser();
+        const firestore = getAdminFirestore();
+
+        if (!input.month || !input.year || input.month < 1 || input.month > 12) {
+            return { success: false, error: 'Invalid reporting period' };
+        }
+
+        const { start, end, label } = getReportRange(input.month, input.year);
+        const targetHospital = (input.hospital || '').trim();
+
+        let patients: Patient[] = [];
+        if (input.patientIds !== undefined) {
+            if (input.patientIds.length === 0) {
+                return { success: false, error: 'No patients available for this report scope.' };
+            }
+            const uniqueIds = Array.from(new Set(input.patientIds));
+            const allowedIds = await filterToAccessiblePatientIds(firestore, uniqueIds, user);
+            if (allowedIds.length === 0) {
+                return { success: false, error: 'No accessible patients found for this report.' };
+            }
+
+            const refs = allowedIds.map((id) => firestore.collection(PATIENTS_COLLECTION).doc(id));
+            const docs = await firestore.getAll(...refs);
+            patients = docs
+                .filter((doc) => doc.exists)
+                .map((doc) => ({ id: doc.id, ...convertDates(doc.data()) } as Patient));
+        } else {
+            const res = await getPatients({ pageSize: 2000, hospital: targetHospital || undefined });
+            if (!res.success || !res.data) {
+                return { success: false, error: res.error || 'Failed to load patients' };
+            }
+            patients = res.data;
+        }
+
+        if (targetHospital) {
+            patients = patients.filter((p) => (p.hospital || '').toLowerCase() === targetHospital.toLowerCase());
+        }
+
+        if (patients.length === 0) {
+            return { success: false, error: 'No patients available for this report scope.' };
+        }
+
+        const patientIds = patients.map((p) => p.id).filter(Boolean) as string[];
+        const interactions = await fetchInteractionsForPatientIds(firestore, patientIds);
+        const interactionsInRange = interactions.filter((i) => isDateInRange(i.date, start, end));
+        const patientMap = new Map(patients.map((p) => [p.id as string, p]));
+        const patientEmailToAgeBucket = new Map<string, 'adult' | 'pediatric'>();
+
+        let totalAdult = 0;
+        let totalPediatric = 0;
+        let newAdult = 0;
+        let newPediatric = 0;
+
+        for (const patient of patients) {
+            const adult = isAdultPatient(patient, end);
+            if (adult) totalAdult += 1;
+            else totalPediatric += 1;
+
+            if (patient.contactInfo?.email) {
+                patientEmailToAgeBucket.set(patient.contactInfo.email.toLowerCase(), adult ? 'adult' : 'pediatric');
+            }
+
+            if (isDateInRange(patient.createdAt, start, end)) {
+                if (adult) newAdult += 1;
+                else newPediatric += 1;
+            }
+        }
+
+        const erAdultSet = new Set<string>();
+        const erPediatricSet = new Set<string>();
+        const admissionAdultSet = new Set<string>();
+        const admissionPediatricSet = new Set<string>();
+        const routineAdultSet = new Set<string>();
+        const routinePediatricSet = new Set<string>();
+
+        const erOrAdmissionAdultSupport = createEmptySupportCounts();
+        const afterDischargeSupport = createEmptySupportCounts();
+        const routineSupportAll = createEmptySupportCounts();
+
+        for (const interaction of interactionsInRange) {
+            const patientId = interaction.patientId;
+            const patient = patientMap.get(patientId);
+            if (!patient) continue;
+            const adult = isAdultPatient(patient, end);
+            const { isEr, isAdmission, isRoutine, isAfterDischarge } = classifyInteraction(interaction);
+
+            if (isEr) {
+                if (adult) erAdultSet.add(patientId);
+                else erPediatricSet.add(patientId);
+            }
+            if (isAdmission) {
+                if (adult) admissionAdultSet.add(patientId);
+                else admissionPediatricSet.add(patientId);
+            }
+            if (isRoutine) {
+                if (adult) routineAdultSet.add(patientId);
+                else routinePediatricSet.add(patientId);
+                incrementSupportCounts(routineSupportAll, interaction.supportTypes);
+            }
+            if (adult && (isEr || isAdmission)) {
+                incrementSupportCounts(erOrAdmissionAdultSupport, interaction.supportTypes);
+            }
+            if (isAfterDischarge) {
+                incrementSupportCounts(afterDischargeSupport, interaction.supportTypes);
+            }
+        }
+
+        const quality = {
+            er: {
+                quality: { total: 0, pediatric: 0, adult: 0 },
+                subQuality: { total: 0, pediatric: 0, adult: 0 },
+            },
+            admission: {
+                quality: { total: 0, pediatric: 0, adult: 0 },
+                subQuality: { total: 0, pediatric: 0, adult: 0 },
+            },
+        };
+
+        try {
+            const submissions = await fetchAllSubmissionsAdmin();
+            const relevantSubmissions = submissions.filter((s) => {
+                if (!isDateInRange(s.submittedAt, start, end)) return false;
+                if (!targetHospital) return true;
+                const candidateHospital =
+                    (s.hospital as string) ||
+                    (s.hospitalName as string) ||
+                    (s.primaryHospital as string) ||
+                    (s['hospital-on'] as string) ||
+                    '';
+                return candidateHospital.toLowerCase() === targetHospital.toLowerCase();
+            });
+
+            for (const submission of relevantSubmissions) {
+                const rating = Number(submission.rating ?? 0);
+                if (!Number.isFinite(rating) || rating <= 0) continue;
+
+                const dept = String((submission.department as string) || (submission.visitType as string) || '').toLowerCase();
+                const inEr = dept.includes('er') || dept.includes('ed') || dept.includes('emergency');
+                const inAdmission = dept.includes('inpatient') || dept.includes('admission') || dept.includes('ward');
+                if (!inEr && !inAdmission) continue;
+
+                const email = String((submission.email as string) || '').toLowerCase();
+                const bucket = patientEmailToAgeBucket.get(email);
+
+                const qualityBucket = rating >= 7 ? 'quality' : rating <= 4 ? 'subQuality' : null;
+                if (!qualityBucket) continue;
+
+                const section = inEr ? quality.er : quality.admission;
+                section[qualityBucket].total += 1;
+                if (bucket === 'adult') section[qualityBucket].adult += 1;
+                if (bucket === 'pediatric') section[qualityBucket].pediatric += 1;
+            }
+        } catch (error) {
+            console.warn('Failed to enrich report with feedback quality data:', error);
+        }
+
+        const reportData: ProgramReportData = {
+            scope: patientIds.length === 1 ? 'single' : 'roster',
+            month: input.month,
+            year: input.year,
+            hospital: targetHospital || 'All Hospitals',
+            generatedAt: new Date().toISOString(),
+            patientDisplayName: patientIds.length === 1 ? patients[0]?.fullName : undefined,
+            reportingLabel: label,
+            section1: {
+                totalPatientsTreated: {
+                    adult: totalAdult,
+                    pediatric: totalPediatric,
+                },
+                newPatientsTreated: {
+                    adult: newAdult,
+                    pediatric: newPediatric,
+                },
+                waitTimeForAccessToCare: 'Not provided',
+                transitionalReferralsFromPediatric: 0,
+                qualityOfCare: quality,
+            },
+            section2: {
+                supportedInHospital: {
+                    er: {
+                        pediatric: erPediatricSet.size,
+                        adult: erAdultSet.size,
+                    },
+                    afterAdmission: {
+                        pediatric: admissionPediatricSet.size,
+                        adult: admissionAdultSet.size,
+                    },
+                    total: {
+                        pediatric: new Set([...erPediatricSet, ...admissionPediatricSet]).size,
+                        adult: new Set([...erAdultSet, ...admissionAdultSet]).size,
+                    },
+                },
+                referredToHematologistBeforeDischarge: {
+                    pediatric: 'unknown',
+                    adult: 'unknown',
+                },
+                painCrisisAnalgesicsWithin60Minutes: {
+                    pediatric: 'unknown',
+                    adult: 'unknown',
+                },
+                routineClinicalVisitSupportCount: {
+                    pediatric: routinePediatricSet.size,
+                    adult: routineAdultSet.size,
+                },
+                supportDuringErOrAdmissionAdult: erOrAdmissionAdultSupport,
+                supportAfterDischargeAllPatients: afterDischargeSupport,
+            },
+            section3: {
+                supportDuringRoutineClinicalVisitAllPatients: routineSupportAll,
+                notes:
+                    'Autogenerated draft. Metrics without structured source data are set to "unknown" or defaults and should be reviewed before export.',
+            },
+        };
+
+        return { success: true, data: reportData };
+    } catch (error) {
+        console.error('Error collating program report:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to collate report data' };
+    }
+}
+
+export async function exportProgramReportPdf(reportData: ProgramReportData): Promise<{ error?: string; pdfBase64?: string }> {
+    try {
+        await getCurrentUser();
+        const { generateProgramReportPdf } = await import('@/lib/program-report-pdf');
+        const pdfBytes = await generateProgramReportPdf(reportData);
+        if (!pdfBytes) return { error: 'Failed to generate PDF' };
+        return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
+    } catch (error) {
+        console.error('Error exporting program report PDF:', error);
+        return { error: 'Failed to generate PDF' };
+    }
+}
 
 export async function exportPatientsToCSV(patientIds?: string[]) {
     try {
