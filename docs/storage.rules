@@ -88,16 +88,21 @@ service firebase.storage {
       allow read, write: if isAdmin();
     }
 
-    // Survey Submission Attachments - Public upload, Admin read
+    // Survey Submission Attachments - Public upload (anonymous OK), Admin read
     // Path structure: submissions/{surveyId}/{sessionId}/{timestamp}_{filename}
     match /submissions/{surveyId}/{sessionId}/{filename} {
       // Only admins can read or delete submission attachments
       allow read, delete: if isAdmin();
       
-      // Anyone can upload (create) attachments for a survey submission
-      // We restrict size to 10MB per file and specific allowed types
-      allow create: if request.resource.size < 10 * 1024 * 1024 &&
+      // Anyone can upload (create) attachments for a survey submission - no auth required
+      // Size: 50MB per file (permissive for resumes, documents with images)
+      // Content types: broad set including images, docs, spreadsheets, text, and application/octet-stream
+      // (browsers often report octet-stream for .doc or unknown types)
+      allow create: if request.resource.size < 50 * 1024 * 1024 &&
                       (request.resource.contentType.matches('image/.*') || 
+                       request.resource.contentType.matches('application/.*') ||
+                       request.resource.contentType.matches('text/.*') ||
+                       request.resource.contentType == 'application/octet-stream' ||
                        request.resource.contentType == 'application/pdf' ||
                        request.resource.contentType == 'application/msword' ||
                        request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||

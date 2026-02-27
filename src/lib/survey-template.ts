@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { SCAGO_MEMBERSHIP_PLANS, formatMembershipPlanLabel } from '@/lib/membership-plans';
 
 // NOTE: The 'id' of each field must match the camelCase property name
 // in the FeedbackSubmission interface (src/app/dashboard/types.ts)
@@ -1299,3 +1300,153 @@ export const consentSurveyFr = {
     },
   ],
 };
+// ---------------------------------------------------------------------------
+// SCAGO Membership Registration (single source of truth)
+// ---------------------------------------------------------------------------
+export const MEMBERSHIP_SURVEY_ID = 'scago-membership-registration';
+export const MEMBERSHIP_SURVEY_TEMPLATE_VERSION = 1;
+
+function buildMembershipFeesText(): string {
+  const lines = SCAGO_MEMBERSHIP_PLANS.map((plan) => formatMembershipPlanLabel(plan));
+  return [
+    'Membership Fees',
+    '$30/year for Individual Membership, $50/year for Family, and $100/year for Organizations.',
+    'Please select the appropriate number of years for the membership type.',
+    '',
+    ...lines,
+  ].join('\n');
+}
+
+export function createMembershipSurveyTemplate() {
+  return {
+    appearance: {
+      themeColor: '#C8262A',
+      cardShadow: 'sm',
+      cardTitleSize: 'lg',
+      sectionTitleSize: 'lg',
+      labelSize: 'sm',
+      gradient: true,
+      showTitle: true,
+    },
+    title: 'Become a Member',
+    templateKey: 'scago-membership',
+    templateVersion: MEMBERSHIP_SURVEY_TEMPLATE_VERSION,
+    description:
+      'Join the Sickle Cell Awareness Group of Ontario (SCAGO) and complete your membership application with secure PayPal payment.',
+    thankYouSettings: {
+      icon: 'checkmark',
+      title: 'Welcome to SCAGO!',
+      description:
+        'Thank you for becoming a member. We look forward to having you as part of our community.',
+      showButton: false,
+      buttonText: 'Submit Another',
+      buttonLink: '',
+      themeColor: '#C8262A',
+    },
+    submitButtonLabel: 'Submit Membership Application',
+    saveProgressEnabled: true,
+    shareButtonEnabled: false,
+    sections: [
+      {
+        id: 'membership-application-section',
+        title: 'Membership Application',
+        fields: [
+          {
+            id: 'membership-name-group',
+            type: 'group',
+            label: 'Name',
+            fields: [
+              { id: 'firstName', type: 'text', label: 'First Name', validation: { required: true } },
+              { id: 'lastName', type: 'text', label: 'Last Name', validation: { required: true } },
+            ],
+          },
+          {
+            id: 'membership-contact-group',
+            type: 'group',
+            label: 'Contact Details',
+            fields: [
+              { id: 'email', type: 'email', label: 'Email', validation: { required: true } },
+              { id: 'phone', type: 'phone', label: 'Phone Number', validation: { required: true } },
+            ],
+          },
+          {
+            id: 'membershipApplicationDate',
+            label: 'Date of application',
+            type: 'date',
+            validation: { required: true },
+          },
+          {
+            id: 'membership-address-line1-group',
+            type: 'group',
+            label: 'Address',
+            fields: [
+              { id: 'street', type: 'text', label: 'Street', validation: { required: true } },
+              { id: 'city', type: 'text', label: 'City', validation: { required: true } },
+            ],
+          },
+          {
+            id: 'membership-address-line2-group',
+            type: 'group',
+            label: 'Address Continued',
+            fields: [
+              { id: 'province', type: 'province-ca', label: 'Province', validation: { required: true } },
+              {
+                id: 'postalCode',
+                type: 'text',
+                label: 'Postal Code',
+                validation: {
+                  required: true,
+                  pattern: '^[A-Za-z]\\d[A-Za-z][ -]?\\d[A-Za-z]\\d$',
+                },
+              },
+            ],
+          },
+          {
+            id: 'membershipReason',
+            label:
+              'Please tell us your reason for becoming a member of the SCAGO (Attach more pages if needed):',
+            type: 'textarea',
+            validation: { required: true },
+          },
+          {
+            id: 'volunteerInterest',
+            label: 'Are you interested in volunteer opportunities?',
+            type: 'radio',
+            options: [
+              { id: nanoid(), label: 'Yes', value: 'yes' },
+              { id: nanoid(), label: 'No', value: 'no' },
+            ],
+            validation: { required: true },
+          },
+          {
+            id: 'membershipReferralSource',
+            label: 'How did you hear about us?',
+            type: 'textarea',
+            validation: { required: true },
+          },
+          {
+            id: 'membershipFeeInfo',
+            label: 'Membership Fees',
+            type: 'text-block',
+            helperText: buildMembershipFeesText(),
+          },
+          {
+            id: 'membershipPayment',
+            label: 'Select your membership option and complete payment with PayPal.',
+            type: 'paypal-membership',
+            validation: { required: true },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function createSeededMembershipSurvey() {
+  return {
+    id: MEMBERSHIP_SURVEY_ID,
+    ...createMembershipSurveyTemplate(),
+  };
+}
+
+export const membershipSurvey = createMembershipSurveyTemplate();

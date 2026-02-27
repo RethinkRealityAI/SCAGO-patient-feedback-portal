@@ -9,10 +9,141 @@ import { db as clientDb } from '@/lib/firebase';
 import { unstable_noStore as noStore } from 'next/cache';
 import { sendWebhook } from '@/lib/webhook-sender';
 import type { SubmissionEmailConfig } from '@/lib/email-templates';
+import { verifyPayPalCapture } from '@/lib/paypal-verification';
+import { MEMBERSHIP_PLAN_BY_ID } from '@/lib/membership-plans';
 
 // Note: We intentionally use the Web Firestore client on the server for writes
 // to respect Firestore security rules and avoid admin credential requirements
 // in local/dev and serverless environments.
+
+type SurveyFieldLite = {
+  id: string;
+  type: string;
+  label?: string;
+  validation?: {
+    required?: boolean;
+  };
+  fields?: SurveyFieldLite[];
+};
+
+function flattenSurveyFields(surveyData: any): SurveyFieldLite[] {
+  const out: SurveyFieldLite[] = [];
+  const visit = (field: SurveyFieldLite) => {
+    if (!field?.id || !field?.type) return;
+    if (field.type === 'group' && Array.isArray(field.fields)) {
+      field.fields.forEach(visit);
+      return;
+    }
+    out.push(field);
+  };
+
+  const sections = Array.isArray(surveyData?.sections) ? surveyData.sections : [];
+  for (const section of sections) {
+    const fields = Array.isArray(section?.fields) ? section.fields : [];
+    fields.forEach(visit);
+  }
+  return out;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function approximatelyEqualAmount(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 0.01;
+}
+
+async function verifyPayPalPaymentsForSubmission(
+  surveyData: any,
+  formData: Record<string, any>,
+): Promise<{ ok: true; verification: Array<Record<string, any>> } | { ok: false; error: string }> {
+  const paypalFields = flattenSurveyFields(surveyData).filter(
+    (field) => field.type === 'paypal-membership' || field.type === 'paypal-payment',
+  );
+
+  if (paypalFields.length === 0) {
+    return { ok: true, verification: [] };
+  }
+
+  const verification: Array<Record<string, any>> = [];
+
+  for (const field of paypalFields) {
+    const fieldValue = formData[field.id];
+    const isRequired = !!field.validation?.required;
+    const fieldName = field.label || field.id;
+
+    if (!fieldValue) {
+      if (isRequired) {
+        return { ok: false, error: `Missing required payment for "${fieldName}".` };
+      }
+      continue;
+    }
+
+    if (typeof fieldValue !== 'object' || fieldValue.status !== 'paid') {
+      return { ok: false, error: `Invalid payment payload for "${fieldName}".` };
+    }
+
+    const captureId = typeof fieldValue.transactionId === 'string' ? fieldValue.transactionId.trim() : '';
+    if (!captureId) {
+      return { ok: false, error: `Missing PayPal capture ID for "${fieldName}".` };
+    }
+
+    const currency =
+      typeof fieldValue.currency === 'string' && fieldValue.currency.trim()
+        ? fieldValue.currency.trim().toUpperCase()
+        : 'CAD';
+
+    const submittedAmount = Number(fieldValue.amount ?? fieldValue.total);
+    const expectedAmount = Number.isFinite(submittedAmount) ? submittedAmount : undefined;
+    if (!isFiniteNumber(expectedAmount)) {
+      return { ok: false, error: `Missing payment amount for "${fieldName}".` };
+    }
+
+    if (field.type === 'paypal-membership' && typeof fieldValue.planId === 'string') {
+      const plan = MEMBERSHIP_PLAN_BY_ID[fieldValue.planId];
+      if (!plan) {
+        return { ok: false, error: `Unknown membership plan "${fieldValue.planId}" for "${fieldName}".` };
+      }
+
+      if (!approximatelyEqualAmount(plan.amount, expectedAmount)) {
+        return {
+          ok: false,
+          error: `Membership amount mismatch for "${fieldName}". Expected ${plan.amount.toFixed(2)} ${plan.currency}.`,
+        };
+      }
+    }
+
+    const captureCheck = await verifyPayPalCapture({
+      captureId,
+      expectedAmount,
+      expectedCurrency: currency,
+    });
+
+    if (!captureCheck.ok) {
+      return {
+        ok: false,
+        error: `PayPal verification failed for "${fieldName}": ${captureCheck.error}`,
+      };
+    }
+
+    verification.push({
+      fieldId: field.id,
+      captureId,
+      status: captureCheck.capture.status,
+      amount:
+        captureCheck.capture.amount?.value ||
+        captureCheck.capture.seller_receivable_breakdown?.gross_amount?.value ||
+        null,
+      currency:
+        captureCheck.capture.amount?.currency_code ||
+        captureCheck.capture.seller_receivable_breakdown?.gross_amount?.currency_code ||
+        null,
+      verifiedAt: new Date().toISOString(),
+    });
+  }
+
+  return { ok: true, verification };
+}
 
 // Existing functions
 export async function getSurveys() {
@@ -78,11 +209,27 @@ export async function submitFeedback(
     // Generate session ID if not provided (server-side generation)
     const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
+    // Fetch survey first so we can validate payment fields against survey definition
+    const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
+    if (!surveyDoc.exists()) {
+      return { error: 'Survey not found.' };
+    }
+    const surveyData = surveyDoc.data();
+
+    // For PayPal fields, verify capture details server-side before persisting submission.
+    const paymentVerification = await verifyPayPalPaymentsForSubmission(surveyData, formData);
+    if (!paymentVerification.ok) {
+      return { error: paymentVerification.error };
+    }
+
     const submissionData = {
       ...formData,
       surveyId,
       sessionId: finalSessionId,
       submittedAt: new Date(),
+      ...(paymentVerification.verification.length > 0
+        ? { paymentVerification: paymentVerification.verification }
+        : {}),
     };
 
     // Save to organized structure: surveys/{surveyId}/submissions/{submissionId}
@@ -90,10 +237,6 @@ export async function submitFeedback(
       collection(clientDb, 'surveys', surveyId, 'submissions'),
       submissionData
     );
-
-    // Fetch survey for webhook and email notification config
-    const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
-    const surveyData = surveyDoc.exists() ? surveyDoc.data() : null;
 
     // Send webhook notification (await on server to ensure it completes)
     try {

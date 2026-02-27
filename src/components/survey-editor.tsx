@@ -46,7 +46,7 @@ const otherOptionSchema = z.object({
 const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   id: z.string(),
   label: z.string().min(1, 'Question label is required.'),
-  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single', 'matrix-multiple', 'matrix-text', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime', 'color', 'range', 'percentage', 'currency', 'logo', 'text-block']),
+  type: z.enum(['text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'time-amount', 'number', 'digital-signature', 'select', 'radio', 'checkbox', 'slider', 'rating', 'nps', 'group', 'boolean-checkbox', 'anonymous-toggle', 'province-ca', 'city-on', 'hospital-on', 'department-on', 'duration-hm', 'duration-dh', 'file-upload', 'multi-text', 'matrix-single', 'matrix-multiple', 'matrix-text', 'likert-scale', 'pain-scale', 'calculated', 'ranking', 'datetime', 'color', 'range', 'percentage', 'currency', 'logo', 'text-block', 'paypal-membership', 'paypal-payment']),
   options: z.array(optionSchema).optional(),
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
@@ -75,6 +75,33 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   alignment: z.enum(['left', 'center', 'right']).optional(),
   width: z.string().optional(),
   otherOption: otherOptionSchema,
+  paymentConfig: z.object({
+    title: z.string().optional(),
+    currency: z.string().optional(),
+    lineItems: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      quantity: z.number(),
+      unitPrice: z.number(),
+      category: z.enum(['DIGITAL_GOODS', 'PHYSICAL_GOODS', 'DONATION']).optional(),
+    })).optional(),
+    allowCustomItems: z.boolean().optional(),
+    allowQuantityEdit: z.boolean().optional(),
+    promoCodes: z.array(z.object({
+      code: z.string(),
+      type: z.enum(['percent', 'fixed']),
+      value: z.number(),
+      label: z.string().optional(),
+    })).optional(),
+    allowPromoCodes: z.boolean().optional(),
+    organizationName: z.string().optional(),
+    taxRate: z.number().optional(),
+    taxLabel: z.string().optional(),
+    generateReceipt: z.boolean().optional(),
+    generateQRTicket: z.boolean().optional(),
+    receiptFooter: z.string().optional(),
+  }).optional(),
 }));
 const sectionSchema = z.object({ id: z.string(), title: z.string().min(1, 'Section title is required.'), allRequired: z.boolean().default(false).optional(), fields: z.array(fieldSchema) });
 const appearanceSchema = z.object({
@@ -133,6 +160,38 @@ const surveySchema = z.object({
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
+interface PaymentLineItemConfig {
+  id: string;
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  category?: 'DIGITAL_GOODS' | 'PHYSICAL_GOODS' | 'DONATION';
+}
+
+interface PromoCodeConfig {
+  code: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  label?: string;
+}
+
+interface PaymentFieldConfig {
+  title?: string;
+  currency?: string;
+  lineItems?: PaymentLineItemConfig[];
+  allowCustomItems?: boolean;
+  allowQuantityEdit?: boolean;
+  promoCodes?: PromoCodeConfig[];
+  allowPromoCodes?: boolean;
+  organizationName?: string;
+  taxRate?: number;
+  taxLabel?: string;
+  generateReceipt?: boolean;
+  generateQRTicket?: boolean;
+  receiptFooter?: string;
+}
+
 interface FormFieldConfig {
   id: string;
   label: string;
@@ -154,6 +213,7 @@ interface FormFieldConfig {
     placeholder?: string;
     required?: boolean;
   };
+  paymentConfig?: PaymentFieldConfig;
 }
 
 // Event handler to prevent dnd-kit from capturing clicks on interactive elements
@@ -165,6 +225,186 @@ class CustomKeyboardSensor extends DndKeyboardSensor {
     const target = event.target as HTMLElement;
     return !target.closest('input, textarea, select, button[role!="button"]');
   }
+}
+
+// ---------------------------------------------------------------------------
+// PayPal Payment Field Configuration Editor
+// ---------------------------------------------------------------------------
+function PaymentFieldConfigEditor({ fieldPath }: { fieldPath: string }) {
+  const { control, watch, setValue, getValues } = useFormContext<SurveyFormData>();
+  const lineItems: PaymentLineItemConfig[] = watch(`${fieldPath}.paymentConfig.lineItems` as any) || [];
+  const promoCodes: PromoCodeConfig[] = watch(`${fieldPath}.paymentConfig.promoCodes` as any) || [];
+
+  const [newItem, setNewItem] = React.useState({ name: '', description: '', quantity: 1, unitPrice: '' });
+  const [newPromo, setNewPromo] = React.useState({ code: '', type: 'percent' as 'percent' | 'fixed', value: '', label: '' });
+
+  const addLineItem = () => {
+    if (!newItem.name.trim() || !newItem.unitPrice || Number(newItem.unitPrice) <= 0) return;
+    const updated = [...lineItems, {
+      id: Math.random().toString(36).slice(2, 10),
+      name: newItem.name.trim(),
+      description: newItem.description.trim() || undefined,
+      quantity: newItem.quantity,
+      unitPrice: parseFloat(newItem.unitPrice),
+    }];
+    setValue(`${fieldPath}.paymentConfig.lineItems` as any, updated);
+    setNewItem({ name: '', description: '', quantity: 1, unitPrice: '' });
+  };
+
+  const removeLineItem = (idx: number) => {
+    setValue(`${fieldPath}.paymentConfig.lineItems` as any, lineItems.filter((_, i) => i !== idx));
+  };
+
+  const addPromoCode = () => {
+    if (!newPromo.code.trim() || !newPromo.value || Number(newPromo.value) <= 0) return;
+    const updated = [...promoCodes, {
+      code: newPromo.code.trim().toUpperCase(),
+      type: newPromo.type,
+      value: parseFloat(newPromo.value),
+      label: newPromo.label.trim() || undefined,
+    }];
+    setValue(`${fieldPath}.paymentConfig.promoCodes` as any, updated);
+    setNewPromo({ code: '', type: 'percent', value: '', label: '' });
+  };
+
+  const removePromoCode = (idx: number) => {
+    setValue(`${fieldPath}.paymentConfig.promoCodes` as any, promoCodes.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-4 border rounded-xl p-4 bg-blue-50/40 border-blue-200">
+      <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+        <span>🛒</span> Payment Field Configuration
+      </div>
+
+      {/* General settings */}
+      <div className="grid grid-cols-2 gap-3">
+        <FormField control={control} name={`${fieldPath}.paymentConfig.title` as any} render={({ field: f }) => (
+          <FormItem className="col-span-2">
+            <FormLabel className="text-xs">Widget Title</FormLabel>
+            <FormControl><Input {...f} value={f.value ?? ''} onPointerDown={stopPropagation} placeholder="e.g. Event Registration Payment" className="h-8 text-sm" /></FormControl>
+          </FormItem>
+        )} />
+        <FormField control={control} name={`${fieldPath}.paymentConfig.organizationName` as any} render={({ field: f }) => (
+          <FormItem>
+            <FormLabel className="text-xs">Organization Name</FormLabel>
+            <FormControl><Input {...f} value={f.value ?? 'SCAGO'} onPointerDown={stopPropagation} placeholder="SCAGO" className="h-8 text-sm" /></FormControl>
+          </FormItem>
+        )} />
+        <FormField control={control} name={`${fieldPath}.paymentConfig.currency` as any} render={({ field: f }) => (
+          <FormItem>
+            <FormLabel className="text-xs">Currency</FormLabel>
+            <Select onValueChange={f.onChange} value={f.value ?? 'CAD'}>
+              <FormControl><SelectTrigger onPointerDown={stopPropagation} className="h-8 text-sm"><SelectValue /></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="CAD">CAD – Canadian Dollar</SelectItem>
+                <SelectItem value="USD">USD – US Dollar</SelectItem>
+                <SelectItem value="EUR">EUR – Euro</SelectItem>
+                <SelectItem value="GBP">GBP – British Pound</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormItem>
+        )} />
+        <FormField control={control} name={`${fieldPath}.paymentConfig.taxRate` as any} render={({ field: f }) => (
+          <FormItem>
+            <FormLabel className="text-xs">Tax Rate (0–1, e.g. 0.13 = 13%)</FormLabel>
+            <FormControl><Input {...f} value={f.value ?? ''} type="number" min={0} max={1} step={0.01} onPointerDown={stopPropagation} placeholder="0" className="h-8 text-sm" onChange={e => f.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+          </FormItem>
+        )} />
+        <FormField control={control} name={`${fieldPath}.paymentConfig.taxLabel` as any} render={({ field: f }) => (
+          <FormItem>
+            <FormLabel className="text-xs">Tax Label</FormLabel>
+            <FormControl><Input {...f} value={f.value ?? 'HST'} onPointerDown={stopPropagation} placeholder="HST" className="h-8 text-sm" /></FormControl>
+          </FormItem>
+        )} />
+      </div>
+
+      {/* Toggle switches */}
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          ['allowCustomItems', 'Allow custom items', true],
+          ['allowQuantityEdit', 'Allow quantity edits', true],
+          ['allowPromoCodes', 'Allow promo codes', false],
+          ['generateReceipt', 'Generate PDF receipt', true],
+          ['generateQRTicket', 'Generate QR ticket', true],
+        ].map(([key, label, def]) => (
+          <FormField key={key as string} control={control} name={`${fieldPath}.paymentConfig.${key}` as any} render={({ field: f }) => (
+            <FormItem className="flex items-center justify-between rounded border p-2 space-y-0 bg-background">
+              <FormLabel className="text-xs font-normal">{label as string}</FormLabel>
+              <FormControl><Switch checked={f.value ?? (def as boolean)} onCheckedChange={f.onChange} onPointerDown={stopPropagation} /></FormControl>
+            </FormItem>
+          )} />
+        ))}
+      </div>
+
+      <FormField control={control} name={`${fieldPath}.paymentConfig.receiptFooter` as any} render={({ field: f }) => (
+        <FormItem>
+          <FormLabel className="text-xs">Receipt Footer Text</FormLabel>
+          <FormControl><Input {...f} value={f.value ?? ''} onPointerDown={stopPropagation} placeholder="Thank you for your payment." className="h-8 text-sm" /></FormControl>
+        </FormItem>
+      )} />
+
+      {/* Line Items */}
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold">Preset Line Items ({lineItems.length})</Label>
+        {lineItems.map((item, idx) => (
+          <div key={item.id} className="flex items-center gap-2 text-xs bg-background border rounded p-2">
+            <span className="flex-1 font-medium">{item.name}</span>
+            <span className="text-muted-foreground">×{item.quantity}</span>
+            <span className="font-semibold">${item.unitPrice.toFixed(2)}</span>
+            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onPointerDown={stopPropagation} onClick={() => removeLineItem(idx)}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        <div className="border rounded p-3 space-y-2 bg-background">
+          <Label className="text-xs font-medium">Add Line Item</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))} onPointerDown={stopPropagation} placeholder="Item name *" className="h-8 text-xs col-span-2" />
+            <Input value={newItem.description} onChange={e => setNewItem(p => ({ ...p, description: e.target.value }))} onPointerDown={stopPropagation} placeholder="Description (optional)" className="h-8 text-xs col-span-2" />
+            <Input type="number" min={1} value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: parseInt(e.target.value) || 1 }))} onPointerDown={stopPropagation} placeholder="Qty" className="h-8 text-xs" />
+            <Input type="number" min={0.01} step={0.01} value={newItem.unitPrice} onChange={e => setNewItem(p => ({ ...p, unitPrice: e.target.value }))} onPointerDown={stopPropagation} placeholder="Unit price $" className="h-8 text-xs" />
+          </div>
+          <Button type="button" size="sm" className="w-full h-8 text-xs" onPointerDown={stopPropagation} onClick={addLineItem} disabled={!newItem.name.trim() || !newItem.unitPrice || Number(newItem.unitPrice) <= 0}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+          </Button>
+        </div>
+      </div>
+
+      {/* Promo Codes */}
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold">Promo / Discount Codes ({promoCodes.length})</Label>
+        {promoCodes.map((pc, idx) => (
+          <div key={pc.code} className="flex items-center gap-2 text-xs bg-background border rounded p-2">
+            <span className="font-mono font-bold">{pc.code}</span>
+            <span className="text-muted-foreground">{pc.type === 'percent' ? `${pc.value}% off` : `$${pc.value} off`}</span>
+            {pc.label && <span className="text-muted-foreground italic">{pc.label}</span>}
+            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive ml-auto" onPointerDown={stopPropagation} onClick={() => removePromoCode(idx)}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        <div className="border rounded p-3 space-y-2 bg-background">
+          <Label className="text-xs font-medium">Add Promo Code</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={newPromo.code} onChange={e => setNewPromo(p => ({ ...p, code: e.target.value }))} onPointerDown={stopPropagation} placeholder="CODE (e.g. SAVE10) *" className="h-8 text-xs" />
+            <Input value={newPromo.label} onChange={e => setNewPromo(p => ({ ...p, label: e.target.value }))} onPointerDown={stopPropagation} placeholder="Display label (optional)" className="h-8 text-xs" />
+            <Select value={newPromo.type} onValueChange={v => setNewPromo(p => ({ ...p, type: v as any }))}>
+              <SelectTrigger onPointerDown={stopPropagation} className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="percent">Percentage (%)</SelectItem>
+                <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input type="number" min={0.01} step={0.01} value={newPromo.value} onChange={e => setNewPromo(p => ({ ...p, value: e.target.value }))} onPointerDown={stopPropagation} placeholder="Value *" className="h-8 text-xs" />
+          </div>
+          <Button type="button" size="sm" className="w-full h-8 text-xs" onPointerDown={stopPropagation} onClick={addPromoCode} disabled={!newPromo.code.trim() || !newPromo.value || Number(newPromo.value) <= 0}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Code
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listeners }: { fieldPath: FieldTypePath; fieldIndex: number; remove: (index: number) => void; move: (from: number, to: number) => void; totalFields: number; listeners?: any }) {
@@ -306,6 +546,8 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
                 <SelectItem value="currency">Currency (CAD)</SelectItem>
                 <SelectItem value="logo">Logo / Image</SelectItem>
                 <SelectItem value="text-block">Text Block / Description</SelectItem>
+                <SelectItem value="paypal-membership">💳 PayPal Membership Payment</SelectItem>
+                <SelectItem value="paypal-payment">🛒 PayPal Payment (Custom Items)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -614,10 +856,10 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
               <FormItem><FormLabel>Max Files</FormLabel><FormControl><Input type="number" min="1" max="10" {...formField} value={formField.value ?? 1} onChange={e => formField.onChange(parseInt(e.target.value))} onPointerDown={stopPropagation} /></FormControl><FormDescription>Maximum number of files (1-10)</FormDescription></FormItem>
             )} />
             <FormField control={control} name={`${fieldPath}.maxFileSize` as any} render={({ field: formField }) => (
-              <FormItem><FormLabel>Max File Size (MB)</FormLabel><FormControl><Input type="number" min="1" max="50" {...formField} value={formField.value ?? 5} onChange={e => formField.onChange(parseInt(e.target.value))} onPointerDown={stopPropagation} /></FormControl><FormDescription>Maximum size per file in megabytes</FormDescription></FormItem>
+              <FormItem><FormLabel>Max File Size (MB)</FormLabel><FormControl><Input type="number" min="1" max="100" {...formField} value={formField.value ?? 50} onChange={e => formField.onChange(parseInt(e.target.value) || undefined)} onPointerDown={stopPropagation} /></FormControl><FormDescription>Maximum size per file in megabytes (default 50MB)</FormDescription></FormItem>
             )} />
             <FormField control={control} name={`${fieldPath}.fileTypes` as any} render={({ field: formField }) => (
-              <FormItem><FormLabel>Allowed File Types</FormLabel><FormControl><Input {...formField} value={formField.value?.join(', ') ?? '.pdf,.jpg,.png'} onChange={e => formField.onChange(e.target.value.split(',').map((t: string) => t.trim()))} onPointerDown={stopPropagation} placeholder=".pdf,.jpg,.png,.doc,.docx" /></FormControl><FormDescription>Comma-separated file extensions</FormDescription></FormItem>
+              <FormItem><FormLabel>Allowed File Types</FormLabel><FormControl><Input {...formField} value={formField.value?.join(', ') ?? ''} onChange={e => formField.onChange(e.target.value ? e.target.value.split(',').map((t: string) => t.trim()).filter(Boolean) : [])} onPointerDown={stopPropagation} placeholder=".pdf,.doc,.docx (leave empty for all types)" /></FormControl><FormDescription>Comma-separated extensions; leave empty to allow any file type</FormDescription></FormItem>
             )} />
           </div>
         )}
@@ -678,6 +920,9 @@ function FieldEditor({ fieldPath, fieldIndex, remove, move, totalFields, listene
               )} />
             </div>
           </div>
+        )}
+        {field?.type === 'paypal-payment' && (
+          <PaymentFieldConfigEditor fieldPath={fieldPath} />
         )}
         {!(field?.type === 'group' || field?.type === 'anonymous-toggle' || field?.type === 'calculated') && (
           <div className="flex items-center justify-between">

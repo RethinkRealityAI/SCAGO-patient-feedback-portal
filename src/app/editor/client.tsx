@@ -21,7 +21,7 @@ import { DeleteSurveyConfirmation } from '@/components/delete-survey-confirmatio
  * 
  * See: .cursor/rules/firebase-auth-pattern-rules.mdc for details
  */
-import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, deleteSurvey, createSurveyFromTemplate } from '@/lib/client-actions';
+import { createBlankSurvey, createSurvey, createSurveyV2, createConsentSurvey, createMembershipSurvey, deleteSurvey, createSurveyFromTemplate } from '@/lib/client-actions';
 import { yepFormTemplates } from '@/lib/yep-form-templates';
 import {
   DropdownMenu,
@@ -75,7 +75,7 @@ export function CreateSurveyDropdown() {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
-  const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent' | 'board-recruitment') => {
+  const handleCreateSurvey = (templateType: 'blank' | 'default' | 'v2' | 'consent' | 'membership' | 'board-recruitment') => {
     startTransition(async () => {
       let survey;
       switch (templateType) {
@@ -87,6 +87,9 @@ export function CreateSurveyDropdown() {
           break;
         case 'consent':
           survey = await createConsentSurvey();
+          break;
+        case 'membership':
+          survey = await createMembershipSurvey();
           break;
         case 'board-recruitment': {
           const template = yepFormTemplates.find(t => t.id === 'board-recruitment-template');
@@ -176,6 +179,17 @@ export function CreateSurveyDropdown() {
             <span className="font-medium">Digital Consent & Information Collection</span>
             <span className="text-xs text-muted-foreground">
               SCAGO consent form for patient registration and information collection
+            </span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => handleCreateSurvey('membership')}
+          disabled={isPending}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">💳 Become a Member</span>
+            <span className="text-xs text-muted-foreground">
+              SCAGO membership application form with PayPal payment (Individual &amp; Family plans)
             </span>
           </div>
         </DropdownMenuItem>

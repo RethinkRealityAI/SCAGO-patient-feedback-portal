@@ -60,6 +60,33 @@ export type FieldDef = {
   helperText?: string;
   placeholder?: string;
   className?: string;
+  /** File upload: max files, max size (MB), allowed extensions (empty = any) */
+  maxFiles?: number;
+  maxFileSize?: number;
+  fileTypes?: string[];
+  /** Configuration for the generic paypal-payment field type */
+  paymentConfig?: {
+    title?: string;
+    currency?: string;
+    lineItems?: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      quantity: number;
+      unitPrice: number;
+      category?: 'DIGITAL_GOODS' | 'PHYSICAL_GOODS' | 'DONATION';
+    }>;
+    allowCustomItems?: boolean;
+    allowQuantityEdit?: boolean;
+    promoCodes?: Array<{ code: string; type: 'percent' | 'fixed'; value: number; label?: string }>;
+    allowPromoCodes?: boolean;
+    organizationName?: string;
+    taxRate?: number;
+    taxLabel?: string;
+    generateReceipt?: boolean;
+    generateQRTicket?: boolean;
+    receiptFooter?: string;
+  };
 };
 
 interface FormFieldRendererProps {

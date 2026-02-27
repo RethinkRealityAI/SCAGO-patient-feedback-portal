@@ -71,6 +71,8 @@ import {
   CurrencyField,
   CalculatedField,
 } from '@/components/advanced-field-renderers';
+import { PayPalMembershipPayment } from '@/components/paypal-membership-payment';
+import { PayPalPayment } from '@/components/paypal-payment';
 
 // FieldDef type is now imported from form-field-renderer
 
@@ -277,6 +279,12 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
       case 'boolean-row':
         fieldSchema = z.boolean();
         break;
+      case 'paypal-membership':
+        fieldSchema = z.any();
+        break;
+      case 'paypal-payment':
+        fieldSchema = z.any();
+        break;
       default:
         fieldSchema = z.any();
     }
@@ -330,9 +338,14 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
         case 'range':
           return v?.min === undefined || v?.max === undefined;
         case 'boolean-checkbox':
+          // Required consent checkboxes must be explicitly checked.
+          return v !== true;
         case 'anonymous-toggle':
         case 'boolean-row':
           return v === undefined;
+        case 'paypal-membership':
+        case 'paypal-payment':
+          return !v || v.status !== 'paid';
         default:
           return typeof v === 'string' && v.trim() === '';
       }
@@ -820,7 +833,9 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
                 const filePath = `submissions/${survey.id}/${finalSessionId}/${Date.now()}_${safeName}`;
                 const storageRef = ref(storage, filePath);
-                const snapshot = await uploadBytes(storageRef, file);
+                // Set contentType explicitly; some browsers report empty for .doc etc.
+                const contentType = file.type || 'application/octet-stream';
+                const snapshot = await uploadBytes(storageRef, file, { contentType });
                 const downloadUrl = await getDownloadURL(snapshot.ref);
                 return {
                   name: file.name,
@@ -839,9 +854,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
       }
     } catch (uploadError: any) {
       console.error('File upload failed:', uploadError);
+      const errMsg = uploadError?.message || uploadError?.code || String(uploadError);
       toast({
         title: "Upload Failed",
-        description: "There was an error uploading your files. Please try again.",
+        description: errMsg || "There was an error uploading your files. Please try again.",
         variant: "destructive",
       });
       return;
@@ -1228,6 +1244,37 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                       <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
                         {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
                       </div>
+                    );
+                  case 'paypal-membership':
+                    return (
+                      <PayPalMembershipPayment
+                        value={field.value}
+                        onChange={(paymentData) => field.onChange(paymentData)}
+                        disabled={isSubmitting}
+                      />
+                    );
+                  case 'paypal-payment':
+                    return (
+                      <PayPalPayment
+                        config={{
+                          title: fieldConfig.paymentConfig?.title,
+                          currency: fieldConfig.paymentConfig?.currency || 'CAD',
+                          lineItems: fieldConfig.paymentConfig?.lineItems || [],
+                          allowCustomItems: fieldConfig.paymentConfig?.allowCustomItems ?? true,
+                          allowQuantityEdit: fieldConfig.paymentConfig?.allowQuantityEdit ?? true,
+                          promoCodes: fieldConfig.paymentConfig?.promoCodes || [],
+                          allowPromoCodes: fieldConfig.paymentConfig?.allowPromoCodes ?? false,
+                          organizationName: fieldConfig.paymentConfig?.organizationName || 'SCAGO',
+                          taxRate: fieldConfig.paymentConfig?.taxRate ?? 0,
+                          taxLabel: fieldConfig.paymentConfig?.taxLabel || 'Tax',
+                          generateReceipt: fieldConfig.paymentConfig?.generateReceipt ?? true,
+                          generateQRTicket: fieldConfig.paymentConfig?.generateQRTicket ?? true,
+                          receiptFooter: fieldConfig.paymentConfig?.receiptFooter,
+                        }}
+                        value={field.value}
+                        onChange={(paymentData) => field.onChange(paymentData)}
+                        disabled={isSubmitting}
+                      />
                     );
                   default:
                     return <Input {...fieldWithValue} className="max-w-md" />;

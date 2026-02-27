@@ -3,7 +3,7 @@
 import { updateSurvey as serverUpdateSurvey } from '@/app/editor/actions';
 import { db, auth } from '@/lib/firebase';
 import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
-import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
+import { defaultSurvey, surveyV2, consentSurvey, membershipSurvey } from '@/lib/survey-template';
 
 /**
  * ⚠️ CRITICAL: CLIENT-SIDE ACTIONS WITH AUTHENTICATION CONTEXT
@@ -219,6 +219,29 @@ export async function createConsentSurvey() {
       return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create consent survey' };
+  }
+}
+
+export async function createMembershipSurvey() {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error('[createMembershipSurvey] No authenticated user found');
+      return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
+    }
+    console.log('[createMembershipSurvey] Authenticated as:', currentUser.email);
+
+    const newSurveyRef = doc(collection(db, 'surveys'));
+    await setDoc(newSurveyRef, sanitizeFirestoreData(membershipSurvey as any));
+    return { id: newSurveyRef.id };
+  } catch (error) {
+    console.error('Error creating membership survey:', error);
+    console.error('Current user:', auth.currentUser?.email || 'NOT AUTHENTICATED');
+    const err = error as any;
+    if (err?.code === 'permission-denied') {
+      return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
+    }
+    return { error: 'Failed to create membership survey' };
   }
 }
 

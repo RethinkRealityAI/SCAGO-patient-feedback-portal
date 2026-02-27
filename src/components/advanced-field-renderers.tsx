@@ -279,40 +279,49 @@ export function RankingField({ fieldConfig, form }: AdvancedFieldProps) {
 }
 
 // File Upload Field
+// Defaults are permissive (50MB, any type); fieldConfig can override to restrict
 export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldProps) {
   const t = useTranslation(isFrench ? 'fr' : 'en');
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const maxFiles = fieldConfig.maxFiles || 1;
-  const maxFileSizeMB = fieldConfig.maxFileSize || 5;
+  const maxFileSizeMB = fieldConfig.maxFileSize ?? 50; // Default 50MB - permissive for resumes/docs
   const maxFileSize = maxFileSizeMB * 1024 * 1024; // Convert MB to bytes
-  const allowedTypes = fieldConfig.fileTypes || ['.pdf', '.jpg', '.png'];
+  const allowedTypes = fieldConfig.fileTypes ?? []; // Empty = accept all file types
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
       const validFiles: File[] = [];
-      let hasError = false;
+      const errors: string[] = [];
 
       selectedFiles.forEach(file => {
-        const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+        const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
+        const typeOk = allowedTypes.length === 0 || allowedTypes.includes(ext);
+        const sizeOk = file.size <= maxFileSize;
 
-        if (!allowedTypes.includes(ext)) {
-          // In a more robust solution, we might differentiate errors, but focusing on size for now or generic validity
-        }
-
-        if (file.size > maxFileSize) {
-          setError(isFrench
-            ? `Le fichier ${file.name} dépasse la taille maximale de ${maxFileSizeMB} Mo.`
-            : `File ${file.name} exceeds the maximum size of ${maxFileSizeMB}MB.`);
-          hasError = true;
-        } else if (allowedTypes.includes(ext)) {
+        if (!typeOk) {
+          errors.push(
+            isFrench
+              ? `Type de fichier non autorisé pour ${file.name}. Types acceptés : ${allowedTypes.join(', ')}`
+              : `File type not allowed for ${file.name}. Accepted types: ${allowedTypes.join(', ')}`
+          );
+        } else if (!sizeOk) {
+          errors.push(
+            isFrench
+              ? `Le fichier ${file.name} dépasse la taille maximale de ${maxFileSizeMB} Mo.`
+              : `File ${file.name} exceeds the maximum size of ${maxFileSizeMB}MB.`
+          );
+        } else {
           validFiles.push(file);
         }
       });
 
-      if (!hasError && validFiles.length > 0) {
+      if (errors.length > 0) {
+        setError(errors.join('. '));
+      }
+      if (validFiles.length > 0) {
         const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
         setFiles(updatedFiles);
         form.setValue(fieldConfig.id, updatedFiles);
@@ -347,7 +356,8 @@ export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldPr
                   <span className="font-semibold">{t.clickToUpload}</span> {t.orDragAndDrop}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {allowedTypes.join(', ')} ({t.max} {maxFiles} {maxFiles !== 1 ? t.filePlural : t.fileSingular}, {maxFileSizeMB}{t.mbEach})
+                  {allowedTypes.length > 0 ? allowedTypes.join(', ') + ' • ' : ''}
+                  {t.max} {maxFiles} {maxFiles !== 1 ? t.filePlural : t.fileSingular}, {maxFileSizeMB}{t.mbEach}
                 </p>
               </>
             )}
@@ -356,7 +366,7 @@ export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldPr
             type="file"
             className="hidden"
             multiple={maxFiles > 1}
-            accept={allowedTypes.join(',')}
+            accept={allowedTypes.length > 0 ? allowedTypes.join(',') : '*/*'}
             onChange={handleFileChange}
             disabled={files.length >= maxFiles}
           />

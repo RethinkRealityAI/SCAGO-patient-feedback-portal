@@ -3,12 +3,15 @@ import { CreateSurveyDropdown } from './client';
 import { SurveyListClient } from './survey-list-client';
 import { listSurveys } from './actions';
 import { UserInfoHeader } from '@/components/user-info-header';
+import { ensureMembershipSurvey } from '@/lib/seed-surveys';
 
 // Force dynamic rendering and disable caching for this page
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 async function SurveyList() {
+  // Ensure platform-required surveys exist (idempotent, non-fatal on failure)
+  await ensureMembershipSurvey();
   const surveys = await listSurveys();
   return <SurveyListClient initialSurveys={surveys} />;
 }
