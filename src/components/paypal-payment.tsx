@@ -670,10 +670,12 @@ function SuccessPanel({
  * developers during local development.
  */
 function MissingClientIdWarning() {
-  console.warn(
-    '[PayPalPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
-    'PayPal buttons will not render until the environment variable is configured.',
-  );
+  useEffect(() => {
+    console.warn(
+      '[PayPalPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
+      'PayPal buttons will not render until the environment variable is configured.',
+    );
+  }, []);
   return null;
 }
 
