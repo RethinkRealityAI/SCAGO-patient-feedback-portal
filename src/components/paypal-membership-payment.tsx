@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
-import { Check, CreditCard, AlertCircle } from 'lucide-react';
+import { Check, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   SCAGO_MEMBERSHIP_PLANS,
@@ -29,6 +29,19 @@ interface PayPalMembershipPaymentProps {
   clientId?: string;
   /** Whether the field is read-only (e.g. form is already submitted) */
   disabled?: boolean;
+}
+
+/**
+ * Renders nothing but emits a console warning when the PayPal client ID is
+ * missing from the environment. This keeps the UI clean while still alerting
+ * developers during local development.
+ */
+function MissingClientIdWarning() {
+  console.warn(
+    '[PayPalMembershipPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
+    'PayPal buttons will not render until the environment variable is configured.',
+  );
+  return null;
 }
 
 /**
@@ -209,16 +222,9 @@ export function PayPalMembershipPayment({
               </PayPalScriptProvider>
             </div>
           ) : (
-            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">PayPal Configuration Required</p>
-                <p className="text-xs mt-0.5">
-                  Set <code className="font-mono bg-amber-100 px-1 rounded">NEXT_PUBLIC_PAYPAL_CLIENT_ID</code> in{' '}
-                  <code className="font-mono bg-amber-100 px-1 rounded">.env.local</code> to enable payments.
-                </p>
-              </div>
-            </div>
+            // Client ID not available – log a warning and render nothing
+            // (NEXT_PUBLIC_PAYPAL_CLIENT_ID must be set in the environment)
+            <MissingClientIdWarning />
           )}
 
           <p className="text-xs text-muted-foreground text-center">
