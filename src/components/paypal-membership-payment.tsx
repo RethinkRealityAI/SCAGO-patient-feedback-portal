@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
-import { Check, CreditCard, AlertCircle } from 'lucide-react';
+import { Check, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   SCAGO_MEMBERSHIP_PLANS,
@@ -33,16 +33,14 @@ interface PayPalMembershipPaymentProps {
 
 /**
  * Renders nothing but emits a console warning when the PayPal client ID is
- * missing from the environment. Uses useEffect so it only logs once on mount
- * rather than on every render cycle.
+ * missing from the environment. This keeps the UI clean while still alerting
+ * developers during local development.
  */
 function MissingClientIdWarning() {
-  useEffect(() => {
-    console.warn(
-      '[PayPalMembershipPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
-      'PayPal buttons will not render until the environment variable is configured.',
-    );
-  }, []);
+  console.warn(
+    '[PayPalMembershipPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
+    'PayPal buttons will not render until the environment variable is configured.',
+  );
   return null;
 }
 
@@ -72,7 +70,7 @@ export function PayPalMembershipPayment({
 
   const selectedPlan = SCAGO_MEMBERSHIP_PLANS.find((p) => p.id === selectedPlanId) ?? null;
 
-  // Already paid
+  // ── Already paid ────────────────────────────────────────────────────────
   const paidInfo = capturedDetails || value;
   if (isPaid || (value && value.status === 'paid')) {
     return (
@@ -93,7 +91,7 @@ export function PayPalMembershipPayment({
     );
   }
 
-  // Plan picker
+  // ── Plan picker ──────────────────────────────────────────────────────────
   const renderPlanGroup = (category: 'Individual' | 'Family') => (
     <div>
       <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -161,8 +159,9 @@ export function PayPalMembershipPayment({
             </div>
           )}
 
-          {/* PayPal buttons */}
+          {/* PayPal buttons or missing-config notice */}
           {paypalClientId ? (
+            /* key forces PayPal to re-mount when plan or clientId changes */
             <div key={`${paypalClientId}-${selectedPlanId}`}>
               <PayPalScriptProvider
                 options={{
@@ -223,12 +222,13 @@ export function PayPalMembershipPayment({
               </PayPalScriptProvider>
             </div>
           ) : (
-            // Client ID not available - log a warning and render nothing
+            // Client ID not available – log a warning and render nothing
+            // (NEXT_PUBLIC_PAYPAL_CLIENT_ID must be set in the environment)
             <MissingClientIdWarning />
           )}
 
           <p className="text-xs text-muted-foreground text-center">
-            Lock Safe and secure payments powered by PayPal
+            🔒 Safe and secure payments powered by PayPal
           </p>
         </div>
       ) : (
