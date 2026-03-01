@@ -461,7 +461,7 @@ function SelectWithOtherField({ field, options, label, isFrench = false }: { fie
             {/* label suppressed to avoid redundancy; placeholder covers */}
             <Select onValueChange={selectionField.onChange} value={coerceSelectValue(selectionField.value)}>
               <FormControl>
-                <SelectTrigger className="max-w-md">
+                <SelectTrigger className="w-full sm:max-w-md">
                   <SelectValue placeholder={isFrench ? `Sélectionnez ${label.toLowerCase() === 'city' ? 'une ville' : label.toLowerCase() === 'department' ? 'un département' : label.toLowerCase() === 'hospital' ? 'un hôpital' : 'une option'}` : `Select a ${label.toLowerCase()}`} />
                 </SelectTrigger>
               </FormControl>
@@ -484,7 +484,7 @@ function SelectWithOtherField({ field, options, label, isFrench = false }: { fie
           render={({ field: otherField }) => (
             <FormItem>
               <FormControl>
-                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="max-w-md" />
+                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="w-full sm:max-w-md" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -525,7 +525,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
-                    className="w-full max-w-md justify-between font-normal"
+                    className="w-full sm:max-w-md justify-between font-normal"
                   >
                     {selectedOption ? translateOption(selectedOption.label, isFrench ? 'fr' : 'en') : (isFrench ? `Sélectionnez ${label.toLowerCase() === 'hospital' ? 'un hôpital' : label.toLowerCase() === 'department' ? 'un département' : label.toLowerCase() === 'city' ? 'une ville' : 'une option'}...` : `Select a ${label.toLowerCase()}...`)}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -579,7 +579,7 @@ function SearchableSelectWithOtherField({ field, options, label, isFrench = fals
           render={({ field: otherField }) => (
             <FormItem>
               <FormControl>
-                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="max-w-md" />
+                <Input {...otherField} value={otherField.value ?? ''} placeholder={isFrench ? 'Veuillez préciser…' : 'Please specify…'} className="w-full sm:max-w-md" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -1017,13 +1017,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 const fieldWithValue = { ...field, value: field.value ?? '' };
                 switch (fieldConfig.type) {
                   case 'text':
-                    return <Input {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : undefined} />;
+                    return <Input {...fieldWithValue} className="w-full sm:max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : undefined} />;
                   case 'url':
-                    return <Input type="url" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : "https://example.com"} />;
+                    return <Input type="url" {...fieldWithValue} className="w-full sm:max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : "https://example.com"} />;
                   case 'email':
-                    return <Input type="email" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterEmail} />;
+                    return <Input type="email" {...fieldWithValue} className="w-full sm:max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterEmail} />;
                   case 'phone':
-                    return <Input type="tel" {...fieldWithValue} className="max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterPhoneNumber} />;
+                    return <Input type="tel" {...fieldWithValue} className="w-full sm:max-w-md" placeholder={fieldConfig.placeholder ? translateFieldLabel(fieldConfig.placeholder, isFrench ? 'fr' : 'en') : t.enterPhoneNumber} />;
                   case 'digital-signature':
                     return (
                       <SignaturePad
@@ -1035,17 +1035,17 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   case 'date':
                     return <DateField field={field} isFrench={isFrench} />;
                   case 'time':
-                    return <Input type="time" {...fieldWithValue} className="max-w-md" />;
+                    return <Input type="time" {...fieldWithValue} className="w-full sm:max-w-md" />;
                   case 'number':
-                    return <Input type="number" {...fieldWithValue} className="max-w-md" />;
+                    return <Input type="number" {...fieldWithValue} className="w-full sm:max-w-md" />;
                   case 'textarea':
-                    return <Textarea {...fieldWithValue} className="max-w-2xl" />;
+                    return <Textarea {...fieldWithValue} className="w-full sm:max-w-2xl" />;
                   case 'select':
                   case 'province-ca':
                     const options = fieldConfig.type === 'province-ca' ? provinces : fieldConfig.options || [];
                     return (
                       <Select onValueChange={field.onChange} value={coerceSelectValue(field.value)}>
-                        <SelectTrigger className="max-w-md">
+                        <SelectTrigger className="w-full sm:max-w-md">
                           <SelectValue placeholder={translateOption("Select an option", isFrench ? 'fr' : 'en')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -1277,7 +1277,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                       />
                     );
                   default:
-                    return <Input {...fieldWithValue} className="max-w-md" />;
+                    return <Input {...fieldWithValue} className="w-full sm:max-w-md" />;
                 }
               })()}
             </FormControl>
@@ -1289,16 +1289,16 @@ export default function FeedbackForm({ survey }: { survey: any }) {
   };
 
   return (
-    <Card className={`w-full max-w-5xl mx-auto rounded-lg border p-6 shadow-sm ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
+    <Card className={`w-full max-w-5xl mx-auto rounded-lg border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
       <CardHeader className="p-0">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             {appearance.showTitle && (
               <CardTitle className={`${titleSizeClass} text-primary`}>{survey.title}</CardTitle>
             )}
             <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description}</CardDescription>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 self-start">
             {/* Language Toggle */}
             <LanguageToggle
               isFrench={isFrench}
@@ -1309,6 +1309,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={async () => {
                   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
                   const title = survey.shareTitle || t.shareTitle;
@@ -1324,13 +1325,14 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                 }}
                 title={survey.shareTitle || t.shareTitle}
               >
-                <Share2 className="h-4 w-4 mr-2" /> {t.share}
+                <Share2 className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">{t.share}</span>
               </Button>
             )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-4 sm:px-6 lg:px-8 mt-6">
+      <CardContent className="px-0 mt-4 sm:mt-6">
         {survey.saveProgressEnabled && (
           <div className="mb-6 text-sm text-muted-foreground">
             {t.progressSaved}
@@ -1346,14 +1348,14 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               const visitTypeValue = (watchedValues as any)['visitType'];
               const hideUntilVisitType = isEngagementSection && (!visitTypeValue || (Array.isArray(visitTypeValue) && visitTypeValue.length === 0));
               return (
-                <Card key={section.id} className="rounded-lg border p-5 shadow-sm hover:shadow-md hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out md:hover:shadow-lg md:hover:-translate-y-2 md:hover:scale-[1.02] sm:shadow-md sm:-translate-y-1 sm:scale-[1.01]">
+                <Card key={section.id} className="rounded-lg border p-3 sm:p-5 shadow-sm hover:shadow-md hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out md:hover:shadow-lg md:hover:-translate-y-2 md:hover:scale-[1.02]">
                   <CardHeader className="p-0">
                     <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{translateSectionTitle(section.title, isFrench ? 'fr' : 'en')}</CardTitle>
                     {section.description && (
                       <CardDescription className="mt-2">{section.description}</CardDescription>
                     )}
                   </CardHeader>
-                  <CardContent className="px-4 sm:px-6 lg:px-8 mt-6">
+                  <CardContent className="px-0 sm:px-2 mt-4 sm:mt-6">
                     <div className="space-y-8">
                       {hideUntilVisitType && (
                         <div className="text-sm text-muted-foreground">
@@ -1437,7 +1439,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                                               (fieldDef as any).otherOption.placeholder || 'Enter details...',
                                               isFrench ? 'fr' : 'en'
                                             )}
-                                            className="max-w-2xl"
+                                            className="w-full sm:max-w-2xl"
                                           />
                                         ) : (
                                           <Input
@@ -1446,7 +1448,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                                               (fieldDef as any).otherOption.placeholder || 'Enter details...',
                                               isFrench ? 'fr' : 'en'
                                             )}
-                                            className="max-w-md"
+                                            className="w-full sm:max-w-md"
                                           />
                                         )}
                                       </FormControl>
@@ -1465,7 +1467,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               );
             })}
 
-            <CardFooter className="px-4 sm:px-6 lg:px-8 pt-8 flex justify-center">
+            <CardFooter className="px-0 pt-6 sm:pt-8 flex justify-center">
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1478,7 +1480,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             </CardFooter>
 
             {submitErrors.length > 0 && (
-              <div className="px-4 sm:px-6 lg:px-8">
+              <div className="px-0">
                 <Card className="mt-4 border-destructive/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-destructive">{t.missingInfo}</CardTitle>
