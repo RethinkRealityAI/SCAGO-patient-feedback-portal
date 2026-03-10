@@ -265,6 +265,12 @@ export async function generateSubmissionPdf(
                 continue;
             }
 
+            // Handle single file upload objects
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'url' in value && 'name' in value) {
+                fileAttachments.push({ label, files: [value as FileAttachment] });
+                continue;
+            }
+
             const formattedValue = formatValueForPdf(value);
             if (!formattedValue && formattedValue !== '0') continue; // Skip empty values
 

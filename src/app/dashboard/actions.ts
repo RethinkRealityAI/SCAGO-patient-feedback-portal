@@ -555,8 +555,11 @@ export async function exportSubmissionsPdf(params: {
         let displayValue = '';
 
         if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'url' in (value[0] as any)) {
-          // Keep file upload logic separate
-          displayValue = value.map((f: any) => f.name || f.url).join(', ');
+          // File upload array: include file names and URLs
+          displayValue = value.map((f: any) => f.name ? `${f.name} - ${f.url}` : f.url).join(', ');
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'url' in value) {
+          // Single file upload object
+          displayValue = value.name ? `${value.name} - ${value.url}` : value.url;
         } else {
           const formatted = formatAnswerValue(value);
           displayValue = Array.isArray(formatted) ? formatted.join(', ') : formatted;

@@ -113,6 +113,22 @@ function extractStringValue(value: any): string {
   return String(value)
 }
 
+// Helper function to format a field value for CSV export, handling file uploads
+function formatValueForCSV(value: any): string {
+  // File upload arrays: extract URLs
+  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0]?.url) {
+    return value.map((f: any) => f.name ? `${f.name}: ${f.url}` : f.url).join('; ')
+  }
+  // Single file upload object
+  if (typeof value === 'object' && value !== null && !Array.isArray(value) && value.url) {
+    return value.name ? `${value.name}: ${value.url}` : value.url
+  }
+  // Fall back to standard formatting
+  const formatted = formatAnswerValue(value)
+  const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted
+  return displayValue === 'N/A' ? '' : displayValue
+}
+
 /**
  * Robustly extract hospital or location information from a submission.
  */
@@ -1202,17 +1218,13 @@ export default function Dashboard() {
         // Add ordered fields
         order.forEach(key => {
           const val = (sub as any)[key];
-          const formatted = formatAnswerValue(val);
-          const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
-          row.push(displayValue === 'N/A' ? '' : displayValue);
+          row.push(formatValueForCSV(val));
         });
 
         // Add extra fields
         Array.from(extraKeys).forEach(key => {
           const val = (sub as any)[key];
-          const formatted = formatAnswerValue(val);
-          const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
-          row.push(displayValue === 'N/A' ? '' : displayValue);
+          row.push(formatValueForCSV(val));
         });
 
         return row;
@@ -1277,7 +1289,13 @@ export default function Dashboard() {
         ...fieldKeys.map(key => {
           const val = (sub as any)[key]
           if (val === null || val === undefined) return ''
+          // File upload arrays: extract name and URL
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object' && val[0]?.url) {
+            return val.map((v: any) => v.name ? `${v.name}: ${v.url}` : v.url).join('; ')
+          }
           if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? (v.name || v.url || JSON.stringify(v)) : String(v)).join('; ')
+          // Single file upload object
+          if (typeof val === 'object' && val.url) return val.name ? `${val.name}: ${val.url}` : val.url
           if (typeof val === 'object') return extractStringValue(val)
           return String(val)
         })
@@ -2926,10 +2944,20 @@ export default function Dashboard() {
                                         href={file.url}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center gap-2 text-[#C8262A] hover:text-[#a51f22] underline text-sm"
+                                        className="flex items-center gap-3 p-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-[#C8262A]/5 hover:border-[#C8262A]/30 transition-colors group"
                                       >
-                                        <FileText className="h-4 w-4 flex-shrink-0" />
-                                        {file.name || `File ${i + 1}`}
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#C8262A]/10 flex items-center justify-center">
+                                          <FileText className="h-4 w-4 text-[#C8262A]" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium text-[#C8262A] group-hover:text-[#a51f22] truncate">
+                                            {file.name || `File ${i + 1}`}
+                                          </p>
+                                          {file.type && (
+                                            <p className="text-xs text-gray-400">{file.type}</p>
+                                          )}
+                                        </div>
+                                        <Download className="h-4 w-4 text-gray-400 group-hover:text-[#C8262A] flex-shrink-0" />
                                       </a>
                                     ))}
                                   </div>
@@ -2948,10 +2976,20 @@ export default function Dashboard() {
                                     href={value.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-[#C8262A] hover:text-[#a51f22] underline text-sm"
+                                    className="flex items-center gap-3 p-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-[#C8262A]/5 hover:border-[#C8262A]/30 transition-colors group"
                                   >
-                                    <FileText className="h-4 w-4 flex-shrink-0" />
-                                    {value.name || 'View Document'}
+                                    <div className="flex-shrink-0 w-8 h-8 rounded-md bg-[#C8262A]/10 flex items-center justify-center">
+                                      <FileText className="h-4 w-4 text-[#C8262A]" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-[#C8262A] group-hover:text-[#a51f22] truncate">
+                                        {value.name || 'View Document'}
+                                      </p>
+                                      {value.type && (
+                                        <p className="text-xs text-gray-400">{value.type}</p>
+                                      )}
+                                    </div>
+                                    <Download className="h-4 w-4 text-gray-400 group-hover:text-[#C8262A] flex-shrink-0" />
                                   </a>
                                 </div>
                               );
@@ -3086,11 +3124,9 @@ export default function Dashboard() {
                             ['Date', safeFormatDateForExport(activeSubmission.submittedAt)],
                             ['Submission ID', activeSubmission.id],
                             ...fields.map(([key, value]) => {
-                              const formatted = formatAnswerValue(value);
-                              const displayValue = Array.isArray(formatted) ? formatted.join('; ') : formatted;
                               return [
                                 getFieldLabel(key, activeSubmission.surveyId),
-                                displayValue
+                                formatValueForCSV(value)
                               ];
                             })
                           ].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
