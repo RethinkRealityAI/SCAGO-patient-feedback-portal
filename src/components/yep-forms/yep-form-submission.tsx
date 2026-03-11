@@ -2,10 +2,9 @@
 
 import React, { useTransition } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { YEPFormTemplate, type YEPFormSubmission as YEPFormSubmissionType, yepFormTemplateSchema } from '@/lib/yep-forms-types';
+import { YEPFormTemplate, type YEPFormSubmission as YEPFormSubmissionType } from '@/lib/yep-forms-types';
 import { useToast } from '@/hooks/use-toast';
 import { YEPFormRenderer } from './yep-form-renderer';
 import { submitYEPForm } from '@/app/yep-forms/actions';
@@ -20,26 +19,37 @@ export default function YEPFormSubmission({ formTemplate, onSubmissionSuccess }:
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
-  // Dynamically create a Zod schema for the form values based on the template
-  const dynamicSchema = yepFormTemplateSchema.pick({ sections: true }).transform((data) => {
-    const values: Record<string, any> = {};
-    data.sections.forEach(section => {
-      section.fields.forEach(field => {
-        values[field.id] = undefined;
-      });
-    });
-    return values;
-  });
-
   const form = useForm<any>({
-    resolver: zodResolver(dynamicSchema),
     defaultValues: {},
   });
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (rawFormData: any) => {
     startTransition(async () => {
       try {
-        // First, create the submission record via server action
+        // Extract field values from the nested sections structure into a flat map
+        // The form stores data as sections[i].fields[j].value, but we need { fieldId: value }
+        const data: Record<string, any> = {};
+        if (rawFormData.sections && Array.isArray(rawFormData.sections)) {
+          formTemplate.sections.forEach((section, sectionIndex) => {
+            const sectionData = rawFormData.sections[sectionIndex];
+            if (!sectionData?.fields) return;
+            section.fields.forEach((fieldDef, fieldIndex) => {
+              const fieldData = sectionData.fields[fieldIndex];
+              if (fieldData?.value !== undefined && fieldData?.value !== null) {
+                data[fieldDef.id] = fieldData.value;
+              }
+            });
+          });
+        }
+
+        // Strip undefined values to prevent Firestore errors
+        for (const key of Object.keys(data)) {
+          if (data[key] === undefined) {
+            delete data[key];
+          }
+        }
+
+        // Create the submission record via server action
         const submitResult = await submitYEPForm(formTemplate.id!, data);
 
         if (!submitResult.success || !submitResult.data) {

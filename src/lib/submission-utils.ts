@@ -33,7 +33,7 @@ function docToSubmission(doc: any): FeedbackSubmission {
   return {
     id: doc.id,
     ...data,
-    rating: Number(data.rating || 0),
+    ...(data.rating != null ? { rating: Number(data.rating) } : {}),
     submittedAt: parseFirestoreDate(data.submittedAt),
     surveyId: data.surveyId || '',
   } as FeedbackSubmission;
@@ -105,7 +105,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
       return {
         id: doc.id,
         ...data,
-        rating: Number(data.rating || 0),
+        ...(data.rating != null ? { rating: Number(data.rating) } : {}),
         submittedAt: parseFirestoreDate(data.submittedAt),
         surveyId: data.surveyId || '',
       } as FeedbackSubmission;
@@ -120,13 +120,16 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
       const surveysSnapshot = await firestore.collection('surveys').get();
       for (const surveyDoc of surveysSnapshot.docs) {
         const snapshot = await surveyDoc.ref.collection('submissions').get();
-        const surveySubmissions = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          rating: Number(doc.data().rating || 0),
-          submittedAt: parseFirestoreDate(doc.data().submittedAt),
-          surveyId: doc.data().surveyId || surveyDoc.id,
-        } as FeedbackSubmission));
+        const surveySubmissions = snapshot.docs.map(doc => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            ...d,
+            ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+            submittedAt: parseFirestoreDate(d.submittedAt),
+            surveyId: d.surveyId || surveyDoc.id,
+          } as FeedbackSubmission;
+        });
         const seenIds = new Set(submissions.map(s => s.id));
         submissions.push(...surveySubmissions.filter(s => !seenIds.has(s.id)));
       }
@@ -135,13 +138,16 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
 
   try {
     const legacySnapshot = await firestore.collection('feedback').get();
-    const legacySubmissions = legacySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      rating: Number(doc.data().rating || 0),
-      submittedAt: parseFirestoreDate(doc.data().submittedAt),
-      surveyId: doc.data().surveyId || '',
-    } as FeedbackSubmission));
+    const legacySubmissions = legacySnapshot.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        ...d,
+        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+        submittedAt: parseFirestoreDate(d.submittedAt),
+        surveyId: d.surveyId || '',
+      } as FeedbackSubmission;
+    });
     const seenIds = new Set(submissions.map(s => s.id));
     submissions.push(...legacySubmissions.filter(s => !seenIds.has(s.id)));
   } catch (e) { }
@@ -167,33 +173,42 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
 
   try {
     const snapshot = await firestore.collection('surveys').doc(surveyId).collection('submissions').get();
-    submissions.push(...snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      rating: Number(doc.data().rating || 0),
-      submittedAt: parseFirestoreDate(doc.data().submittedAt),
-      surveyId: doc.data().surveyId || surveyId,
-    } as FeedbackSubmission)));
+    submissions.push(...snapshot.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        ...d,
+        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+        submittedAt: parseFirestoreDate(d.submittedAt),
+        surveyId: d.surveyId || surveyId,
+      } as FeedbackSubmission;
+    }));
 
     const groupSnapshot = await firestore.collectionGroup('submissions').where('surveyId', '==', surveyId).get();
-    const groupSubs = groupSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      rating: Number(doc.data().rating || 0),
-      submittedAt: parseFirestoreDate(doc.data().submittedAt),
-      surveyId: doc.data().surveyId || surveyId,
-    } as FeedbackSubmission));
+    const groupSubs = groupSnapshot.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        ...d,
+        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+        submittedAt: parseFirestoreDate(d.submittedAt),
+        surveyId: d.surveyId || surveyId,
+      } as FeedbackSubmission;
+    });
     const seenIds = new Set(submissions.map(s => s.id));
     submissions.push(...groupSubs.filter(s => !seenIds.has(s.id)));
 
     const legacySnapshot = await firestore.collection('feedback').where('surveyId', '==', surveyId).get();
-    const legacySubs = legacySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      rating: Number(doc.data().rating || 0),
-      submittedAt: parseFirestoreDate(doc.data().submittedAt),
-      surveyId: doc.data().surveyId || surveyId,
-    } as FeedbackSubmission));
+    const legacySubs = legacySnapshot.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        ...d,
+        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+        submittedAt: parseFirestoreDate(d.submittedAt),
+        surveyId: d.surveyId || surveyId,
+      } as FeedbackSubmission;
+    });
     const seenIds2 = new Set(submissions.map(s => s.id));
     submissions.push(...legacySubs.filter(s => !seenIds2.has(s.id)));
   } catch (e) { }

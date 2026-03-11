@@ -42,7 +42,20 @@ export const QUESTION_MAPPING: Record<string, string> = {
     hospitalInteraction: "Detailed Experience Description",
     rating: "Overall Care Rating",
     submittedAt: "Submission Date",
-    surveyId: "Survey Type"
+    surveyId: "Survey Type",
+
+    // Board Recruitment Form
+    fullName: "Full Name",
+    primaryPhone: "Primary Phone Number",
+    "term-commitment": "3-Year Term Commitment",
+    "confidentiality-agreement": "Confidentiality Agreement",
+    "committee-support": "Interested in Committee Support",
+    "preferred-committees": "Preferred Committees",
+    "board-experience-desc": "Board Experience",
+    "experience-attachment": "Experience Document",
+    "other-orgs": "Other Organizations",
+    "references-matrix": "References",
+    "resume-upload": "Resume Upload"
 };
 
 /**
@@ -69,8 +82,10 @@ export function formatAnswerValue(value: any): string | string[] {
     if (value === null || value === undefined) return 'N/A';
 
     if (Array.isArray(value)) {
-        // Skip file upload arrays (handled separately in the UI)
-        if (value.length > 0 && typeof value[0] === 'object' && value[0]?.url) return 'N/A';
+        // File upload arrays: return file names and URLs
+        if (value.length > 0 && typeof value[0] === 'object' && value[0]?.url) {
+            return value.map((f: any) => f.name ? `${f.name} (${f.url})` : f.url);
+        }
 
         // If it's an array of strings/numbers, format them
         if (value.every(v => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
@@ -89,8 +104,10 @@ export function formatAnswerValue(value: any): string | string[] {
     }
 
     if (typeof value === 'object') {
-        // Skip file upload objects (handled separately in the UI)
-        if (value.url) return 'N/A';
+        // File upload objects: return file name and URL
+        if (value.url) {
+            return value.name ? `${value.name} (${value.url})` : value.url;
+        }
 
         // Handle {selection: '...', other: '...'} from hospital-on/city-on/department-on
         if (value.selection) {

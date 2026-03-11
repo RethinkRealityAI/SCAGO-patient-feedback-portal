@@ -824,11 +824,17 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     const processedValues = { ...values };
     try {
       for (const field of allFields) {
-        if (field.type === 'file-upload' && values[field.id]) {
-          const files = values[field.id];
-          if (Array.isArray(files) && files.length > 0) {
-            const uploadPromises = files.map(async (file: any) => {
-              if (file instanceof File) {
+        if (field.type === 'file-upload') {
+          const fieldValue = values[field.id];
+          // If field value is already uploaded metadata (array of objects with url), keep as-is
+          if (Array.isArray(fieldValue) && fieldValue.length > 0 && typeof fieldValue[0] === 'object' && fieldValue[0]?.url) {
+            processedValues[field.id] = fieldValue;
+            continue;
+          }
+          if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+            const uploadPromises = fieldValue.map(async (file: any) => {
+              // Use duck-typing instead of instanceof to handle cross-realm File objects
+              if (file && typeof file === 'object' && typeof file.name === 'string' && typeof file.size === 'number' && typeof file.arrayBuffer === 'function') {
                 // Sanitize filename and add timestamp to avoid collisions
                 const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
                 const filePath = `submissions/${survey.id}/${finalSessionId}/${Date.now()}_${safeName}`;
@@ -846,9 +852,17 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   uploadedAt: new Date().toISOString()
                 };
               }
-              return file; // Already metadata
+              // Already metadata object with url — keep it
+              if (file && typeof file === 'object' && file.url) {
+                return file;
+              }
+              return null; // Skip unrecognized values
             });
-            processedValues[field.id] = await Promise.all(uploadPromises);
+            const results = (await Promise.all(uploadPromises)).filter(Boolean);
+            processedValues[field.id] = results.length > 0 ? results : undefined;
+          } else {
+            // No file selected — remove the key so Firestore doesn't store undefined/empty
+            delete processedValues[field.id];
           }
         }
       }
@@ -861,6 +875,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         variant: "destructive",
       });
       return;
+    }
+
+    // Strip undefined values to prevent Firestore errors
+    for (const key of Object.keys(processedValues)) {
+      if (processedValues[key] === undefined) {
+        delete processedValues[key];
+      }
     }
 
     const result = await submitFeedback(survey.id, processedValues, finalSessionId);

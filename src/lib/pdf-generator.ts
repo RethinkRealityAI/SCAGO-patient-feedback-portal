@@ -1,6 +1,6 @@
 'use server';
 
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFArray } from 'pdf-lib';
 
 /**
  * Represents a file attachment uploaded with a form submission.
@@ -265,6 +265,12 @@ export async function generateSubmissionPdf(
                 continue;
             }
 
+            // Handle single file upload objects
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'url' in value && 'name' in value) {
+                fileAttachments.push({ label, files: [value as FileAttachment] });
+                continue;
+            }
+
             const formattedValue = formatValueForPdf(value);
             if (!formattedValue && formattedValue !== '0') continue; // Skip empty values
 
@@ -333,7 +339,7 @@ export async function generateSubmissionPdf(
                     }
 
                     // Draw file name as a link annotation
-                    const linkText = `📎 ${sanitizeText(file.name)}`;
+                    const linkText = sanitizeText(`[File] ${file.name}`);
                     const linkWidth = font.widthOfTextAtSize(linkText, 10);
 
                     page.drawText(linkText, {
@@ -345,24 +351,30 @@ export async function generateSubmissionPdf(
                     });
 
                     // Add link annotation for clickable URL
-                    const linkAnnotation = doc.context.obj({
-                        Type: 'Annot',
-                        Subtype: 'Link',
-                        Rect: [margin + 10, cursorY - 2, margin + 10 + linkWidth, cursorY + 10],
-                        Border: [0, 0, 0],
-                        A: {
-                            Type: 'Action',
-                            S: 'URI',
-                            URI: file.url,
-                        },
-                    });
+                    try {
+                        const linkAnnotation = doc.context.obj({
+                            Type: 'Annot',
+                            Subtype: 'Link',
+                            Rect: [margin + 10, cursorY - 2, margin + 10 + linkWidth, cursorY + 10],
+                            Border: [0, 0, 0],
+                            A: {
+                                Type: 'Action',
+                                S: 'URI',
+                                URI: file.url,
+                            },
+                        });
 
-                    const linkRef = doc.context.register(linkAnnotation);
-                    const existingAnnots = page.node.get(doc.context.obj('Annots'));
-                    if (existingAnnots) {
-                        (existingAnnots as any).push(linkRef);
-                    } else {
-                        page.node.set(doc.context.obj('Annots'), doc.context.obj([linkRef]));
+                        const linkRef = doc.context.register(linkAnnotation);
+                        const annotsKey = PDFName.of('Annots');
+                        const existingAnnots = page.node.get(annotsKey);
+                        if (existingAnnots && existingAnnots instanceof PDFArray) {
+                            existingAnnots.push(linkRef);
+                        } else {
+                            page.node.set(annotsKey, doc.context.obj([linkRef]));
+                        }
+                    } catch (annotError) {
+                        // Link annotation failed — file text is still rendered, just not clickable
+                        console.warn('[generateSubmissionPdf] Link annotation failed for file:', file.name, annotError);
                     }
 
                     cursorY -= 14;

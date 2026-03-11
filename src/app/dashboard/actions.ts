@@ -3,6 +3,7 @@
 // AI imports will be loaded dynamically to avoid build issues
 import type { FeedbackSubmission } from './types';
 import { unstable_noStore as noStore } from 'next/cache';
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getQuestionText, formatAnswerValue } from '@/lib/question-mapping';
 import { extractName } from '@/lib/submission-utils';
@@ -125,6 +126,7 @@ export async function analyzeFeedback() {
 
     return { summary: report };
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     console.error('Error analyzing feedback:', error);
     if (error instanceof Error) {
       return { error: error.message };
@@ -267,6 +269,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
 
     return { summary: report };
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     console.error('Error analyzing feedback for survey:', error);
     if (error instanceof Error) {
       return { error: error.message };
@@ -459,6 +462,7 @@ export async function generateAnalysisPdf(params: {
     const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
     return { pdfBase64 };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     console.error('Error generating PDF:', e);
     return { error: 'Failed to generate PDF.' };
   }
@@ -536,15 +540,14 @@ export async function exportSubmissionsPdf(params: {
       // Determine fields to display and their order
       let fields = Object.entries(sub).filter(([k]) => !['id', 'surveyId', 'submittedAt', 'userId', 'sessionId'].includes(k));
 
-      if (params.fieldOrder) {
+      if (params.fieldOrder && params.fieldOrder.length > 0) {
         const order = params.fieldOrder;
+        // Only include fields that are in the survey's field order (filter out irrelevant columns)
+        fields = fields.filter(([k]) => order.includes(k));
         fields.sort((a, b) => {
           const indexA = order.indexOf(a[0]);
           const indexB = order.indexOf(b[0]);
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          return a[0].localeCompare(b[0]);
+          return indexA - indexB;
         });
       }
 
@@ -555,8 +558,11 @@ export async function exportSubmissionsPdf(params: {
         let displayValue = '';
 
         if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'url' in (value[0] as any)) {
-          // Keep file upload logic separate
-          displayValue = value.map((f: any) => f.name || f.url).join(', ');
+          // File upload array: include file names and URLs
+          displayValue = value.map((f: any) => f.name ? `${f.name} - ${f.url}` : f.url).join(', ');
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'url' in value) {
+          // Single file upload object
+          displayValue = value.name ? `${value.name} - ${value.url}` : value.url;
         } else {
           const formatted = formatAnswerValue(value);
           displayValue = Array.isArray(formatted) ? formatted.join(', ') : formatted;
@@ -618,6 +624,7 @@ export async function exportSubmissionsPdf(params: {
     const pdfBytes = await doc.save();
     return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     console.error('Error exporting PDF:', e);
     return { error: 'Failed to generate export PDF' };
   }
@@ -635,25 +642,28 @@ export async function exportSubmissionPdf(params: {
 
     const sub = params.submission;
     const { generateSubmissionPdf } = await import('@/lib/pdf-generator');
-    const { extractName } = await import('@/lib/submission-utils');
+    const { extractName, parseFirestoreDate } = await import('@/lib/submission-utils');
+
+    // Internal fields to exclude from PDF content
+    const excludeKeys = new Set(['id', 'surveyId', 'sessionId', 'submittedAt', 'userId']);
 
     // We need to reorder the data object before passing it to generateSubmissionPdf
     // BUT generateSubmissionPdf uses Object.entries, so we should create an object with keys in order.
     const orderedData: Record<string, any> = {};
-    if (params.fieldOrder) {
+    if (params.fieldOrder && params.fieldOrder.length > 0) {
+      // Only include fields from the survey's field order (no irrelevant columns)
       for (const key of params.fieldOrder) {
         if (sub[key as keyof FeedbackSubmission] !== undefined) {
           orderedData[key] = sub[key as keyof FeedbackSubmission];
         }
       }
-      // Add any other fields not in fieldOrder
+    } else {
+      // Copy all fields except internal ones
       for (const [key, value] of Object.entries(sub)) {
-        if (!params.fieldOrder.includes(key) && !['id', 'surveyId', 'submittedAt', 'userId', 'sessionId', 'rating', 'hospitalInteraction'].includes(key)) {
+        if (!excludeKeys.has(key) && value !== undefined && value !== null) {
           orderedData[key] = value;
         }
       }
-    } else {
-      Object.assign(orderedData, sub);
     }
 
     // Create a descriptive title
@@ -662,10 +672,13 @@ export async function exportSubmissionPdf(params: {
       ? `${params.surveyTitle}${submitterName ? ` - ${submitterName}` : ''}`
       : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
 
+    // Parse submittedAt robustly — it may arrive as string, Date, or Firestore Timestamp
+    const submittedAt = parseFirestoreDate(sub.submittedAt);
+
     const pdfBytes = await generateSubmissionPdf({
       title,
       surveyId: sub.surveyId,
-      submittedAt: new Date(sub.submittedAt),
+      submittedAt,
       data: orderedData,
       fieldLabels: params.fieldLabels
     });
@@ -673,6 +686,7 @@ export async function exportSubmissionPdf(params: {
     if (!pdfBytes) return { error: 'Failed to generate PDF' };
     return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     console.error('Error exporting single PDF:', e);
     return { error: 'Failed to generate PDF' };
   }
@@ -766,6 +780,7 @@ User question: ${query}`;
     }
 
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     console.error('[chatWithFeedbackData] Unexpected error:', e);
     return { error: 'An unexpected system error occurred. Please try again later.' };
   }
