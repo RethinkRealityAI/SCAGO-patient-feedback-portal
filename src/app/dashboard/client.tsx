@@ -1183,28 +1183,33 @@ export default function Dashboard() {
       const labels = surveyFieldLabelsMap.get(selectedSurvey) || {}
       const order = surveyFieldOrderMap.get(selectedSurvey) || []
 
-      // Collect all keys from all submissions to ensure we don't miss anything that might not be in the order
-      const extraKeys = new Set<string>()
-      filtered.forEach(sub => {
-        Object.keys(sub).forEach(key => {
-          if (!['id', 'surveyId', 'submittedAt', 'userId', 'sessionId', 'rating', 'hospitalInteraction'].includes(key) && !order.includes(key)) {
-            extraKeys.add(key)
-          }
-        })
-      })
+      // Only include rating/hospitalInteraction if they are part of this survey's field definitions
+      const hasRating = order.includes('rating') || (filtered.some(s => s.rating != null && s.rating !== 0) && order.length === 0);
+      const hasInteraction = order.includes('hospitalInteraction') || (filtered.some(s => !!s.hospitalInteraction) && order.length === 0);
 
-      // Construct headers: Basic info + Ordered Fields + Extra Fields
+      // Construct headers: Basic info + Ordered Fields
+      // When a survey has a defined field order, only export those fields (no extra columns from other surveys)
       const headers = ['Date', 'ID']
 
-      // Add rating and hospital interaction for feedback surveys if they exist
-      const hasRating = filtered.some(s => s.rating !== undefined);
       if (hasRating) headers.push('Rating');
-
-      const hasInteraction = filtered.some(s => s.hospitalInteraction !== undefined);
       if (hasInteraction) headers.push('Experience/Feedback');
 
-      headers.push(...order.map(key => labels[key] || key));
-      headers.push(...Array.from(extraKeys).map(key => labels[key] || key));
+      headers.push(...order.map(key => labels[key] || getQuestionText(key)));
+
+      // Only add extra keys if the survey has NO defined field order (fallback for legacy/unknown surveys)
+      const extraKeys: string[] = []
+      if (order.length === 0) {
+        const extraSet = new Set<string>()
+        filtered.forEach(sub => {
+          Object.keys(sub).forEach(key => {
+            if (!['id', 'surveyId', 'submittedAt', 'userId', 'sessionId', 'rating', 'hospitalInteraction'].includes(key)) {
+              extraSet.add(key)
+            }
+          })
+        })
+        extraKeys.push(...Array.from(extraSet))
+        headers.push(...extraKeys.map(key => labels[key] || getQuestionText(key)))
+      }
 
       const rows = filtered.map(sub => {
         const row = [
@@ -1221,8 +1226,8 @@ export default function Dashboard() {
           row.push(formatValueForCSV(val));
         });
 
-        // Add extra fields
-        Array.from(extraKeys).forEach(key => {
+        // Add extra fields (only when no field order defined)
+        extraKeys.forEach(key => {
           const val = (sub as any)[key];
           row.push(formatValueForCSV(val));
         });
@@ -2997,9 +3002,20 @@ export default function Dashboard() {
 
                             const formattedValue = formatAnswerValue(value);
 
-                            // Skip empty values
-                            if (!formattedValue || (Array.isArray(formattedValue) && formattedValue.length === 0)) return null;
+                            // Skip truly empty/null values but show "No file uploaded" for empty arrays (file upload fields)
                             if (formattedValue === 'N/A' || formattedValue === '') return null;
+                            if (Array.isArray(formattedValue) && formattedValue.length === 0) {
+                              // Empty array: likely an empty file upload field — show it so users know the field exists
+                              return (
+                                <div key={key} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-b-0">
+                                  <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                                    {question}
+                                  </h4>
+                                  <span className="text-sm text-gray-400 italic">No file uploaded</span>
+                                </div>
+                              );
+                            }
+                            if (!formattedValue) return null;
 
                             return (
                               <div key={key} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-b-0">
@@ -3009,20 +3025,42 @@ export default function Dashboard() {
                                 <div className="text-base text-gray-900 dark:text-gray-100">
                                   {Array.isArray(formattedValue) ? (
                                     <div className="flex flex-wrap gap-2">
-                                      {formattedValue.map((v, i) => (
-                                        <span
-                                          key={i}
-                                          className="inline-block bg-[#C8262A]/10 text-[#C8262A] px-3 py-1 rounded-full text-sm font-medium"
-                                        >
-                                          {v}
-                                        </span>
-                                      ))}
+                                      {formattedValue.map((v, i) => {
+                                        // Check if this is a file upload formatted value (contains URL)
+                                        const urlMatch = v.match(/\(?(https?:\/\/[^\s)]+)\)?$/);
+                                        if (urlMatch) {
+                                          const url = urlMatch[1];
+                                          const label = v.replace(/\s*\(https?:\/\/[^\s)]+\)\s*$/, '').trim() || url;
+                                          return (
+                                            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                              className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-[#C8262A]/5 hover:border-[#C8262A]/30 transition-colors group">
+                                              <FileText className="h-4 w-4 text-[#C8262A] flex-shrink-0" />
+                                              <span className="text-sm font-medium text-[#C8262A] group-hover:text-[#a51f22] truncate">{label}</span>
+                                              <Download className="h-3.5 w-3.5 text-gray-400 group-hover:text-[#C8262A] flex-shrink-0" />
+                                            </a>
+                                          );
+                                        }
+                                        return (
+                                          <span
+                                            key={i}
+                                            className="inline-block bg-[#C8262A]/10 text-[#C8262A] px-3 py-1 rounded-full text-sm font-medium"
+                                          >
+                                            {v}
+                                          </span>
+                                        );
+                                      })}
                                     </div>
-                                  ) : typeof formattedValue === 'string' && formattedValue.startsWith('https://') ? (
-                                    <a href={formattedValue} target="_blank" rel="noopener noreferrer" className="text-[#C8262A] hover:text-[#a51f22] underline break-all">
-                                      {formattedValue}
-                                    </a>
-                                  ) : (
+                                  ) : typeof formattedValue === 'string' && formattedValue.includes('https://') ? (() => {
+                                    // Handle URLs and file upload values formatted as "filename (url)"
+                                    const urlMatch = formattedValue.match(/\(?(https?:\/\/[^\s)]+)\)?$/);
+                                    const url = urlMatch ? urlMatch[1] : formattedValue;
+                                    const label = urlMatch ? formattedValue.replace(/\s*\(https?:\/\/[^\s)]+\)\s*$/, '').trim() : formattedValue;
+                                    return (
+                                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-[#C8262A] hover:text-[#a51f22] underline break-all">
+                                        {label || url}
+                                      </a>
+                                    );
+                                  })() : (
                                     <span className="whitespace-pre-wrap">{formattedValue}</span>
                                   )}
                                 </div>
