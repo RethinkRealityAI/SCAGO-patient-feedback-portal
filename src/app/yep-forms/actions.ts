@@ -628,5 +628,98 @@ export async function getYEPFormTemplatesForParticipantProfile() {
   }
 }
 
+// Get ALL YEP form submissions (admin only, across all templates)
+export async function getAllYEPFormSubmissions() {
+  try {
+    await enforceAdminInAction();
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const firestore = getAdminFirestore();
+    let submissions: YEPFormSubmission[] = [];
+    try {
+      const snapshot = await firestore
+        .collection('yep-form-submissions')
+        .orderBy('submittedAt', 'desc')
+        .get();
+      submissions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+          processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+        } as unknown as YEPFormSubmission;
+      });
+    } catch (e: any) {
+      // Fallback without orderBy
+      const snapshot = await firestore.collection('yep-form-submissions').get();
+      submissions = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            submittedAt: parseFirestoreTimestamp(data.submittedAt).toISOString(),
+            processedAt: data.processedAt ? parseFirestoreTimestamp(data.processedAt).toISOString() : undefined,
+          } as unknown as YEPFormSubmission;
+        })
+        .sort((a: any, b: any) => {
+          const aDate = new Date(a.submittedAt as any);
+          const bDate = new Date(b.submittedAt as any);
+          return bDate.getTime() - aDate.getTime();
+        });
+    }
+    return { success: true, data: submissions };
+  } catch (error) {
+    console.error('Error fetching all YEP form submissions:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch submissions'
+    };
+  }
+}
 
+// Export a YEP form submission as PDF (returns base64-encoded PDF)
+export async function exportYEPSubmissionPdf(params: {
+  submission: YEPFormSubmission;
+  fieldLabels?: Record<string, string>;
+}): Promise<{ error?: string; pdfBase64?: string }> {
+  try {
+    await enforceAdminInAction();
+    const { generateSubmissionPdf } = await import('@/lib/pdf-generator');
+    const { parseFirestoreDate } = await import('@/lib/submission-utils');
+
+    const sub = params.submission;
+    // The form data is nested under sub.data
+    const rawData: Record<string, any> = (sub as any).data || {};
+
+    // Build ordered data, skipping internal fields
+    const excludeKeys = new Set(['id', 'formTemplateId', 'formTemplateName', 'submittedBy', 'submittedByUserId',
+      'participantId', 'mentorId', 'submittedAt', 'processedAt', 'processingStatus', 'errorMessage', 'createdEntities']);
+    const orderedData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(rawData)) {
+      if (!excludeKeys.has(key) && value !== undefined && value !== null) {
+        orderedData[key] = value;
+      }
+    }
+
+    const submitterName = (rawData.fullName as string) || sub.submittedBy || 'Unknown';
+    const title = `${sub.formTemplateName || 'Board Recruitment'} - ${submitterName}`;
+
+    const submittedAt = parseFirestoreDate(sub.submittedAt as any);
+
+    const pdfBytes = await generateSubmissionPdf({
+      title,
+      surveyId: sub.formTemplateId,
+      submittedAt,
+      data: orderedData,
+      fieldLabels: params.fieldLabels,
+    });
+
+    if (!pdfBytes) return { error: 'Failed to generate PDF' };
+    return { pdfBase64: Buffer.from(pdfBytes).toString('base64') };
+  } catch (e) {
+    console.error('Error exporting YEP submission PDF:', e);
+    return { error: 'Failed to generate PDF' };
+  }
+}
 

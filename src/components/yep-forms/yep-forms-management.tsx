@@ -38,6 +38,7 @@ import { YEPFormTemplate, YEPFormCategory } from '@/lib/yep-forms-types';
 import { CreateYEPFormDropdown, DeleteYEPFormButton, DuplicateYEPFormButton } from '@/app/yep-forms/client';
 import YEPFormEditor from './yep-form-editor';
 import YEPFormSubmission from './yep-form-submission';
+import YEPFormSubmissionsViewer from './yep-form-submissions-viewer';
 
 interface YEPFormsManagementProps {
   onClose?: () => void;
@@ -57,6 +58,15 @@ export default function YEPFormsManagement({ onClose }: YEPFormsManagementProps)
     // We no longer need to fetch forms for the Forms List tab since it shows templates.
     setIsLoading(false);
   }, []);
+
+  // Load Firestore form templates when the submissions tab is activated
+  // so the template filter dropdown shows real Firestore IDs that match stored submissions
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'submissions' && forms.length === 0) {
+      loadForms();
+    }
+  };
 
   const loadForms = async () => {
     setIsLoading(true);
@@ -275,7 +285,7 @@ export default function YEPFormsManagement({ onClose }: YEPFormsManagementProps)
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="list">Forms List</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
@@ -470,20 +480,12 @@ export default function YEPFormsManagement({ onClose }: YEPFormsManagementProps)
           <Card>
             <CardHeader>
               <CardTitle>Form Submissions</CardTitle>
-              <p className="text-muted-foreground">View and manage form submissions</p>
+              <p className="text-muted-foreground">
+                View, search and export submissions. File uploads are shown as clickable download links.
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">Submissions Management</h3>
-                <p className="text-muted-foreground mb-4">
-                  Track and manage form submissions across all forms
-                </p>
-                <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Submissions
-                </Button>
-              </div>
+              <YEPFormSubmissionsViewer templates={forms.length > 0 ? forms : yepFormTemplates} />
             </CardContent>
           </Card>
         </TabsContent>
