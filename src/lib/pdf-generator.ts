@@ -1,6 +1,6 @@
 'use server';
 
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFArray } from 'pdf-lib';
 
 /**
  * Represents a file attachment uploaded with a form submission.
@@ -365,11 +365,12 @@ export async function generateSubmissionPdf(
                         });
 
                         const linkRef = doc.context.register(linkAnnotation);
-                        const existingAnnots = page.node.get(doc.context.obj('Annots'));
-                        if (existingAnnots) {
-                            (existingAnnots as any).push(linkRef);
+                        const annotsKey = PDFName.of('Annots');
+                        const existingAnnots = page.node.get(annotsKey);
+                        if (existingAnnots && existingAnnots instanceof PDFArray) {
+                            existingAnnots.push(linkRef);
                         } else {
-                            page.node.set(doc.context.obj('Annots'), doc.context.obj([linkRef]));
+                            page.node.set(annotsKey, doc.context.obj([linkRef]));
                         }
                     } catch (annotError) {
                         // Link annotation failed — file text is still rendered, just not clickable

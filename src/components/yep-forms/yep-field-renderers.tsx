@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 // import { Switch } from '@/components/ui/switch';
 import { YEPFormField as YEPField, YEPFieldType } from '@/lib/yep-forms-types';
 import { cn } from '@/lib/utils';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Upload, X, FileText } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -20,6 +20,8 @@ import { SINSecureField } from './sin-secure-field';
 import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { ParticipantLookupField } from '@/components/yep-forms/participant-lookup-field';
 import { MentorLookupField } from '@/components/yep-forms/mentor-lookup-field';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface YEPFieldRendererProps {
   field: YEPField;
@@ -254,6 +256,117 @@ export const YEPFieldRenderer: React.FC<YEPFieldRendererProps> = ({
                 showValidation={true}
               />
             )}
+          />
+        );
+      case 'file-upload':
+        return (
+          <Controller
+            control={control}
+            name={fieldName}
+            render={({ field: controllerField }) => {
+              const [localFiles, setLocalFiles] = useState<File[]>([]);
+              const [uploading, setUploading] = useState(false);
+              const [error, setError] = useState<string | null>(null);
+              const fileInputRef = useRef<HTMLInputElement>(null);
+              const maxFiles = (field as any).maxFiles || 1;
+              const allowedTypes: string[] = (field as any).fileTypes || [];
+
+              // The form value is an array of uploaded file metadata objects
+              const uploadedFiles: any[] = Array.isArray(controllerField.value) ? controllerField.value : [];
+
+              const handleFileSelect = async (selectedFiles: FileList | null) => {
+                if (!selectedFiles || selectedFiles.length === 0) return;
+                setError(null);
+                setUploading(true);
+                try {
+                  const newUploaded = [...uploadedFiles];
+                  for (let i = 0; i < selectedFiles.length && newUploaded.length < maxFiles; i++) {
+                    const file = selectedFiles[i];
+                    // Validate type
+                    if (allowedTypes.length > 0) {
+                      const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
+                      if (!allowedTypes.includes(ext)) {
+                        setError(`File type ${ext} not allowed. Accepted: ${allowedTypes.join(', ')}`);
+                        continue;
+                      }
+                    }
+                    // Upload to Firebase Storage
+                    const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+                    const filePath = `yep-form-uploads/${field.id}/${Date.now()}_${safeName}`;
+                    const storageRef = ref(storage, filePath);
+                    const contentType = file.type || 'application/octet-stream';
+                    const snapshot = await uploadBytes(storageRef, file, { contentType });
+                    const downloadUrl = await getDownloadURL(snapshot.ref);
+                    newUploaded.push({
+                      name: file.name,
+                      url: downloadUrl,
+                      size: file.size,
+                      type: file.type,
+                      path: filePath,
+                      uploadedAt: new Date().toISOString()
+                    });
+                  }
+                  controllerField.onChange(newUploaded);
+                  setLocalFiles([]);
+                } catch (err: any) {
+                  console.error('File upload failed:', err);
+                  setError(err?.message || 'Upload failed. Please try again.');
+                } finally {
+                  setUploading(false);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }
+              };
+
+              const removeFile = (index: number) => {
+                const updated = uploadedFiles.filter((_, i) => i !== index);
+                controllerField.onChange(updated.length > 0 ? updated : undefined);
+              };
+
+              return (
+                <div className="space-y-3">
+                  {uploadedFiles.length < maxFiles && (
+                    <label className={cn(
+                      "flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
+                      error ? "border-destructive bg-destructive/5" : "border-border",
+                      uploading && "opacity-50 pointer-events-none"
+                    )}>
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <Upload className="w-6 h-6 mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          {uploading ? 'Uploading...' : <><span className="font-semibold">Click to upload</span> or drag and drop</>}
+                        </p>
+                        {allowedTypes.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">{allowedTypes.join(', ')}</p>
+                        )}
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        accept={allowedTypes.length > 0 ? allowedTypes.join(',') : '*/*'}
+                        disabled={uploading}
+                        onChange={(e) => handleFileSelect(e.target.files)}
+                      />
+                    </label>
+                  )}
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  {uploadedFiles.map((file: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-lg">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          {file.size && <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>}
+                        </div>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeFile(index)} className="flex-shrink-0">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              );
+            }}
           />
         );
       case YEPFieldType.yepFileSecure:

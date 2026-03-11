@@ -1164,10 +1164,23 @@ export default function Dashboard() {
       if (res.error || !res.pdfBase64) {
         setError(res.error || 'Failed to generate PDF')
       } else {
+        // Convert base64 to Blob for reliable cross-browser downloads
+        const byteCharacters = atob(res.pdfBase64)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: 'application/pdf' })
+        const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
-        link.href = `data:application/pdf;base64,${res.pdfBase64}`
+        link.href = url
         link.download = `submissions-${selectedSurvey}-${new Date().toISOString().split('T')[0]}.pdf`
+        link.style.visibility = 'hidden'
+        document.body.appendChild(link)
         link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
       }
     } catch (e) {
       console.error("Export PDF failed", e)
@@ -3115,14 +3128,27 @@ export default function Dashboard() {
                             if (res.error || !res.pdfBase64) {
                               setError(res.error || 'Failed to generate PDF')
                             } else {
+                              // Convert base64 to Blob for reliable cross-browser downloads
+                              const byteCharacters = atob(res.pdfBase64)
+                              const byteNumbers = new Array(byteCharacters.length)
+                              for (let i = 0; i < byteCharacters.length; i++) {
+                                byteNumbers[i] = byteCharacters.charCodeAt(i)
+                              }
+                              const byteArray = new Uint8Array(byteNumbers)
+                              const blob = new Blob([byteArray], { type: 'application/pdf' })
+                              const url = URL.createObjectURL(blob)
                               const link = document.createElement('a')
-                              link.href = `data:application/pdf;base64,${res.pdfBase64}`
+                              link.href = url
                               // Create a descriptive filename
                               const submitterName = extractName(activeSubmission)
                               const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 30)
                               const safeName = submitterName ? submitterName.replace(/[^a-z0-9]/gi, '_').substring(0, 20) : activeSubmission.id.substring(0, 8)
                               link.download = `${safeTitle}-${safeName}.pdf`
+                              link.style.visibility = 'hidden'
+                              document.body.appendChild(link)
                               link.click()
+                              document.body.removeChild(link)
+                              URL.revokeObjectURL(url)
                             }
                           } catch (e) {
                             console.error("PDF Export error", e)

@@ -642,7 +642,10 @@ export async function exportSubmissionPdf(params: {
 
     const sub = params.submission;
     const { generateSubmissionPdf } = await import('@/lib/pdf-generator');
-    const { extractName } = await import('@/lib/submission-utils');
+    const { extractName, parseFirestoreDate } = await import('@/lib/submission-utils');
+
+    // Internal fields to exclude from PDF content
+    const excludeKeys = new Set(['id', 'surveyId', 'sessionId', 'submittedAt', 'userId']);
 
     // We need to reorder the data object before passing it to generateSubmissionPdf
     // BUT generateSubmissionPdf uses Object.entries, so we should create an object with keys in order.
@@ -655,7 +658,12 @@ export async function exportSubmissionPdf(params: {
         }
       }
     } else {
-      Object.assign(orderedData, sub);
+      // Copy all fields except internal ones
+      for (const [key, value] of Object.entries(sub)) {
+        if (!excludeKeys.has(key) && value !== undefined && value !== null) {
+          orderedData[key] = value;
+        }
+      }
     }
 
     // Create a descriptive title
@@ -664,10 +672,13 @@ export async function exportSubmissionPdf(params: {
       ? `${params.surveyTitle}${submitterName ? ` - ${submitterName}` : ''}`
       : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
 
+    // Parse submittedAt robustly — it may arrive as string, Date, or Firestore Timestamp
+    const submittedAt = parseFirestoreDate(sub.submittedAt);
+
     const pdfBytes = await generateSubmissionPdf({
       title,
       surveyId: sub.surveyId,
-      submittedAt: new Date(sub.submittedAt),
+      submittedAt,
       data: orderedData,
       fieldLabels: params.fieldLabels
     });
