@@ -1,6 +1,6 @@
 'use server';
 
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFArray } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFArray, PDFString } from 'pdf-lib';
 
 /**
  * Represents a file attachment uploaded with a form submission.
@@ -47,7 +47,7 @@ import { extractName } from './submission-utils';
 function formatValueForPdf(value: any): string {
     const formatted = formatAnswerValue(value);
     if (Array.isArray(formatted)) {
-        return formatted.join(', ');
+        return formatted.join('\n');
     }
     return formatted === 'N/A' ? '' : formatted;
 }
@@ -105,8 +105,12 @@ export async function extractFieldOrder(surveyData: any): Promise<string[]> {
  * Sanitize text to remove characters unsupported by WinAnsi encoding (standard PDF fonts)
  */
 function sanitizeText(text: string): string {
-    // Replace characters outside the WinAnsi range (approx Latin-1) with '?'
-    return text.replace(/[^\x00-\xFF]/g, '?');
+    if (!text) return '';
+    return String(text)
+        .replace(/\t/g, '    ') // Convert tabs to spaces
+        .replace(/\r/g, '')     // Remove carriage returns
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Remove unprintable control characters
+        .replace(/[^\x00-\xFF]/g, '?'); // Replace non-Latin-1 chars
 }
 
 /**
@@ -124,26 +128,34 @@ function drawWrappedText(
     color = rgb(0, 0, 0)
 ): number {
     const safeText = sanitizeText(text);
-    const words = safeText.split(' ');
-    let line = '';
+    const paragraphs = safeText.split('\n');
     let cursorY = y;
 
-    for (const word of words) {
-        const testLine = line ? `${line} ${word}` : word;
-        const testWidth = font.widthOfTextAtSize(testLine, size);
+    for (const paragraph of paragraphs) {
+        if (!paragraph.trim() && paragraph.length === 0) {
+            continue;
+        }
 
-        if (testWidth > maxWidth && line) {
+        const words = paragraph.split(' ');
+        let line = '';
+
+        for (const word of words) {
+            const testLine = line ? `${line} ${word}` : word;
+            const testWidth = font.widthOfTextAtSize(testLine, size);
+
+            if (testWidth > maxWidth && line) {
+                page.drawText(line, { x, y: cursorY, size, font, color });
+                cursorY -= lineHeight;
+                line = word;
+            } else {
+                line = testLine;
+            }
+        }
+
+        if (line) {
             page.drawText(line, { x, y: cursorY, size, font, color });
             cursorY -= lineHeight;
-            line = word;
-        } else {
-            line = testLine;
         }
-    }
-
-    if (line) {
-        page.drawText(line, { x, y: cursorY, size, font, color });
-        cursorY -= lineHeight;
     }
 
     return cursorY;
@@ -192,26 +204,34 @@ export async function generateSubmissionPdf(
 
         // Title
         const title = sanitizeText(config.title || 'Form Submission');
-        page.drawText(title, {
-            x: margin,
-            y: cursorY,
-            size: 18,
-            font: boldFont,
-            color: rgb(0.1, 0.1, 0.1),
-        });
-        cursorY -= 25;
+        cursorY = drawWrappedText(
+            page,
+            title,
+            margin,
+            cursorY,
+            maxTextWidth,
+            boldFont,
+            18,
+            24,
+            rgb(0.1, 0.1, 0.1)
+        );
+        cursorY -= 7;
 
         // Survey ID, Patient & Submission Date
         const patientName = extractName(config.data);
         if (patientName) {
-            page.drawText(`Patient: ${patientName}`, {
-                x: margin,
-                y: cursorY,
-                size: 11,
-                font: boldFont,
-                color: rgb(0.2, 0.2, 0.2),
-            });
-            cursorY -= 16;
+            cursorY = drawWrappedText(
+                page,
+                `Patient: ${patientName}`,
+                margin,
+                cursorY,
+                maxTextWidth,
+                boldFont,
+                11,
+                14,
+                rgb(0.2, 0.2, 0.2)
+            );
+            cursorY -= 4;
         }
 
         page.drawText(`Survey ID: ${config.surveyId}`, {
@@ -275,14 +295,18 @@ export async function generateSubmissionPdf(
             if (!formattedValue && formattedValue !== '0') continue; // Skip empty values
 
             // Draw field label
-            page.drawText(`${sanitizeText(label)}:`, {
-                x: margin,
-                y: cursorY,
-                size: 11,
-                font: boldFont,
-                color: rgb(0.2, 0.2, 0.2),
-            });
-            cursorY -= lineHeight;
+            cursorY = drawWrappedText(
+                page,
+                `${label}:`,
+                margin,
+                cursorY,
+                maxTextWidth,
+                boldFont,
+                11,
+                14,
+                rgb(0.2, 0.2, 0.2)
+            );
+            cursorY -= 2;
 
             // Draw field value with wrapping
             cursorY = drawWrappedText(
@@ -323,14 +347,18 @@ export async function generateSubmissionPdf(
                     cursorY = pageHeight - margin;
                 }
 
-                page.drawText(`${sanitizeText(label)}:`, {
-                    x: margin,
-                    y: cursorY,
-                    size: 11,
-                    font: boldFont,
-                    color: rgb(0.2, 0.2, 0.2),
-                });
-                cursorY -= lineHeight;
+                cursorY = drawWrappedText(
+                    page,
+                    `${label}:`,
+                    margin,
+                    cursorY,
+                    maxTextWidth,
+                    boldFont,
+                    11,
+                    14,
+                    rgb(0.2, 0.2, 0.2)
+                );
+                cursorY -= 2;
 
                 for (const file of files) {
                     if (cursorY < margin + 20) {
@@ -360,18 +388,20 @@ export async function generateSubmissionPdf(
                             A: {
                                 Type: 'Action',
                                 S: 'URI',
-                                URI: file.url,
+                                URI: PDFString.of(file.url),
                             },
                         });
 
                         const linkRef = doc.context.register(linkAnnotation);
                         const annotsKey = PDFName.of('Annots');
-                        const existingAnnots = page.node.get(annotsKey);
-                        if (existingAnnots && existingAnnots instanceof PDFArray) {
-                            existingAnnots.push(linkRef);
-                        } else {
-                            page.node.set(annotsKey, doc.context.obj([linkRef]));
+                        
+                        // Carefully pull out the array, resolving potential references
+                        let annots = page.node.lookupMaybe(annotsKey, PDFArray);
+                        if (!annots) {
+                            annots = doc.context.obj([]);
+                            page.node.set(annotsKey, annots);
                         }
+                        annots.push(linkRef);
                     } catch (annotError) {
                         // Link annotation failed — file text is still rendered, just not clickable
                         console.warn('[generateSubmissionPdf] Link annotation failed for file:', file.name, annotError);

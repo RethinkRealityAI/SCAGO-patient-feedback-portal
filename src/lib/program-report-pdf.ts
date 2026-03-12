@@ -8,7 +8,12 @@ interface MetricRow {
 }
 
 function sanitizeText(text: string): string {
-    return text.replace(/[^\x00-\xFF]/g, '?');
+    if (!text) return '';
+    return String(text)
+        .replace(/\t/g, '    ') // Convert tabs to spaces
+        .replace(/\r/g, '')     // Remove carriage returns
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Remove unprintable control characters
+        .replace(/[^\x00-\xFF]/g, '?'); // Replace non-Latin-1 chars
 }
 
 function drawWrappedText(
@@ -21,20 +26,28 @@ function drawWrappedText(
     size: number,
     lineHeight: number
 ): { nextY: number; lines: number } {
-    const words = sanitizeText(text).split(' ');
+    const paragraphs = sanitizeText(text).split('\n');
     const lines: string[] = [];
-    let line = '';
-
-    for (const word of words) {
-        const testLine = line ? `${line} ${word}` : word;
-        if (font.widthOfTextAtSize(testLine, size) > maxWidth && line) {
-            lines.push(line);
-            line = word;
-        } else {
-            line = testLine;
+    
+    for (const paragraph of paragraphs) {
+        if (!paragraph.trim() && paragraph.length === 0) {
+            lines.push('');
+            continue;
         }
+        const words = paragraph.split(' ');
+        let line = '';
+
+        for (const word of words) {
+            const testLine = line ? `${line} ${word}` : word;
+            if (font.widthOfTextAtSize(testLine, size) > maxWidth && line) {
+                lines.push(line);
+                line = word;
+            } else {
+                line = testLine;
+            }
+        }
+        if (line) lines.push(line);
     }
-    if (line) lines.push(line);
 
     let cursorY = y;
     for (const wrappedLine of lines) {

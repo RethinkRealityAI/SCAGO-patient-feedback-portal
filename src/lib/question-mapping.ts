@@ -132,16 +132,32 @@ export function formatAnswerValue(value: any): string | string[] {
         // Handle time-amount {value, unit}
         if (value.value !== undefined && value.unit) return `${value.value} ${value.unit}`;
 
-        // Generic object: flatten it
-        const entries = Object.entries(value)
-            .filter(([k, v]) => v !== null && v !== undefined && v !== '')
-            .map(([k, v]) => {
+        // Generic object: flatten it safely without raw JSON and map to nice labels
+        const flattenObject = (obj: any): string[] => {
+            const entries: string[] = [];
+            for (const [k, v] of Object.entries(obj)) {
+                if (v === null || v === undefined || v === '') continue;
                 const label = getQuestionText(k);
-                const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
-                return `${label}: ${val}`;
-            });
+                if (typeof v === 'object' && !Array.isArray(v)) {
+                    // It's a nested object (like a matrix cell)
+                    const nested = [];
+                    for (const [subK, subV] of Object.entries(v)) {
+                        if (subV !== null && subV !== undefined && subV !== '') {
+                            nested.push(`${getQuestionText(subK)}: ${subV}`);
+                        }
+                    }
+                    if (nested.length > 0) {
+                        entries.push(`${label}: ${nested.join('; ')}`);
+                    }
+                } else {
+                    entries.push(`${label}: ${v}`);
+                }
+            }
+            return entries;
+        };
 
-        return entries.length > 0 ? entries.join(', ') : 'N/A';
+        const flatEntries = flattenObject(value);
+        return flatEntries.length > 0 ? flatEntries.join('\n') : 'N/A';
     }
 
     return formatStringValue(String(value));
