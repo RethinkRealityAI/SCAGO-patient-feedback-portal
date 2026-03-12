@@ -282,7 +282,8 @@ export function RankingField({ fieldConfig, form }: AdvancedFieldProps) {
 // Defaults are permissive (50MB, any type); fieldConfig can override to restrict
 export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldProps) {
   const t = useTranslation(isFrench ? 'fr' : 'en');
-  const [files, setFiles] = useState<File[]>([]);
+  const formValue = form.watch(fieldConfig.id) || [];
+  const files = Array.isArray(formValue) ? formValue : [];
   const [error, setError] = useState<string | null>(null);
   const maxFiles = fieldConfig.maxFiles || 1;
   const maxFileSizeMB = fieldConfig.maxFileSize ?? 50; // Default 50MB - permissive for resumes/docs
@@ -323,7 +324,6 @@ export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldPr
       }
       if (validFiles.length > 0) {
         const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
-        setFiles(updatedFiles);
         form.setValue(fieldConfig.id, updatedFiles);
       }
     }
@@ -331,9 +331,8 @@ export function FileUploadField({ fieldConfig, form, isFrench }: AdvancedFieldPr
 
   const removeFile = (index: number) => {
     setError(null);
-    const updated = files.filter((_, i) => i !== index);
-    setFiles(updated);
-    form.setValue(fieldConfig.id, updated);
+    const updated = files.filter((_: any, i: number) => i !== index);
+    form.setValue(fieldConfig.id, updated, { shouldDirty: true, shouldTouch: true });
   };
 
   return (

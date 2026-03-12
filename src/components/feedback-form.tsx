@@ -860,6 +860,9 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             });
             const results = (await Promise.all(uploadPromises)).filter(Boolean);
             processedValues[field.id] = results.length > 0 ? results : undefined;
+            if (results.length > 0) {
+              form.setValue(field.id, results, { shouldDirty: true, shouldTouch: true });
+            }
           } else {
             // No file selected — remove the key so Firestore doesn't store undefined/empty
             delete processedValues[field.id];
