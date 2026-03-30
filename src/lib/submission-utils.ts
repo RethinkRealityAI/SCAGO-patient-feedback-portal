@@ -53,15 +53,51 @@ async function getAllSurveyIds(): Promise<string[]> {
 }
 
 /**
- * Fetch all submissions (Client-safe, subject to security rules)
+ * Check if a Firestore document path is a survey submission document.
+ * Only matches paths like: surveys/{surveyId}/submissions/{submissionId}
+ * This prevents picking up 'submissions' subcollections from non-survey parents
+ * (e.g. yep-forms, patient records, etc.).
  */
+function isSurveySubmissionDoc(docRef: any): boolean {
+  // docRef.ref.path gives e.g. 'surveys/abc123/submissions/xyz789'
+  const path = docRef.ref?.path || '';
+  const parts = path.split('/');
+  // Must be exactly: surveys / {id} / submissions / {id}
+  return parts.length === 4 && parts[0] === 'surveys' && parts[2] === 'submissions';
+}
+
+/**
+ * Extract the parent survey ID from a submission document's path.
+ * e.g. 'surveys/abc123/submissions/xyz789' → 'abc123'
+ */
+function extractSurveyIdFromPath(docRef: any): string {
+  const path = docRef.ref?.path || '';
+  const parts = path.split('/');
+  if (parts.length >= 2 && parts[0] === 'surveys') {
+    return parts[1];
+  }
+  return '';
+}
+
+// The main Hospital Experience Reporting Portal survey ID - all legacy submissions map to this
+const HOSPITAL_SURVEY_ID = 'QDl3z7vLa0IQ4JgHBZ2s';
+
 export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
   const submissions: FeedbackSubmission[] = [];
   let collectionGroupSucceeded = false;
 
   try {
     const snapshot = await getDocs(collectionGroup(db, 'submissions'));
-    submissions.push(...snapshot.docs.map(docToSubmission));
+    // CRITICAL: Only include docs from surveys/*/submissions paths
+    const surveyDocs = snapshot.docs.filter(isSurveySubmissionDoc);
+    submissions.push(...surveyDocs.map(d => {
+      const sub = docToSubmission(d);
+      // Ensure surveyId comes from the document path, not just the field
+      if (!sub.surveyId) {
+        sub.surveyId = extractSurveyIdFromPath(d);
+      }
+      return sub;
+    }));
     collectionGroupSucceeded = true;
   } catch (error) {
     console.warn("Client collectionGroup fetch failed, falling back to survey-specific fetch.", error);
@@ -72,7 +108,12 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
     for (const surveyId of surveyIds) {
       try {
         const snapshot = await getDocs(collection(db, 'surveys', surveyId, 'submissions'));
-        const surveySubmissions = snapshot.docs.map(docToSubmission);
+        const surveySubmissions = snapshot.docs.map(d => {
+          const sub = docToSubmission(d);
+          // Ensure surveyId is set from the parent path
+          if (!sub.surveyId) sub.surveyId = surveyId;
+          return sub;
+        });
         const seenIds = new Set(submissions.map(s => s.id));
         submissions.push(...surveySubmissions.filter(s => !seenIds.has(s.id)));
       } catch (e) { }
@@ -81,7 +122,11 @@ export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
 
   try {
     const legacySnapshot = await getDocs(query(collection(db, 'feedback'), orderBy('submittedAt', 'desc')));
-    const legacySubmissions = legacySnapshot.docs.map(docToSubmission);
+    const legacySubmissions = legacySnapshot.docs.map(d => {
+      const sub = docToSubmission(d);
+      if (!sub.surveyId) sub.surveyId = HOSPITAL_SURVEY_ID;
+      return sub;
+    });
     const seenIds = new Set(submissions.map(s => s.id));
     submissions.push(...legacySubmissions.filter(s => !seenIds.has(s.id)));
   } catch (e) { }
@@ -100,14 +145,24 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
 
   try {
     const snapshot = await firestore.collectionGroup('submissions').get();
-    submissions.push(...snapshot.docs.map(doc => {
+    // CRITICAL: Only include docs from surveys/*/submissions paths
+    const surveyDocs = snapshot.docs.filter(doc => {
+      const path = doc.ref.path;
+      const parts = path.split('/');
+      return parts.length === 4 && parts[0] === 'surveys' && parts[2] === 'submissions';
+    });
+    submissions.push(...surveyDocs.map(doc => {
       const data = doc.data();
+      // Extract surveyId from the document path (authoritative source)
+      const pathParts = doc.ref.path.split('/');
+      const pathSurveyId = pathParts.length >= 2 ? pathParts[1] : '';
       return {
         id: doc.id,
         ...data,
         ...(data.rating != null ? { rating: Number(data.rating) } : {}),
         submittedAt: parseFirestoreDate(data.submittedAt),
-        surveyId: data.surveyId || '',
+        // Use path-based surveyId as primary, fall back to field value
+        surveyId: pathSurveyId || data.surveyId || '',
       } as FeedbackSubmission;
     }));
     collectionGroupSucceeded = true;
@@ -127,7 +182,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
             ...d,
             ...(d.rating != null ? { rating: Number(d.rating) } : {}),
             submittedAt: parseFirestoreDate(d.submittedAt),
-            surveyId: d.surveyId || surveyDoc.id,
+            surveyId: surveyDoc.id, // Always use parent doc ID as surveyId
           } as FeedbackSubmission;
         });
         const seenIds = new Set(submissions.map(s => s.id));
@@ -145,7 +200,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
         ...d,
         ...(d.rating != null ? { rating: Number(d.rating) } : {}),
         submittedAt: parseFirestoreDate(d.submittedAt),
-        surveyId: d.surveyId || '',
+        surveyId: d.surveyId || HOSPITAL_SURVEY_ID,
       } as FeedbackSubmission;
     });
     const seenIds = new Set(submissions.map(s => s.id));
@@ -159,8 +214,35 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
  * Fetch submissions for a specific survey (Client-safe)
  */
 export async function fetchSubmissionsForSurvey(surveyId: string): Promise<FeedbackSubmission[]> {
-  const all = await fetchAllSubmissions();
-  return all.filter(s => s.surveyId === surveyId);
+  if (!surveyId) return [];
+  const submissions: FeedbackSubmission[] = [];
+
+  // Primary: fetch directly from the survey's submissions subcollection
+  try {
+    const snapshot = await getDocs(collection(db, 'surveys', surveyId, 'submissions'));
+    submissions.push(...snapshot.docs.map(d => {
+      const sub = docToSubmission(d);
+      if (!sub.surveyId) sub.surveyId = surveyId;
+      return sub;
+    }));
+  } catch (e) {
+    console.warn(`Failed to fetch submissions for survey ${surveyId}:`, e);
+  }
+
+  // Fallback: also check legacy 'feedback' collection for matching surveyId
+  try {
+    const legacySnapshot = await getDocs(query(collection(db, 'feedback'), orderBy('submittedAt', 'desc')));
+    const legacySubs = legacySnapshot.docs.map(d => {
+      const sub = docToSubmission(d);
+      if (!sub.surveyId) sub.surveyId = HOSPITAL_SURVEY_ID;
+      return sub;
+    }).filter(s => s.surveyId === surveyId);
+    
+    const seenIds = new Set(submissions.map(s => s.id));
+    submissions.push(...legacySubs.filter(s => !seenIds.has(s.id)));
+  } catch (e) { }
+
+  return submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
 }
 
 /**
@@ -220,9 +302,13 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
  * Delete a submission (Client-safe version)
  */
 export async function deleteSubmission(id: string, surveyId: string): Promise<void> {
-  const targetSurveyId = surveyId || 'QDl3z7vLa0IQ4JgHBZ2s';
-  const p1 = deleteDoc(doc(db, 'surveys', targetSurveyId, 'submissions', id));
-  const p2 = deleteDoc(doc(db, 'feedback', id));
+  if (!surveyId) {
+    throw new Error('Cannot delete submission: surveyId is required to locate the document.');
+  }
+  // Delete from the actual survey's submissions subcollection
+  const p1 = deleteDoc(doc(db, 'surveys', surveyId, 'submissions', id));
+  // Also attempt to clean up from legacy 'feedback' collection (best-effort)
+  const p2 = deleteDoc(doc(db, 'feedback', id)).catch(() => { /* legacy doc may not exist */ });
   await Promise.all([p1, p2]);
 }
 

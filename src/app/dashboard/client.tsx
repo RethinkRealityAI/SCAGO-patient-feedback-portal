@@ -206,15 +206,18 @@ export default function Dashboard() {
     }
   }
 
-
-  // The main Hospital Experience Reporting Portal survey ID - all legacy submissions map to this
+  // The main Hospital Experience Reporting Portal survey ID - used for UI-specific dashboards
   const HOSPITAL_SURVEY_ID = 'QDl3z7vLa0IQ4JgHBZ2s'
 
   // Only show active surveys from the surveys collection (not orphaned IDs)
   const surveyOptions = useMemo(() => {
     const knownSurveyIds = surveys.map(s => s.id)
+    // If the user is a restricted admin with exactly 1 permitted form, hide 'All Surveys' entirely
+    if (isAdmin && !isSuperAdmin && allowedForms && allowedForms.length === 1) {
+      return [...knownSurveyIds]
+    }
     return ['all', ...knownSurveyIds]
-  }, [surveys])
+  }, [surveys, isAdmin, isSuperAdmin, allowedForms])
 
   // Map survey IDs to titles - only for known surveys
   const surveyTitleMap = useMemo(() => {
@@ -247,22 +250,12 @@ export default function Dashboard() {
     return map
   }, [surveys])
 
-  // Get the normalized survey ID - maps orphaned/legacy IDs to the main Hospital survey
-  const getNormalizedSurveyId = useCallback((surveyId: string | undefined): string => {
-    if (!surveyId) return HOSPITAL_SURVEY_ID
-    // If this survey ID exists in our known surveys, use it as-is
-    if (surveyTitleMap.has(surveyId)) return surveyId
-    // Otherwise, map to the Hospital Experience Reporting Portal
-    return HOSPITAL_SURVEY_ID
-  }, [surveyTitleMap])
-
-  // Get display name for a survey ID (handles legacy IDs gracefully)
+  // Get display name for a survey ID
   const getSurveyDisplayName = useCallback((surveyId: string | undefined): string => {
-    if (!surveyId) return surveyTitleMap.get(HOSPITAL_SURVEY_ID) || 'Hospital Experience Reporting Portal'
-    // First check if we have a direct match
+    if (!surveyId) return 'Unknown Survey'
     if (surveyTitleMap.has(surveyId)) return surveyTitleMap.get(surveyId)!
-    // For legacy IDs, show the Hospital survey name
-    return surveyTitleMap.get(HOSPITAL_SURVEY_ID) || 'Hospital Experience Reporting Portal'
+    // For unknown survey IDs, show a truncated ID rather than misattributing
+    return `Survey ${surveyId.substring(0, 8)}...`
   }, [surveyTitleMap])
 
 
@@ -274,14 +267,13 @@ export default function Dashboard() {
 
     // Safety check for admins
     if (isAdmin && !isSuperAdmin) {
-      relevantSubmissions = relevantSubmissions.filter(s => {
-        const normId = getNormalizedSurveyId(s.surveyId)
-        return (allowedForms || []).includes(normId)
-      })
+      relevantSubmissions = relevantSubmissions.filter(s =>
+        (allowedForms || []).includes(s.surveyId)
+      )
     }
 
     if (selectedSurvey !== 'all') {
-      relevantSubmissions = relevantSubmissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey)
+      relevantSubmissions = relevantSubmissions.filter(s => s.surveyId === selectedSurvey)
     }
 
     // Determine if we're looking at consent/intake form data or hospital feedback
@@ -294,7 +286,7 @@ export default function Dashboard() {
     }).filter(loc => loc !== 'Unknown Location' && loc !== 'Unknown Hospital')))
 
     return ['all', ...locations.sort()]
-  }, [submissions, selectedSurvey, getNormalizedSurveyId])
+  }, [submissions, selectedSurvey, isAdmin, isSuperAdmin, allowedForms])
 
   // Fetch data on mount or when auth state changes
   useEffect(() => {
@@ -331,28 +323,19 @@ export default function Dashboard() {
           const authorizedIds = allowedForms || []
           surveysData = (surveysData || []).filter(s => authorizedIds.includes(s.id))
 
-          // Re-map title map for normalization check inside fetchData
-          const tempTitleMap = new Map<string, string>()
-          surveysData.forEach(s => tempTitleMap.set(s.id, s.title))
-
-          uniqueSubmissions = uniqueSubmissions.filter(s => {
-            // Check normalized ID to correctly handle legacy/orphaned records
-            const sId = s.surveyId || HOSPITAL_SURVEY_ID
-            const normId = tempTitleMap.has(sId) ? sId : HOSPITAL_SURVEY_ID
-            return authorizedIds.includes(normId)
-          })
+          // Filter submissions to only include those belonging to authorized surveys
+          uniqueSubmissions = uniqueSubmissions.filter(s =>
+            authorizedIds.includes(s.surveyId)
+          )
         }
 
         setSubmissions(uniqueSubmissions)
         setSurveys(surveysData)
 
-        // For restricted admins, if they have unauthorized forms hidden, 
-        // and we're currently on 'all', consider auto-selecting the first one 
-        // to make the experience more focused, BUT only if they have specific forms assigned.
-        if (isAdmin && !isSuperAdmin && allowedForms && allowedForms.length > 0 && selectedSurvey === 'all') {
-          // We don't necessarily force it, but let's check if 'all' is still what they want.
-          // Actually, the user says "it opens up to the specific form dashboard", 
-          // so maybe they WANT it to be specific.
+        // Auto-select the single survey dashboard for restricted admins
+        // If the user only has access to one survey, default to that survey's view
+        if (isAdmin && !isSuperAdmin && allowedForms && allowedForms.length === 1 && selectedSurvey === 'all') {
+          setSelectedSurvey(allowedForms[0])
         }
 
       } catch (e: any) {
@@ -389,7 +372,6 @@ export default function Dashboard() {
   const isAllSurveysMode = selectedSurvey === 'all'
 
   // Detect if current filtered data is consent survey
-  // Use getNormalizedSurveyId to match how filtered data is computed
   const isConsent = useMemo(() => {
     if (isAllSurveysMode) return false // Overview mode is neither consent nor feedback
     // Strict check: Only the official Consent Survey is "Consent" type
@@ -438,15 +420,14 @@ export default function Dashboard() {
 
     // Safety check: ensure only authorized surveys are ever processed
     if (isAdmin && !isSuperAdmin) {
-      result = result.filter(s => {
-        const normId = getNormalizedSurveyId(s.surveyId)
-        return (allowedForms || []).includes(normId)
-      })
+      result = result.filter(s =>
+        (allowedForms || []).includes(s.surveyId)
+      )
     }
 
-    // Filter by survey - use normalized ID to aggregate legacy submissions under appropriate survey
+    // Filter by survey - use actual surveyId for strict isolation
     if (selectedSurvey !== 'all') {
-      result = result.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey)
+      result = result.filter(s => s.surveyId === selectedSurvey)
     }
 
     // Filter by search query
@@ -517,7 +498,7 @@ export default function Dashboard() {
     if (hospitalFilter !== 'all') {
       // Determine if current view is consent-based (same logic as hospitalOptions)
       const isCurrentViewConsent = selectedSurvey !== 'all' && isConsentSurvey(
-        submissions.filter(s => getNormalizedSurveyId(s.surveyId) === selectedSurvey)
+        submissions.filter(s => s.surveyId === selectedSurvey)
       )
 
       result = result.filter(s => {
@@ -528,7 +509,7 @@ export default function Dashboard() {
     }
 
     return result
-  }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, getNormalizedSurveyId, isAdmin, isSuperAdmin, allowedForms])
+  }, [submissions, surveys, selectedSurvey, searchQuery, dateRange, ratingFilter, hospitalFilter, isAdmin, isSuperAdmin, allowedForms])
 
   // Improved trend calculation for ratings and submissions
   const ratingTrend = useMemo(() => {
@@ -553,7 +534,7 @@ export default function Dashboard() {
       if (!inTime) return false
 
       // Apply same survey filter
-      if (selectedSurvey !== 'all' && getNormalizedSurveyId(s.surveyId) !== selectedSurvey) return false
+      if (selectedSurvey !== 'all' && s.surveyId !== selectedSurvey) return false
 
       return true
     })
@@ -575,7 +556,7 @@ export default function Dashboard() {
       change: Math.abs(change).toFixed(1),
       label: `Vs. previous ${days} days`
     }
-  }, [filtered, submissions, dateRange, isConsent, isAllSurveysMode, selectedSurvey, getNormalizedSurveyId])
+  }, [filtered, submissions, dateRange, isConsent, isAllSurveysMode, selectedSurvey])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE))
 
@@ -1117,14 +1098,9 @@ export default function Dashboard() {
         const authorizedIds = allowedForms || []
         surveysData = (surveysData || []).filter(s => authorizedIds.includes(s.id))
 
-        const tempTitleMap = new Map<string, string>()
-        surveysData.forEach(s => tempTitleMap.set(s.id, s.title))
-
-        feedbackList = feedbackList.filter(s => {
-          const sId = s.surveyId || HOSPITAL_SURVEY_ID
-          const normId = tempTitleMap.has(sId) ? sId : HOSPITAL_SURVEY_ID
-          return authorizedIds.includes(normId)
-        })
+        feedbackList = feedbackList.filter(s =>
+          authorizedIds.includes(s.surveyId)
+        )
       }
 
       setSubmissions(feedbackList)
@@ -1141,7 +1117,14 @@ export default function Dashboard() {
     setDateRange('all')
     setRatingFilter('all')
     setHospitalFilter('all')
-    setSelectedSurvey('all')
+    
+    // Default back to the user's specific survey if they only have one
+    if (isAdmin && !isSuperAdmin && allowedForms && allowedForms.length === 1) {
+      setSelectedSurvey(allowedForms[0])
+    } else {
+      setSelectedSurvey('all')
+    }
+    
     setCurrentPage(1)
   }
 

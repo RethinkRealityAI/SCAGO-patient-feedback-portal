@@ -1,0 +1,43 @@
+﻿   Γû▓ Next.js 15.5.9
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     ┬╖ serverActions
+
+npx : 
+At line:1 char:1
++ npx next build > 
+build_output.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : 
+NotSpecified:     
+(:String) [], Remote 
+   Exception
+    + 
+FullyQualifiedErro   
+ rId : 
+NativeCommandE    
+rror
+ 
+> Build error 
+occurred
+[Error: EINVAL: 
+invalid argument, 
+readlink 'C:\Users\de
+vel\OneDrive\Document
+s\RethinkReality\SCAG
+O\patient-feedback-re
+sponse-portal\.next\c
+ache'] {
+  errno: -4071,
+  code: 'EINVAL',
+  syscall: 
+'readlink',
+  path: 'C:\\Users\\d
+evel\\OneDrive\\Docum
+ents\\RethinkReality\
+\SCAGO\\patient-feedb
+ack-response-portal\\
+.next\\cache'
+}

@@ -40,8 +40,8 @@ export async function createYEPFormTemplate(data: Omit<YEPFormTemplate, 'id' | '
     const formTemplate: YEPFormTemplate = {
       id: nanoid(),
       ...validatedData,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date().toISOString() as any,
+      updatedAt: new Date().toISOString() as any,
       createdBy: session?.email || 'admin',
       version: 1,
     };
@@ -73,12 +73,28 @@ export async function getYEPFormTemplates() {
         .where('isActive', '==', true)
         .orderBy('updatedAt', 'desc')
         .get();
-      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+          updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+        };
+      }) as unknown as YEPFormTemplate[];
     } catch (e: any) {
       // Fallback without composite index: fetch and sort in-memory
       const snapshot = await firestore.collection('yep-form-templates').get();
       templates = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+            updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+          };
+        }) as unknown as YEPFormTemplate[];
       templates = templates
         .filter(t => (t as any).isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
@@ -105,7 +121,13 @@ export async function getYEPFormTemplate(id: string) {
       return { success: false, error: 'Form template not found' };
     }
 
-    const template = { id: docSnap.id, ...docSnap.data() } as unknown as YEPFormTemplate;
+    const data = docSnap.data()!;
+    const template = {
+      id: docSnap.id,
+      ...data,
+      createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+      updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+    } as unknown as YEPFormTemplate;
     return { success: true, data: template };
   } catch (error) {
     console.error('Error fetching YEP form template:', error);
@@ -359,11 +381,27 @@ export async function getYEPFormTemplatesByCategory(category: YEPFormCategory) {
         .where('isActive', '==', true)
         .orderBy('updatedAt', 'desc')
         .get();
-      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+          updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+        };
+      }) as unknown as YEPFormTemplate[];
     } catch (e: any) {
       const snapshot = await firestore.collection('yep-form-templates').get();
       templates = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+            updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+          };
+        }) as unknown as YEPFormTemplate[];
       templates = templates
         .filter((t: any) => t.category === category && t.isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
@@ -393,11 +431,27 @@ export async function getYEPFormTemplatesByTargetEntity(targetEntity: string) {
         .where('isActive', '==', true)
         .orderBy('updatedAt', 'desc')
         .get();
-      templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+      templates = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+          updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+        };
+      }) as unknown as YEPFormTemplate[];
     } catch (e: any) {
       const snapshot = await firestore.collection('yep-form-templates').get();
       templates = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() })) as YEPFormTemplate[];
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: parseFirestoreTimestamp(data.createdAt).toISOString(),
+            updatedAt: parseFirestoreTimestamp(data.updatedAt).toISOString(),
+          };
+        }) as unknown as YEPFormTemplate[];
       templates = templates
         .filter((t: any) => t.targetEntity === targetEntity && t.isActive === true)
         .sort((a: any, b: any) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime());
