@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
+import { usePayPalV6 } from '@/hooks/use-paypal-v6';
 import {
   Check,
   CreditCard,
@@ -145,6 +145,36 @@ function calcTotals(
 
 function fmtMoney(amount: number, currency: string) {
   return `$${amount.toFixed(2)} ${currency}`;
+}
+
+// ---------------------------------------------------------------------------
+// Server-side order helpers
+// ---------------------------------------------------------------------------
+
+async function createGenericOrder(amount: number, currency: string, description: string): Promise<{ orderId: string }> {
+  const res = await fetch('/api/paypal/create-generic-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: amount.toFixed(2), currency, description }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to create order.');
+  }
+  return res.json();
+}
+
+async function captureOrder(orderId: string): Promise<{ captureId: string; status: string; amount: string; currency: string }> {
+  const res = await fetch('/api/paypal/capture-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to capture order.');
+  }
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -661,25 +691,6 @@ function SuccessPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Missing config helper
-// ---------------------------------------------------------------------------
-
-/**
- * Renders nothing but emits a console warning when the PayPal client ID is
- * missing from the environment. This keeps the UI clean while still alerting
- * developers during local development.
- */
-function MissingClientIdWarning() {
-  useEffect(() => {
-    console.warn(
-      '[PayPalPayment] NEXT_PUBLIC_PAYPAL_CLIENT_ID is not set. ' +
-      'PayPal buttons will not render until the environment variable is configured.',
-    );
-  }, []);
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -712,6 +723,9 @@ export function PayPalPayment({
     (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID : undefined) ||
     '';
 
+  const { sdk, loading: sdkLoading, error: sdkError } = usePayPalV6(paypalClientId || undefined);
+  const [paymentInProgress, setPaymentInProgress] = useState(false);
+
   // --- Handlers ---
   const updateQty = useCallback((itemId: string, qty: number) => {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, quantity: qty } : i)));
@@ -726,11 +740,9 @@ export function PayPalPayment({
   }, []);
 
   const handleApprove = useCallback(
-    (_data: any, actions: any) => {
-      return (actions.order as any).capture().then((details: any) => {
-        const txId: string =
-          details?.purchase_units?.[0]?.payments?.captures?.[0]?.id || _data.orderID;
-        const orderId: string = _data.orderID;
+    async (data: { orderId: string }) => {
+      try {
+        const result = await captureOrder(data.orderId);
 
         const pv: PaymentValue = {
           lineItems: items,
@@ -740,8 +752,8 @@ export function PayPalPayment({
           tax,
           total,
           currency,
-          transactionId: txId,
-          orderId,
+          transactionId: result.captureId,
+          orderId: data.orderId,
           invoiceId: genInvoiceId(),
           paidAt: new Date().toISOString(),
           status: 'paid',
@@ -750,7 +762,12 @@ export function PayPalPayment({
         setCapturedValue(pv);
         setIsPaid(true);
         onChange?.(pv);
-      });
+      } catch (err) {
+        console.error('[PayPal] Capture error:', err);
+        setPaypalError(err instanceof Error ? err.message : 'Payment capture failed.');
+      } finally {
+        setPaymentInProgress(false);
+      }
     },
     [items, appliedPromo, subtotal, discount, tax, total, currency, onChange],
   );
@@ -878,60 +895,69 @@ export function PayPalPayment({
           )}
 
           {paypalClientId ? (
-            <div key={`${paypalClientId}-${total.toFixed(2)}`}>
-              <PayPalScriptProvider
-                options={{ clientId: paypalClientId, currency, components: 'buttons' }}
-              >
-                <PayPalButtons
-                  style={{ layout: 'vertical', shape: 'rect', tagline: false }}
-                  disabled={disabled}
-                  createOrder={(_data, actions) =>
-                    actions.order.create({
-                      intent: 'CAPTURE',
-                      purchase_units: [
-                        {
-                          description: config.title || 'SCAGO Payment',
-                          amount: {
-                            currency_code: currency,
-                            value: total.toFixed(2),
-                            breakdown: {
-                              item_total: { currency_code: currency, value: subtotal.toFixed(2) },
-                              discount: discount > 0
-                                ? { currency_code: currency, value: discount.toFixed(2) }
-                                : undefined,
-                              tax_total: tax > 0
-                                ? { currency_code: currency, value: tax.toFixed(2) }
-                                : undefined,
-                            },
-                          },
-                          items: items.map((i) => ({
-                            name: i.name.slice(0, 127),
-                            description: i.description?.slice(0, 127),
-                            quantity: String(i.quantity),
-                            unit_amount: { currency_code: currency, value: i.unitPrice.toFixed(2) },
-                            category: i.category || 'DIGITAL_GOODS',
-                          })),
-                        },
-                      ],
-                      application_context: { shipping_preference: 'NO_SHIPPING' },
-                    } as any)
-                  }
-                  onApprove={handleApprove}
-                  onError={(err) => {
-                    console.error('PayPal Error:', err);
-                    setPaypalError('PayPal encountered an error. Please try again or contact support.');
+            sdkLoading ? (
+              <div className="flex items-center justify-center py-6 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                <span className="text-sm">Loading payment options...</span>
+              </div>
+            ) : sdkError || !sdk ? (
+              <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <p>{sdkError || 'Payment system unavailable. Please refresh and try again.'}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  disabled={disabled || paymentInProgress}
+                  onClick={() => {
+                    if (!sdk || paymentInProgress) return;
+                    setPaypalError(null);
+                    setPaymentInProgress(true);
+                    const session = sdk.createPayPalOneTimePaymentSession({
+                      onApprove: handleApprove,
+                      onCancel: () => setPaymentInProgress(false),
+                      onError: (error) => {
+                        console.error('[PayPal] Payment error:', error);
+                        setPaypalError(error.message || 'PayPal encountered an error.');
+                        setPaymentInProgress(false);
+                      },
+                    });
+                    session.start(
+                      { presentationMode: 'auto' },
+                      createGenericOrder(total, currency, config.title || 'SCAGO Payment'),
+                    ).catch((err: any) => {
+                      console.error('[PayPal] Session start error:', err);
+                      setPaypalError('Failed to start payment. Please try again.');
+                      setPaymentInProgress(false);
+                    });
                   }}
-                />
-              </PayPalScriptProvider>
-            </div>
+                  className={cn(
+                    'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold text-sm transition-all duration-150',
+                    'bg-[#FFC439] hover:bg-[#f0b72d] text-[#003087] border border-[#FFC439]',
+                    (disabled || paymentInProgress) && 'opacity-50 cursor-not-allowed',
+                  )}
+                >
+                  {paymentInProgress ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                      <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.603c-.564 0-1.04.41-1.127.964L7.076 21.337z" />
+                    </svg>
+                  )}
+                  Pay with PayPal
+                </button>
+              </div>
+            )
           ) : (
-            // Client ID not available – log a warning and render nothing
-            // (NEXT_PUBLIC_PAYPAL_CLIENT_ID must be set in the environment)
-            <MissingClientIdWarning />
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <p>Payment system is not configured. Please contact support.</p>
+            </div>
           )}
 
           <p className="text-xs text-muted-foreground text-center">
-            🔒 Safe and secure payments powered by PayPal
+            Secure payments powered by PayPal
           </p>
         </div>
       ) : (

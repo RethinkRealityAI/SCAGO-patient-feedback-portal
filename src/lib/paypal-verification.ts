@@ -1,3 +1,5 @@
+import { getPayPalAccessToken } from '@/lib/paypal-server';
+
 export interface PayPalCaptureDetails {
   id: string;
   status: string;
@@ -14,7 +16,12 @@ export interface PayPalCaptureDetails {
 }
 
 function getPayPalApiBaseUrl(): string {
-  const mode = (process.env.PAYPAL_MODE || process.env.PAYPAL_ENV || 'sandbox').toLowerCase();
+  const mode = (
+    process.env.NEXT_PUBLIC_PAYPAL_MODE ||
+    process.env.PAYPAL_MODE ||
+    process.env.PAYPAL_ENV ||
+    'sandbox'
+  ).toLowerCase();
   return mode === 'live'
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
@@ -28,40 +35,6 @@ function parseAmount(raw: string | number | undefined | null): number | null {
 
 function amountMatches(expected: number, actual: number): boolean {
   return Math.abs(expected - actual) <= 0.01;
-}
-
-async function getPayPalAccessToken(): Promise<string> {
-  const clientId = process.env.PAYPAL_CLIENT_ID || process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      'PayPal server credentials are missing. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET.',
-    );
-  }
-
-  const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const tokenRes = await fetch(`${getPayPalApiBaseUrl()}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${authHeader}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-    cache: 'no-store',
-  });
-
-  if (!tokenRes.ok) {
-    const body = await tokenRes.text();
-    throw new Error(`Unable to obtain PayPal access token (${tokenRes.status}): ${body}`);
-  }
-
-  const tokenJson = (await tokenRes.json()) as { access_token?: string };
-  if (!tokenJson.access_token) {
-    throw new Error('PayPal access token response did not include access_token.');
-  }
-
-  return tokenJson.access_token;
 }
 
 async function getCaptureDetails(captureId: string, accessToken: string): Promise<PayPalCaptureDetails> {
