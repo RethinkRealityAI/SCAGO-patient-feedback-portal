@@ -9,6 +9,8 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 import { revalidatePath, unstable_noStore as noStore } from 'next/cache';
 import { defaultSurvey, surveyV2, consentSurvey } from '@/lib/survey-template';
@@ -206,11 +208,21 @@ export async function getSurvey(id: string) {
 
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
-    } else {
-      const newSurvey = JSON.parse(JSON.stringify(defaultSurvey));
-      newSurvey.id = id;
-      return newSurvey;
+    } 
+
+    // Attempt to look up by slug if ID lookup fails
+    const q = query(collection(db, 'surveys'), where('slug', '==', id));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const matchedDoc = querySnapshot.docs[0];
+      return { id: matchedDoc.id, ...matchedDoc.data() };
     }
+
+    // Fallback to new survey if neither found
+    const newSurvey = JSON.parse(JSON.stringify(defaultSurvey));
+    newSurvey.id = id;
+    return newSurvey;
   } catch (e) {
     console.error('Error getting survey:', e);
     if (e instanceof Error && e.message.includes('permission-denied')) {

@@ -125,6 +125,7 @@ const thankYouSettingsSchema = z.object({
 
 const surveySchema = z.object({
   title: z.string().min(1, 'Survey title is required.'),
+  slug: z.string().regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens").optional().or(z.literal('')),
   description: z.string().optional(),
   appearance: appearanceSchema,
   // New: submission and sharing controls
@@ -2173,6 +2174,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                 <CardHeader><CardTitle>Survey Details</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   <FormField control={form.control} name="title" render={({ field }) => <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="slug" render={({ field }) => <FormItem><FormLabel>URL Slug</FormLabel><FormDescription>Custom URL name for this survey (e.g., 'patient-feedback'). Keep blank to use the default ID.</FormDescription><FormControl><Input {...field} value={field.value ?? ''} placeholder="my-custom-survey" /></FormControl><FormMessage /></FormItem>} />
                   <FormField control={form.control} name="description" render={({ field }) => <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="submitButtonLabel" render={({ field }) => <FormItem><FormLabel>Submit Button Label</FormLabel><FormControl><Input {...field} value={field.value ?? 'Submit'} /></FormControl><FormMessage /></FormItem>} />

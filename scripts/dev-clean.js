@@ -9,7 +9,7 @@ const { rmSync, existsSync } = require('fs');
 const { join } = require('path');
 
 const root = join(__dirname, '..');
-const PORT = 9002;
+const PORT = 3012;
 const selfPid = process.pid.toString();
 
 function killProcessOnPort() {
@@ -106,7 +106,7 @@ function warmUpInitialBuild(attempt = 1) {
 }
 
 // Start Next.js dev server
-const child = spawn('npx', ['next', 'dev', '-p', '9002'], {
+const child = spawn('npx', ['next', 'dev', '-p', '3012'], {
   stdio: 'inherit',
   shell: true,
   cwd: root,

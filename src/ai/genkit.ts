@@ -20,8 +20,8 @@ if (process.env.GOOGLE_API_KEY.length < 20) {
 }
 
 // Configure Genkit with Google AI plugin
-// The plugin automatically reads GOOGLE_API_KEY from environment variables
-const googleAIPlugin = googleAI();
+// Passing GOOGLE_API_KEY explicitly since plugin expects GEMINI_API_KEY by default
+const googleAIPlugin = googleAI({ apiKey: process.env.GOOGLE_API_KEY });
 export const ai = genkit({
   plugins: [googleAIPlugin],
 });

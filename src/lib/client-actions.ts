@@ -256,11 +256,12 @@ export async function createSurveyFromTemplate(template: any) {
     console.log('[createSurveyFromTemplate] Authenticated as:', currentUser.email);
 
     const newSurveyRef = doc(collection(db, 'surveys'));
-    // Ensure we don't carry over template-specific flags that shouldn't be in the instance
-    const { isTemplate, isActive, category, ...surveyData } = template;
+    // Ensure we don't carry over template-specific flags or custom slugs that shouldn't be in the instance
+    const { isTemplate, isActive, category, slug, ...surveyData } = template;
 
     const newSurvey = {
       ...surveyData,
+      title: surveyData.title ? `${surveyData.title} (Copy)` : 'New Survey',
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: currentUser.email || 'unknown',
