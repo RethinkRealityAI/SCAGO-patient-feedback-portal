@@ -191,6 +191,7 @@ export async function listSurveys() {
         id: doc.id,
         title: data.title || 'Untitled Survey',
         description: data.description || 'No description.',
+        slug: typeof data.slug === 'string' && data.slug.length > 0 ? data.slug : undefined,
         sections,
         questionCount,
       };

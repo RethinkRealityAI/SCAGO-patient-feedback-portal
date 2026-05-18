@@ -256,8 +256,9 @@ export async function createSurveyFromTemplate(template: any) {
     console.log('[createSurveyFromTemplate] Authenticated as:', currentUser.email);
 
     const newSurveyRef = doc(collection(db, 'surveys'));
-    // Ensure we don't carry over template-specific flags or custom slugs that shouldn't be in the instance
-    const { isTemplate, isActive, category, slug, ...surveyData } = template;
+    // Strip template-specific fields: id (prevents template id overwriting Firestore doc id in getSurvey),
+    // slug (new survey should have its own), dashboardColumns (should be configured fresh per survey)
+    const { isTemplate, isActive, category, slug, id: _tid, dashboardColumns: _dc, name: _tname, ...surveyData } = template;
 
     const newSurvey = {
       ...surveyData,

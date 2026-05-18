@@ -12,6 +12,7 @@ interface Survey {
   id: string;
   name?: string;
   title?: string;
+  slug?: string;
   sections?: Array<{
     fields?: Array<any>;
   }>;
@@ -99,7 +100,7 @@ export function SurveyListClient({ initialSurveys }: SurveyListClientProps) {
                   <Link href={`/dashboard/${survey.id}`}>Dashboard</Link>
                 </Button>
                 <Button asChild size="sm" variant="secondary" className="h-8">
-                  <Link href={`/survey/${survey.id}`}>View</Link>
+                  <Link href={`/survey/${survey.slug || survey.id}`}>View</Link>
                 </Button>
                 <Button asChild size="sm" className="h-8">
                   <Link href={`/editor/${survey.id}`}>Edit</Link>

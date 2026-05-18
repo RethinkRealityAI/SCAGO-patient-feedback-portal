@@ -9,6 +9,8 @@ import ReactMarkdown from 'react-markdown'
 // Firestore imports removed - now using utility functions from @/lib/submission-utils
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
+import { getSurvey } from '@/app/editor/actions'
+import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -40,8 +42,11 @@ function getHospitalName(submission: any): string {
     'Hospital'
 }
 
+interface DashboardColumn { fieldId: string; label: string }
+
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
+  const [surveyConfig, setSurveyConfig] = useState<{ dashboardColumns?: DashboardColumn[]; dashboardWidgets?: DashboardWidget[]; title?: string } | null>(null)
   const [analysis, setAnalysis] = useState<{ summary?: string; error?: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,8 +58,14 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         setIsLoading(true)
         setError(null)
 
-        // Fetch submissions for this survey using utility function
-        const { fetchSubmissionsForSurvey } = await import('@/lib/submission-utils')
+        // Fetch survey config (for dashboardColumns) and submissions in parallel
+        const [surveyResult, { fetchSubmissionsForSurvey }] = await Promise.all([
+          getSurvey(surveyId),
+          import('@/lib/submission-utils'),
+        ])
+        if (!('error' in surveyResult)) {
+          setSurveyConfig(surveyResult as any)
+        }
         const filteredSubmissions = await fetchSubmissionsForSurvey(surveyId)
         setSubmissions(filteredSubmissions)
 
@@ -185,6 +196,11 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
           </Card>
         </div>
 
+        {/* Custom Dashboard Widgets */}
+        {surveyConfig?.dashboardWidgets && surveyConfig.dashboardWidgets.length > 0 && (
+          <DashboardWidgets widgets={surveyConfig.dashboardWidgets} submissions={submissions} />
+        )}
+
         {/* AI Analysis */}
         <Card>
           <CardHeader>
@@ -226,6 +242,42 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               <div className="text-center py-8 text-muted-foreground">
                 No submissions found for this survey.
               </div>
+            ) : surveyConfig?.dashboardColumns?.length ? (
+              <>
+                <div className="rounded-lg border overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Date</th>
+                        {surveyConfig.dashboardColumns.map((col) => (
+                          <th key={col.fieldId} className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">{col.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {submissions.slice(0, 10).map((submission) => (
+                        <tr key={submission.id} className="hover:bg-muted/20">
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            {new Date(submission.submittedAt).toLocaleDateString()}
+                          </td>
+                          {surveyConfig.dashboardColumns!.map((col) => (
+                            <td key={col.fieldId} className="px-4 py-3 text-sm max-w-xs">
+                              <p className="line-clamp-2">
+                                {extractStringValue((submission as any)[col.fieldId]) ?? '—'}
+                              </p>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalSubmissions > 10 && (
+                  <p className="mt-4 text-sm text-muted-foreground text-center">
+                    Showing 10 of {totalSubmissions} submissions
+                  </p>
+                )}
+              </>
             ) : (
               <>
                 <div className="rounded-lg border overflow-hidden">

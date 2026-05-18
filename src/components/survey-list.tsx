@@ -17,6 +17,7 @@ interface Survey {
   id: string;
   title: string;
   description: string;
+  slug?: string;
 }
 
 interface SurveyListProps {
@@ -98,7 +99,7 @@ export default function SurveyList({ surveys }: SurveyListProps) {
               className="group hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out"
             >
               <Link
-                href={`/survey/${survey.id}`}
+                href={`/survey/${survey.slug || survey.id}`}
                 className="block p-4 sm:p-6 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow duration-300"
                 title={`${t.beginSurvey} ${survey.title}`}
               >

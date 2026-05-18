@@ -22,10 +22,11 @@ import { useToast } from '@/hooks/use-toast';
 import { DndContext, closestCenter, KeyboardSensor as DndKeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X, Plus, Eraser, GitBranch, Zap, Mail, Send, CheckCircle2, AlertTriangle, RefreshCw, Clock } from 'lucide-react';
+import { Trash2, PlusCircle, GripVertical, Loader2, ArrowUp, ArrowDown, X, Plus, Eraser, GitBranch, Zap, Mail, Send, CheckCircle2, AlertTriangle, RefreshCw, Clock, PieChart as PieChartIcon, BarChart3, Hash, Sigma, ListTodo, LayoutDashboard, Table as TableIcon, Settings2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { regexPresets } from '@/lib/regex-presets';
@@ -158,6 +159,17 @@ const surveySchema = z.object({
   }).optional(),
   thankYouSettings: thankYouSettingsSchema,
   sections: z.array(sectionSchema),
+  dashboardColumns: z.array(z.object({
+    fieldId: z.string(),
+    label: z.string(),
+  })).optional(),
+  dashboardWidgets: z.array(z.object({
+    id: z.string(),
+    type: z.enum(['pie', 'bar', 'stat-avg', 'stat-count', 'breakdown']),
+    fieldId: z.string().optional(),
+    label: z.string(),
+    color: z.string().optional(),
+  })).optional(),
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
@@ -1599,6 +1611,455 @@ function TestFormSubmissionButton({ surveyId, sections }: { surveyId: string; se
 }
 
 
+const DISPLAYABLE_FIELD_TYPES = new Set([
+  'text', 'textarea', 'email', 'phone', 'url', 'date', 'time', 'datetime', 'number',
+  'select', 'radio', 'checkbox', 'rating', 'nps', 'boolean-checkbox',
+  'province-ca', 'city-on', 'hospital-on', 'department-on',
+  'duration-hm', 'duration-dh', 'range', 'percentage', 'currency', 'pain-scale', 'ranking',
+]);
+
+const CATEGORICAL_FIELD_TYPES = new Set([
+  'select', 'radio', 'checkbox', 'boolean-checkbox',
+  'province-ca', 'city-on', 'hospital-on', 'department-on',
+]);
+
+const NUMERIC_FIELD_TYPES = new Set([
+  'rating', 'nps', 'range', 'percentage', 'number', 'pain-scale', 'currency',
+]);
+
+type WidgetType = 'pie' | 'bar' | 'stat-avg' | 'stat-count' | 'breakdown';
+
+const WIDGET_TYPE_META: Record<WidgetType, { label: string; description: string; Icon: any; accepts: 'categorical' | 'numeric' | 'none' | 'any' }> = {
+  'pie': { label: 'Pie Chart', description: 'Distribution of choices for a categorical question', Icon: PieChartIcon, accepts: 'categorical' },
+  'bar': { label: 'Bar Chart', description: 'Distribution of values for a numeric question', Icon: BarChart3, accepts: 'numeric' },
+  'stat-avg': { label: 'Average', description: 'Average value for a numeric question', Icon: Sigma, accepts: 'numeric' },
+  'stat-count': { label: 'Total Submissions', description: 'Total count of survey submissions', Icon: Hash, accepts: 'none' },
+  'breakdown': { label: 'Breakdown Table', description: 'Ranked list of most common responses', Icon: ListTodo, accepts: 'categorical' },
+};
+
+const WIDGET_COLOR_PRESETS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#6366f1', '#14b8a6'];
+
+function fieldAcceptsWidget(fieldType: string, widgetType: WidgetType): boolean {
+  const accepts = WIDGET_TYPE_META[widgetType].accepts;
+  if (accepts === 'none') return false;
+  if (accepts === 'any') return true;
+  if (accepts === 'categorical') return CATEGORICAL_FIELD_TYPES.has(fieldType);
+  if (accepts === 'numeric') return NUMERIC_FIELD_TYPES.has(fieldType);
+  return false;
+}
+
+function DashboardColumnsSection() {
+  const form = useFormContext<SurveyFormData>();
+  const sections = form.watch('sections') || [];
+  const dashboardColumns = form.watch('dashboardColumns') || [];
+
+  const allFields = (sections as any[]).flatMap((section) =>
+    (section.fields || [])
+      .filter((f: any) => DISPLAYABLE_FIELD_TYPES.has(f.type))
+      .map((f: any) => ({ id: f.id, label: f.label, type: f.type, sectionTitle: section.title }))
+  );
+
+  const isEnabled = (fieldId: string) => dashboardColumns.some((c) => c.fieldId === fieldId);
+  const getLabel = (fieldId: string, fallback: string) =>
+    dashboardColumns.find((c) => c.fieldId === fieldId)?.label ?? fallback;
+
+  const toggle = (fieldId: string, defaultLabel: string) => {
+    if (isEnabled(fieldId)) {
+      form.setValue('dashboardColumns', dashboardColumns.filter((c) => c.fieldId !== fieldId));
+    } else {
+      form.setValue('dashboardColumns', [...dashboardColumns, { fieldId, label: defaultLabel }]);
+    }
+  };
+
+  const updateLabel = (fieldId: string, newLabel: string) => {
+    form.setValue('dashboardColumns',
+      dashboardColumns.map((c) => c.fieldId === fieldId ? { ...c, label: newLabel } : c)
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <TableIcon className="h-5 w-5 text-primary" />
+          <CardTitle>Submissions Table Columns</CardTitle>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Choose which questions appear as columns in the submissions table. Date is always shown first.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {allFields.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            No displayable questions found. Add questions to your survey sections first.
+          </p>
+        ) : (
+          allFields.map((field) => {
+            const enabled = isEnabled(field.id);
+            const colLabel = getLabel(field.id, field.label);
+            return (
+              <div key={field.id} className={cn('flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border p-3 transition-colors', enabled && 'border-primary/30 bg-primary/5')}>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <Switch checked={enabled} onCheckedChange={() => toggle(field.id, field.label)} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{field.label}</p>
+                    <p className="text-xs text-muted-foreground">{field.sectionTitle} · {field.type}</p>
+                  </div>
+                </div>
+                {enabled && (
+                  <div className="flex items-center gap-2 shrink-0 pl-12 sm:pl-0">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Column label:</Label>
+                    <Input
+                      className="h-7 text-xs w-36"
+                      value={colLabel}
+                      onChange={(e) => updateLabel(field.id, e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+        {dashboardColumns.length > 0 && (
+          <div className="mt-4 rounded-lg bg-muted/50 p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Active columns in order:</p>
+            <div className="flex flex-wrap gap-2">
+              {dashboardColumns.map((col, i) => (
+                <span key={col.fieldId} className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                  {i + 1}. {col.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DashboardWidgetsSection() {
+  const form = useFormContext<SurveyFormData>();
+  const sections = form.watch('sections') || [];
+  const widgets = form.watch('dashboardWidgets') || [];
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingWidget, setEditingWidget] = useState<any | null>(null);
+
+  const allFields = (sections as any[]).flatMap((section) =>
+    (section.fields || [])
+      .filter((f: any) => DISPLAYABLE_FIELD_TYPES.has(f.type))
+      .map((f: any) => ({ id: f.id, label: f.label, type: f.type, sectionTitle: section.title }))
+  );
+
+  const fieldById = (id: string) => allFields.find((f) => f.id === id);
+
+  const handleSave = (widget: any) => {
+    const exists = widgets.some((w) => w.id === widget.id);
+    if (exists) {
+      form.setValue('dashboardWidgets', widgets.map((w) => (w.id === widget.id ? widget : w)));
+    } else {
+      form.setValue('dashboardWidgets', [...widgets, widget]);
+    }
+    setDialogOpen(false);
+    setEditingWidget(null);
+  };
+
+  const handleRemove = (id: string) => {
+    form.setValue('dashboardWidgets', widgets.filter((w) => w.id !== id));
+  };
+
+  const moveWidget = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= widgets.length) return;
+    const newWidgets = [...widgets];
+    [newWidgets[index], newWidgets[target]] = [newWidgets[target], newWidgets[index]];
+    form.setValue('dashboardWidgets', newWidgets);
+  };
+
+  const openEdit = (widget: any) => {
+    setEditingWidget(widget);
+    setDialogOpen(true);
+  };
+
+  const openCreate = () => {
+    setEditingWidget(null);
+    setDialogOpen(true);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="h-5 w-5 text-primary" />
+            <CardTitle>Charts &amp; Stats</CardTitle>
+          </div>
+          <Button type="button" size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-1" /> Add Widget
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Add visual summaries that appear above the submissions table on the dashboard.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {widgets.length === 0 ? (
+          <div className="text-center py-8 border-2 border-dashed rounded-lg">
+            <LayoutDashboard className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+            <p className="text-sm text-muted-foreground mb-1">No widgets yet</p>
+            <p className="text-xs text-muted-foreground">Add pie charts, bar charts, and stats to visualize responses.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {widgets.map((widget, i) => {
+              const meta = WIDGET_TYPE_META[widget.type as WidgetType];
+              const field = widget.fieldId ? fieldById(widget.fieldId) : null;
+              const Icon = meta?.Icon ?? LayoutDashboard;
+              return (
+                <div key={widget.id} className="rounded-lg border p-3 group hover:border-primary/40 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="h-9 w-9 rounded-md flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${widget.color || '#3b82f6'}20`, color: widget.color || '#3b82f6' }}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{widget.label}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {meta?.label}{field ? ` · ${field.label}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => moveWidget(i, -1)} disabled={i === 0}>
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => moveWidget(i, 1)} disabled={i === widgets.length - 1}>
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(widget)}>
+                        <Settings2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleRemove(widget.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+
+      <WidgetEditorDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setEditingWidget(null);
+        }}
+        onSave={handleSave}
+        initial={editingWidget}
+        allFields={allFields}
+      />
+    </Card>
+  );
+}
+
+function WidgetEditorDialog({
+  open,
+  onOpenChange,
+  onSave,
+  initial,
+  allFields,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (widget: any) => void;
+  initial: any | null;
+  allFields: { id: string; label: string; type: string; sectionTitle: string }[];
+}) {
+  const [type, setType] = useState<WidgetType>('pie');
+  const [fieldId, setFieldId] = useState<string>('');
+  const [label, setLabel] = useState('');
+  const [color, setColor] = useState(WIDGET_COLOR_PRESETS[0]);
+
+  useEffect(() => {
+    if (open) {
+      if (initial) {
+        setType(initial.type);
+        setFieldId(initial.fieldId || '');
+        setLabel(initial.label || '');
+        setColor(initial.color || WIDGET_COLOR_PRESETS[0]);
+      } else {
+        setType('pie');
+        setFieldId('');
+        setLabel('');
+        setColor(WIDGET_COLOR_PRESETS[0]);
+      }
+    }
+  }, [open, initial]);
+
+  const meta = WIDGET_TYPE_META[type];
+  const needsField = meta.accepts !== 'none';
+  const compatibleFields = needsField
+    ? allFields.filter((f) => fieldAcceptsWidget(f.type, type))
+    : [];
+
+  const handleTypeChange = (newType: WidgetType) => {
+    setType(newType);
+    // Reset fieldId if the new type doesn't need a field, or the current field is incompatible
+    if (WIDGET_TYPE_META[newType].accepts === 'none') {
+      setFieldId('');
+    } else {
+      const currentField = allFields.find((f) => f.id === fieldId);
+      if (!currentField || !fieldAcceptsWidget(currentField.type, newType)) {
+        setFieldId('');
+      }
+    }
+    if (!label || !initial) {
+      setLabel(WIDGET_TYPE_META[newType].label);
+    }
+  };
+
+  const handleFieldChange = (id: string) => {
+    setFieldId(id);
+    if (!label || label === meta.label) {
+      const f = allFields.find((x) => x.id === id);
+      if (f) setLabel(f.label);
+    }
+  };
+
+  const canSave = label.trim().length > 0 && (!needsField || !!fieldId);
+
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave({
+      id: initial?.id || nanoid(),
+      type,
+      fieldId: needsField ? fieldId : undefined,
+      label: label.trim(),
+      color,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initial ? 'Edit Widget' : 'Add Widget'}</DialogTitle>
+          <DialogDescription>
+            Choose how you want to visualize responses on the dashboard.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Widget Type</Label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {(Object.keys(WIDGET_TYPE_META) as WidgetType[]).map((t) => {
+                const m = WIDGET_TYPE_META[t];
+                const selected = type === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => handleTypeChange(t)}
+                    className={cn(
+                      'flex flex-col items-center text-center gap-1.5 p-3 rounded-lg border-2 transition-all hover:border-primary/50',
+                      selected ? 'border-primary bg-primary/5' : 'border-border'
+                    )}
+                  >
+                    <m.Icon className={cn('h-5 w-5', selected ? 'text-primary' : 'text-muted-foreground')} />
+                    <span className="text-xs font-medium">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">{meta.description}</p>
+          </div>
+
+          {needsField && (
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Question</Label>
+              {compatibleFields.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-3 px-3 border rounded-lg bg-muted/30">
+                  No compatible questions found for this widget type. {meta.accepts === 'categorical' ? 'Add a select, radio, or checkbox question to your survey.' : 'Add a rating, NPS, or numeric question to your survey.'}
+                </p>
+              ) : (
+                <Select value={fieldId} onValueChange={handleFieldChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a question..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {compatibleFields.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        <div className="flex flex-col">
+                          <span className="text-sm">{f.label}</span>
+                          <span className="text-xs text-muted-foreground">{f.sectionTitle} · {f.type}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Widget Label</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Hospital Distribution"
+            />
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Accent Color</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              {WIDGET_COLOR_PRESETS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={cn(
+                    'h-7 w-7 rounded-full border-2 transition-transform hover:scale-110',
+                    color === c ? 'border-foreground scale-110' : 'border-transparent'
+                  )}
+                  style={{ backgroundColor: c }}
+                  aria-label={`Color ${c}`}
+                />
+              ))}
+              <Input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-7 w-12 p-0.5 cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" onClick={handleSave} disabled={!canSave}>
+            {initial ? 'Save Changes' : 'Add Widget'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DashboardConfig() {
+  return (
+    <div className="space-y-6">
+      <DashboardWidgetsSection />
+      <DashboardColumnsSection />
+    </div>
+  );
+}
+
 export default function SurveyEditor({ survey }: { survey: Record<string, any> }) {
   const [isMounted, setIsMounted] = useState(false);
   const [activeItem, setActiveItem] = useState<any>(null);
@@ -1833,6 +2294,7 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                 <TabsTrigger value="sections">Sections</TabsTrigger>
                 <TabsTrigger value="thank-you">Thank You Page</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
+                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
               </TabsList>
               <Button type="submit" size="sm" disabled={isSubmitting} className="shadow-2xl md:hidden">{isSubmitting && <Loader2 className="mr-2 animate-spin" />} Save</Button>
             </div>
@@ -2294,6 +2756,10 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                   </div>
                 </DragOverlay>
               </DndContext>
+            </TabsContent>
+
+            <TabsContent value="dashboard" className="space-y-6">
+              <DashboardConfig />
             </TabsContent>
           </Tabs>
 
