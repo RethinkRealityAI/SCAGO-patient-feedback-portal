@@ -1269,14 +1269,31 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                         {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
                       </div>
                     );
-                  case 'paypal-membership':
+                  case 'paypal-membership': {
+                    // Extract payer name and email from other form fields so they
+                    // appear in the PayPal merchant dashboard.
+                    const emailField = allFields.find((f) => f.type === 'email');
+                    const nameField = allFields.find(
+                      (f) =>
+                        f.type === 'text' &&
+                        /name/i.test(f.label),
+                    );
+                    const payerEmail = emailField
+                      ? String(watchedValues[emailField.id] ?? '')
+                      : undefined;
+                    const payerName = nameField
+                      ? String(watchedValues[nameField.id] ?? '')
+                      : undefined;
                     return (
                       <PayPalMembershipPayment
                         value={field.value}
                         onChange={(paymentData) => field.onChange(paymentData)}
                         disabled={isSubmitting}
+                        payerName={payerName || undefined}
+                        payerEmail={payerEmail || undefined}
                       />
                     );
+                  }
                   case 'paypal-payment':
                     return (
                       <PayPalPayment

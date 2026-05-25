@@ -256,11 +256,6 @@ export async function updateSurvey(
     delete dataToSave.id;
 
     const surveyRef = doc(db, 'surveys', id);
-    // Log approximate payload size to help diagnose Firestore limits (1 MiB per document)
-    try {
-      const payloadSizeBytes = Buffer.from(JSON.stringify(dataToSave)).length;
-      console.log('[updateSurvey] Payload size (bytes):', payloadSizeBytes);
-    } catch {}
     await setDoc(surveyRef, dataToSave, { merge: true });
 
     revalidatePath(`/survey/${id}`);

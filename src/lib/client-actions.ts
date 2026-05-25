@@ -74,8 +74,6 @@ export async function updateSurvey(surveyId: string, data: any) {
       console.error('[updateSurvey] No authenticated user found');
       return { error: 'You must be logged in to update surveys. Please refresh the page and try again.' };
     }
-    console.log('[updateSurvey] Authenticated as:', currentUser.email);
-
     const { id, ...dataToSave } = data || {};
     // Prefer client-side write so Firestore uses the current user's auth context
     const cleaned = sanitizeFirestoreData(dataToSave);
@@ -102,8 +100,6 @@ export async function createBlankSurvey() {
       console.error('[createBlankSurvey] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createBlankSurvey] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = {
       appearance: {
@@ -156,8 +152,6 @@ export async function createSurvey() {
       console.error('[createSurvey] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createSurvey] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = { ...defaultSurvey, title: 'Untitled Survey' } as any;
     await setDoc(newSurveyRef, sanitizeFirestoreData(newSurvey));
@@ -181,8 +175,6 @@ export async function createSurveyV2() {
       console.error('[createSurveyV2] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createSurveyV2] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
     const newSurvey = { ...surveyV2, title: 'Untitled Survey (V2)' } as any;
     await setDoc(newSurveyRef, sanitizeFirestoreData(newSurvey));
@@ -206,8 +198,6 @@ export async function createConsentSurvey() {
       console.error('[createConsentSurvey] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createConsentSurvey] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
     await setDoc(newSurveyRef, sanitizeFirestoreData(consentSurvey as any));
     return { id: newSurveyRef.id };
@@ -229,8 +219,6 @@ export async function createMembershipSurvey() {
       console.error('[createMembershipSurvey] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createMembershipSurvey] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
     await setDoc(newSurveyRef, sanitizeFirestoreData(membershipSurvey as any));
     return { id: newSurveyRef.id };
@@ -253,12 +241,24 @@ export async function createSurveyFromTemplate(template: any) {
       console.error('[createSurveyFromTemplate] No authenticated user found');
       return { error: 'You must be logged in to create surveys. Please refresh the page and try again.' };
     }
-    console.log('[createSurveyFromTemplate] Authenticated as:', currentUser.email);
-
     const newSurveyRef = doc(collection(db, 'surveys'));
-    // Strip template-specific fields: id (prevents template id overwriting Firestore doc id in getSurvey),
-    // slug (new survey should have its own), dashboardColumns (should be configured fresh per survey)
-    const { isTemplate, isActive, category, slug, id: _tid, dashboardColumns: _dc, name: _tname, ...surveyData } = template;
+    // Strip template-specific and status fields that must not be inherited by a copy:
+    //   id          – prevents the template's Firestore doc id from overwriting the new doc
+    //   slug        – each survey must have its own unique slug
+    //   dashboardColumns / dashboardWidgets – must be configured fresh (sharing them causes
+    //                  both surveys to show identical dashboards)
+    //   isTemplate / isActive / category / name – template metadata, not survey metadata
+    //   submissionCount – a live counter; copy starts at zero
+    //   isPublished – copy should start unpublished
+    const {
+      isTemplate, isActive, category, slug,
+      id: _tid,
+      dashboardColumns: _dc, dashboardWidgets: _dw,
+      name: _tname,
+      submissionCount: _sc,
+      isPublished: _ip,
+      ...surveyData
+    } = template;
 
     const newSurvey = {
       ...surveyData,

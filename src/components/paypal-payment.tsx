@@ -108,6 +108,10 @@ interface PayPalPaymentProps {
   onChange?: (value: PaymentValue) => void;
   clientId?: string;
   disabled?: boolean;
+  /** Payer's full name — forwarded to PayPal for the merchant dashboard */
+  payerName?: string;
+  /** Payer's email address — forwarded to PayPal for the merchant dashboard */
+  payerEmail?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,11 +155,22 @@ function fmtMoney(amount: number, currency: string) {
 // Server-side order helpers
 // ---------------------------------------------------------------------------
 
-async function createGenericOrder(amount: number, currency: string, description: string): Promise<{ orderId: string }> {
+async function createGenericOrder(
+  amount: number,
+  currency: string,
+  description: string,
+  payer?: { name?: string; email?: string },
+): Promise<{ orderId: string }> {
   const res = await fetch('/api/paypal/create-generic-order', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: amount.toFixed(2), currency, description }),
+    body: JSON.stringify({
+      amount: amount.toFixed(2),
+      currency,
+      description,
+      ...(payer?.name ? { payerName: payer.name } : {}),
+      ...(payer?.email ? { payerEmail: payer.email } : {}),
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -700,6 +715,8 @@ export function PayPalPayment({
   onChange,
   clientId,
   disabled = false,
+  payerName,
+  payerEmail,
 }: PayPalPaymentProps) {
   const currency = config.currency || 'CAD';
   const taxRate = config.taxRate ?? 0;
@@ -923,10 +940,14 @@ export function PayPalPayment({
                         setPaymentInProgress(false);
                       },
                     });
+                    const payer =
+                      payerName || payerEmail
+                        ? { name: payerName, email: payerEmail }
+                        : undefined;
                     session.start(
                       { presentationMode: 'auto' },
-                      createGenericOrder(total, currency, config.title || 'SCAGO Payment'),
-                    ).catch((err: any) => {
+                      createGenericOrder(total, currency, config.title || 'SCAGO Payment', payer),
+                    ).catch((err: unknown) => {
                       console.error('[PayPal] Session start error:', err);
                       setPaypalError('Failed to start payment. Please try again.');
                       setPaymentInProgress(false);

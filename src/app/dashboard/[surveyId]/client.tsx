@@ -11,6 +11,7 @@ import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
 import { getSurvey } from '@/app/editor/actions'
 import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
+import { useAuth } from '@/hooks/use-auth'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -42,36 +43,84 @@ function getHospitalName(submission: any): string {
     'Hospital'
 }
 
+// Detect whether any submission in the set carries hospital-feedback fields.
+// Used to decide whether to show hospital-specific metric cards.
+function hasHospitalFields(submissions: FeedbackSubmission[]): boolean {
+  return submissions.some(s =>
+    s.rating !== undefined ||
+    !!(s as any).hospitalInteraction ||
+    !!(s as any).hospitalName ||
+    !!(s as any)['hospital-on']
+  )
+}
+
 interface DashboardColumn { fieldId: string; label: string }
 
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
+  const { isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [surveyConfig, setSurveyConfig] = useState<{ dashboardColumns?: DashboardColumn[]; dashboardWidgets?: DashboardWidget[]; title?: string } | null>(null)
   const [analysis, setAnalysis] = useState<{ summary?: string; error?: string } | null>(null)
+  // isLoading covers only the initial data fetch (survey config + submissions).
+  // isAnalyzing covers the separate AI analysis request that runs after data is loaded,
+  // so the submissions table can render while analysis is still in progress.
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   useEffect(() => {
+    // Wait for both auth AND permissions to settle before fetching.
+    // Without this guard a restricted admin would briefly see isAdmin=true
+    // with allowedForms=[] (before the async permissions fetch completes),
+    // causing a false "permission denied" error.
+    if (authLoading || permissionsLoading) return
+
     async function fetchData() {
       try {
         setIsLoading(true)
         setError(null)
 
-        // Fetch survey config (for dashboardColumns) and submissions in parallel
+        // ── Access control ────────────────────────────────────────────────────
+        // Restricted admins (isAdmin && !isSuperAdmin) may only view surveys
+        // listed in their allowedForms. Resolve the survey first so we have the
+        // canonical Firestore document ID even if a slug was passed in the URL.
         const [surveyResult, { fetchSubmissionsForSurvey }] = await Promise.all([
           getSurvey(surveyId),
           import('@/lib/submission-utils'),
         ])
+
+        // Resolve the canonical Firestore doc ID (getSurvey may resolve a slug)
+        const resolvedId: string =
+          !('error' in surveyResult) && (surveyResult as any).id
+            ? (surveyResult as any).id
+            : surveyId
+
+        // Enforce per-survey access for restricted admins
+        if (isAdmin && !isSuperAdmin) {
+          const permitted = allowedForms ?? []
+          if (!permitted.includes(resolvedId)) {
+            setError('You do not have permission to view this survey\'s dashboard.')
+            setIsLoading(false)
+            return
+          }
+        }
+
         if (!('error' in surveyResult)) {
           setSurveyConfig(surveyResult as any)
         }
-        const filteredSubmissions = await fetchSubmissionsForSurvey(surveyId)
+
+        // Use the resolved Firestore doc ID — never the raw URL param —
+        // so submissions are always fetched from surveys/{docId}/submissions/
+        const filteredSubmissions = await fetchSubmissionsForSurvey(resolvedId)
         setSubmissions(filteredSubmissions)
 
-        // Run analysis
+        // Stop the main loading spinner now — the submissions table can render.
+        // AI analysis runs separately so the page isn't blocked waiting for it.
+        setIsLoading(false)
+
+        // Run analysis using the canonical ID
         setIsAnalyzing(true)
-        const analysisResult = await analyzeFeedbackForSurvey(surveyId)
+        const analysisResult = await analyzeFeedbackForSurvey(resolvedId)
         setAnalysis(analysisResult)
         setIsAnalyzing(false)
       } catch (e: any) {
@@ -81,15 +130,15 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         } else {
           setError('Failed to load survey data. Please try refreshing the page.')
         }
-      } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [surveyId])
+  }, [surveyId, authLoading, permissionsLoading, isAdmin, isSuperAdmin, allowedForms])
 
-  // Show loading state
+  // Show loading state only until survey config + submissions are fetched.
+  // The AI analysis section has its own inline spinner (isAnalyzing).
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -127,6 +176,12 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
   // Calculate metrics
   const totalSubmissions = submissions.length
+
+  // Only show hospital-specific metric cards when the survey actually has those fields.
+  // Generic surveys (job applications, membership forms, etc.) have neither `rating`
+  // nor `hospitalName` fields, so showing "0.0/10" and "Hospital" would be misleading.
+  const showHospitalMetrics = hasHospitalFields(submissions)
+
   const avgRating = totalSubmissions > 0
     ? (submissions.reduce((acc, s) => acc + Number(s.rating || 0), 0) / totalSubmissions).toFixed(1)
     : '0.0'
@@ -134,13 +189,21 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const good = submissions.filter(s => (Number(s.rating) || 0) >= 5 && (Number(s.rating) || 0) < 8).length
   const needsImprovement = submissions.filter(s => (Number(s.rating) || 0) < 5).length
 
-  // Get hospital breakdown
+  // Get hospital name (only used when showHospitalMetrics is true)
   const hospitalName = submissions[0] ? getHospitalName(submissions[0]) : 'Hospital'
+
+  // Most recent submission date for generic surveys
+  const mostRecentDate = submissions.length > 0
+    ? new Date(Math.max(...submissions.map(s => new Date(s.submittedAt).getTime())))
+    : null
+
+  // Survey title to display: prefer the config title, fall back to URL param
+  const surveyTitle = surveyConfig?.title || `Survey ${surveyId}`
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="grid gap-8">
-        {/* Header with Survey ID and Back Button */}
+        {/* Header with Survey Title and Back Button */}
         <div className="space-y-4">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="gap-2">
@@ -150,58 +213,85 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Survey Dashboard</h1>
-              <p className="text-muted-foreground mt-1">Survey ID: {surveyId}</p>
+              <h1 className="text-3xl font-bold">{surveyTitle}</h1>
+              <p className="text-muted-foreground mt-1">Survey Dashboard</p>
             </div>
           </div>
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Total Submissions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalSubmissions}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Average Rating</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{avgRating}/10</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Hospital</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm font-bold truncate">{hospitalName}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Experience Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2 text-xs">
-                <span className="text-green-600">E: {excellent}</span>
-                <span className="text-yellow-600">G: {good}</span>
-                <span className="text-red-600">NI: {needsImprovement}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {showHospitalMetrics ? (
+          // Hospital-feedback surveys: show rating, hospital, and experience breakdown
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Total Submissions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalSubmissions}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Average Rating</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{avgRating}/10</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Hospital</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm font-bold truncate">{hospitalName}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Experience Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 text-xs">
+                  <span className="text-green-600">E: {excellent}</span>
+                  <span className="text-yellow-600">G: {good}</span>
+                  <span className="text-red-600">NI: {needsImprovement}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          // Generic surveys: show total submissions and most recent date instead
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Total Submissions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalSubmissions}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Most Recent</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {mostRecentDate
+                    ? mostRecentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : '—'}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Custom Dashboard Widgets */}
         {surveyConfig?.dashboardWidgets && surveyConfig.dashboardWidgets.length > 0 && (
           <DashboardWidgets widgets={surveyConfig.dashboardWidgets} submissions={submissions} />
         )}
 
-        {/* AI Analysis */}
+        {/* AI Analysis — renders independently after submissions table is visible */}
         <Card>
           <CardHeader>
             <CardTitle>AI Analysis Summary</CardTitle>
@@ -243,6 +333,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 No submissions found for this survey.
               </div>
             ) : surveyConfig?.dashboardColumns?.length ? (
+              // Survey has explicit column config — use it
               <>
                 <div className="rounded-lg border overflow-x-auto">
                   <table className="w-full">
@@ -278,7 +369,8 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                   </p>
                 )}
               </>
-            ) : (
+            ) : showHospitalMetrics ? (
+              // Hospital-feedback fallback: show rating / experience / sentiment columns
               <>
                 <div className="rounded-lg border overflow-hidden">
                   <table className="w-full">
@@ -305,7 +397,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm max-w-md">
-                            <p className="line-clamp-2">{submission.hospitalInteraction}</p>
+                            <p className="line-clamp-2">{(submission as any).hospitalInteraction}</p>
                           </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${(Number(submission.rating) || 0) >= 8 ? 'bg-green-100 text-green-700' :
@@ -327,6 +419,47 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                   </p>
                 )}
               </>
+            ) : (
+              // Generic survey fallback: date + submission index only
+              <>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium">#</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium">Submitter</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {submissions.slice(0, 10).map((submission, idx) => {
+                        // Try to surface any name-like field from the submission
+                        const rawSub = submission as any
+                        const displayName =
+                          rawSub.firstName || rawSub.first_name || rawSub.fname
+                            ? `${rawSub.firstName || rawSub.first_name || rawSub.fname || ''} ${rawSub.lastName || rawSub.last_name || rawSub.lname || ''}`.trim()
+                            : rawSub.name || rawSub.fullName || rawSub.full_name || null
+                        return (
+                          <tr key={submission.id} className="hover:bg-muted/20">
+                            <td className="px-4 py-3 text-sm text-muted-foreground">{idx + 1}</td>
+                            <td className="px-4 py-3 text-sm whitespace-nowrap">
+                              {new Date(submission.submittedAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {displayName || <span className="italic text-muted-foreground">Anonymous</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {totalSubmissions > 10 && (
+                  <p className="mt-4 text-sm text-muted-foreground text-center">
+                    Showing 10 of {totalSubmissions} submissions
+                  </p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -334,4 +467,3 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     </div>
   )
 }
-

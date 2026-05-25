@@ -79,7 +79,7 @@ export interface ApplePayPayPalSession {
 
 export interface CardFieldsSession {
   createCardFieldsComponent: (opts: {
-    type: 'number' | 'expiry' | 'cvv';
+    type: 'number' | 'expiry' | 'cvv' | 'name';
     placeholder?: string;
     style?: Record<string, unknown>;
   }) => HTMLElement;

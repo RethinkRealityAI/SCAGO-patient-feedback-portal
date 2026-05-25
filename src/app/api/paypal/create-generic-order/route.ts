@@ -4,7 +4,7 @@ import { createPayPalOrder } from '@/lib/paypal-server';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { amount, currency, description } = body;
+    const { amount, currency, description, payerName, payerEmail } = body;
 
     if (!amount || !currency) {
       return NextResponse.json({ error: 'Missing amount or currency.' }, { status: 400 });
@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
       amount: numAmount.toFixed(2),
       currency: currency.toUpperCase(),
       description: description || 'SCAGO Payment',
+      payerName: typeof payerName === 'string' ? payerName : undefined,
+      payerEmail: typeof payerEmail === 'string' ? payerEmail : undefined,
     });
 
     return NextResponse.json({ orderId });

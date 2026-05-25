@@ -5,7 +5,7 @@ import { createPayPalOrder } from '@/lib/paypal-server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { planId } = body;
+    const { planId, payerName, payerEmail } = body;
 
     if (!planId || typeof planId !== 'string') {
       return NextResponse.json(
@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
       amount: plan.amount.toFixed(2),
       currency: plan.currency,
       description: `SCAGO ${plan.category} ${plan.durationYears} year Membership`,
+      payerName: typeof payerName === 'string' ? payerName : undefined,
+      payerEmail: typeof payerEmail === 'string' ? payerEmail : undefined,
     });
 
     return NextResponse.json({ orderId });

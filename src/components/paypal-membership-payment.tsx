@@ -37,17 +37,26 @@ interface PayPalMembershipPaymentProps {
   clientId?: string;
   /** Whether the field is read-only (e.g. form is already submitted) */
   disabled?: boolean;
+  /** Payer's full name — shown in the PayPal merchant dashboard */
+  payerName?: string;
+  /** Payer's email address — shown in the PayPal merchant dashboard */
+  payerEmail?: string;
 }
 
 // ── Helper functions ─────────────────────────────────────────────────────────
 
 async function createOrderForPlan(
   planId: string,
+  payer?: { name?: string; email?: string },
 ): Promise<{ orderId: string }> {
   const res = await fetch('/api/paypal/create-order', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ planId }),
+    body: JSON.stringify({
+      planId,
+      ...(payer?.name ? { payerName: payer.name } : {}),
+      ...(payer?.email ? { payerEmail: payer.email } : {}),
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -140,12 +149,14 @@ function ApplePayIcon({ className }: { className?: string }) {
 function GooglePayButton({
   sdk,
   plan,
+  payer,
   onPaymentComplete,
   onError,
   disabled,
 }: {
   sdk: PayPalV6Instance;
   plan: MembershipPlan;
+  payer?: { name?: string; email?: string };
   onPaymentComplete: (data: MembershipPaymentValue) => void;
   onError: (msg: string) => void;
   disabled: boolean;
@@ -157,6 +168,8 @@ function GooglePayButton({
   // Refs for latest values inside async callbacks
   const planRef = useRef(plan);
   planRef.current = plan;
+  const payerRef = useRef(payer);
+  payerRef.current = payer;
   const onCompleteRef = useRef(onPaymentComplete);
   onCompleteRef.current = onPaymentComplete;
   const onErrorRef = useRef(onError);
@@ -217,7 +230,7 @@ function GooglePayButton({
             try {
               setProcessing(true);
               const currentPlan = planRef.current;
-              const { orderId } = await createOrderForPlan(currentPlan.id);
+              const { orderId } = await createOrderForPlan(currentPlan.id, payerRef.current);
 
               const confirmResult = await googlePaySession.confirmOrder({
                 orderId,
@@ -329,12 +342,14 @@ function GooglePayButton({
 function ApplePayButton({
   sdk,
   plan,
+  payer,
   onPaymentComplete,
   onError,
   disabled,
 }: {
   sdk: PayPalV6Instance;
   plan: MembershipPlan;
+  payer?: { name?: string; email?: string };
   onPaymentComplete: (data: MembershipPaymentValue) => void;
   onError: (msg: string) => void;
   disabled: boolean;
@@ -344,6 +359,8 @@ function ApplePayButton({
 
   const planRef = useRef(plan);
   planRef.current = plan;
+  const payerRef = useRef(payer);
+  payerRef.current = payer;
   const onCompleteRef = useRef(onPaymentComplete);
   onCompleteRef.current = onPaymentComplete;
   const onErrorRef = useRef(onError);
@@ -421,7 +438,7 @@ function ApplePayButton({
 
       appleSession.onpaymentauthorized = async (event) => {
         try {
-          const { orderId } = await createOrderForPlan(currentPlan.id);
+          const { orderId } = await createOrderForPlan(currentPlan.id, payerRef.current);
           const confirmResult = await paypalSession.confirmOrder({
             orderId,
             token: event.payment.token,
@@ -500,16 +517,19 @@ function ApplePayButton({
 function CardFieldsForm({
   sdk,
   plan,
+  payer,
   onPaymentComplete,
   onError,
   disabled,
 }: {
   sdk: PayPalV6Instance;
   plan: MembershipPlan;
+  payer?: { name?: string; email?: string };
   onPaymentComplete: (data: MembershipPaymentValue) => void;
   onError: (msg: string) => void;
   disabled: boolean;
 }) {
+  const nameRef = useRef<HTMLDivElement>(null);
   const numberRef = useRef<HTMLDivElement>(null);
   const expiryRef = useRef<HTMLDivElement>(null);
   const cvvRef = useRef<HTMLDivElement>(null);
@@ -519,6 +539,8 @@ function CardFieldsForm({
 
   const planRef = useRef(plan);
   planRef.current = plan;
+  const payerRef = useRef(payer);
+  payerRef.current = payer;
 
   useEffect(() => {
     let cancelled = false;
@@ -529,6 +551,7 @@ function CardFieldsForm({
 
       if (
         cancelled ||
+        !nameRef.current ||
         !numberRef.current ||
         !expiryRef.current ||
         !cvvRef.current
@@ -539,6 +562,10 @@ function CardFieldsForm({
         const cardSession = sdk.createCardFieldsOneTimePaymentSession();
         cardSessionRef.current = cardSession;
 
+        const nameField = cardSession.createCardFieldsComponent({
+          type: 'name',
+          placeholder: 'Name on card',
+        });
         const numberField = cardSession.createCardFieldsComponent({
           type: 'number',
           placeholder: 'Card number',
@@ -552,10 +579,12 @@ function CardFieldsForm({
           placeholder: 'CVV',
         });
 
+        nameRef.current.innerHTML = '';
         numberRef.current.innerHTML = '';
         expiryRef.current.innerHTML = '';
         cvvRef.current.innerHTML = '';
 
+        nameRef.current.appendChild(nameField);
         numberRef.current.appendChild(numberField);
         expiryRef.current.appendChild(expiryField);
         cvvRef.current.appendChild(cvvField);
@@ -580,7 +609,7 @@ function CardFieldsForm({
     const currentPlan = planRef.current;
 
     try {
-      const { orderId } = await createOrderForPlan(currentPlan.id);
+      const { orderId } = await createOrderForPlan(currentPlan.id, payerRef.current);
       const { data, state } = await cardSessionRef.current.submit(orderId);
 
       if (state === 'succeeded') {
@@ -614,6 +643,11 @@ function CardFieldsForm({
       </div>
 
       <div className="space-y-2">
+        {/* Name on card */}
+        <div
+          ref={nameRef}
+          className="min-h-[44px] rounded-lg border bg-background px-1 [&_iframe]:!min-h-[42px] [&_iframe]:!w-full"
+        />
         {/* Card number */}
         <div
           ref={numberRef}
@@ -674,6 +708,8 @@ export function PayPalMembershipPayment({
   onChange,
   clientId,
   disabled = false,
+  payerName,
+  payerEmail,
 }: PayPalMembershipPaymentProps) {
   const paypalClientId =
     clientId ||
@@ -821,7 +857,10 @@ export function PayPalMembershipPayment({
           session = sdk.createPayPalOneTimePaymentSession(sessionOpts);
         }
 
-        const orderPromise = createOrderForPlan(selectedPlan.id);
+        const payer = payerName || payerEmail
+          ? { name: payerName, email: payerEmail }
+          : undefined;
+        const orderPromise = createOrderForPlan(selectedPlan.id, payer);
 
         await session.start({ presentationMode: 'popup' }, orderPromise);
       } catch (err) {
@@ -832,7 +871,7 @@ export function PayPalMembershipPayment({
         setPaymentInProgress(false);
       }
     },
-    [sdk, selectedPlan, paymentInProgress, handlePaymentComplete],
+    [sdk, selectedPlan, paymentInProgress, handlePaymentComplete, payerName, payerEmail],
   );
 
   // ── Already paid ──────────────────────────────────────────────────────────
@@ -1019,6 +1058,7 @@ export function PayPalMembershipPayment({
           <GooglePayButton
             sdk={sdk}
             plan={selectedPlan}
+            payer={payerName || payerEmail ? { name: payerName, email: payerEmail } : undefined}
             onPaymentComplete={handlePaymentComplete}
             onError={(msg) => setPaypalError(msg)}
             disabled={disabled || paymentInProgress}
@@ -1028,6 +1068,7 @@ export function PayPalMembershipPayment({
           <ApplePayButton
             sdk={sdk}
             plan={selectedPlan}
+            payer={payerName || payerEmail ? { name: payerName, email: payerEmail } : undefined}
             onPaymentComplete={handlePaymentComplete}
             onError={(msg) => setPaypalError(msg)}
             disabled={disabled || paymentInProgress}
@@ -1051,6 +1092,7 @@ export function PayPalMembershipPayment({
             <CardFieldsForm
               sdk={sdk}
               plan={selectedPlan}
+              payer={payerName || payerEmail ? { name: payerName, email: payerEmail } : undefined}
               onPaymentComplete={handlePaymentComplete}
               onError={(msg) => setPaypalError(msg)}
               disabled={disabled || paymentInProgress}

@@ -10,6 +10,8 @@ import { usePathname, useRouter } from 'next/navigation';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  /** True while the initial auth check AND granular permissions fetch are both in flight. */
+  permissionsLoading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
   isYEPManager: boolean;
@@ -21,6 +23,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  permissionsLoading: true,
   isAdmin: false,
   isSuperAdmin: false,
   isYEPManager: false,
@@ -50,6 +53,7 @@ const PUBLIC_ROUTES = [
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isYEPManager, setIsYEPManager] = useState(false);
@@ -92,7 +96,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setIsYEPManager(userRole === 'admin' || userRole === 'super-admin' || userRole === 'mentor'); // Consider mentors as part of YEP management for UI purposes or define more strictly
           setUserRole(userRole);
 
-          // Fetch granular page permissions for admin users
+          // Fetch granular page permissions for admin users.
+          // permissionsLoading stays true until this completes so consumers
+          // never observe isAdmin=true with a stale empty allowedForms list.
           if (adminStatus && !superAdminStatus && authUser.email) {
             try {
               const { getPagePermissions } = await import('@/lib/page-permissions-actions');
@@ -104,15 +110,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
               console.error('Error fetching granular permissions:', err);
               setPermissions([]);
               setAllowedForms([]);
+            } finally {
+              setPermissionsLoading(false);
             }
-          } else if (superAdminStatus) {
-            // Super admins conceptually have all permissions, but the UI might checks specific keys
-            // We'll define them as needed or leave empty if the UI handles super-admin separately
-            setPermissions([]);
-            setAllowedForms([]);
           } else {
+            // Super admins and unauthenticated users need no async permissions fetch.
             setPermissions([]);
             setAllowedForms([]);
+            setPermissionsLoading(false);
           }
 
           // Track login (optional - will fail if Firestore rules don't allow)
@@ -146,7 +151,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             } catch (error) {
               // Silently fail - login tracking is optional
-              console.log('Login tracking skipped (requires Firestore write permissions)');
             }
           }
 
@@ -158,6 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUserRole(null);
           setPermissions([]);
           setAllowedForms([]);
+          setPermissionsLoading(false);
 
           // Clear server session cookie
           try {
@@ -186,7 +191,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [router, pathname]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isSuperAdmin, isYEPManager, userRole, permissions, allowedForms }}>
+    <AuthContext.Provider value={{ user, loading, permissionsLoading, isAdmin, isSuperAdmin, isYEPManager, userRole, permissions, allowedForms }}>
       {children}
     </AuthContext.Provider>
   );

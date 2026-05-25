@@ -92,8 +92,25 @@ export async function createPayPalOrder(input: {
   amount: string;
   currency: string;
   description: string;
+  payerName?: string;
+  payerEmail?: string;
 }): Promise<string> {
   const accessToken = await getPayPalAccessToken();
+
+  // Build optional payer block so the buyer's name appears in the merchant dashboard.
+  // Split "First Last" into given_name / surname; fall back to given_name only.
+  let payer: Record<string, unknown> | undefined;
+  if (input.payerName || input.payerEmail) {
+    const nameParts = (input.payerName ?? '').trim().split(/\s+/);
+    const givenName = nameParts[0] || undefined;
+    const surname = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
+    payer = {
+      ...(givenName || surname
+        ? { name: { ...(givenName ? { given_name: givenName } : {}), ...(surname ? { surname } : {}) } }
+        : {}),
+      ...(input.payerEmail ? { email_address: input.payerEmail } : {}),
+    };
+  }
 
   const res = await fetch(`${getPayPalApiBaseUrl()}/v2/checkout/orders`, {
     method: 'POST',
@@ -103,6 +120,7 @@ export async function createPayPalOrder(input: {
     },
     body: JSON.stringify({
       intent: 'CAPTURE',
+      ...(payer ? { payer } : {}),
       purchase_units: [
         {
           amount: {
@@ -135,6 +153,47 @@ export async function createPayPalOrder(input: {
 }
 
 /**
+ * Fetch an already-completed order from PayPal and return its first capture.
+ * Used when ORDER_ALREADY_CAPTURED is returned to achieve idempotent capture.
+ */
+async function getExistingCapture(
+  orderId: string,
+  accessToken: string,
+): Promise<CaptureResult> {
+  const res = await fetch(`${getPayPalApiBaseUrl()}/v2/checkout/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Failed to retrieve already-captured PayPal order ${orderId} (${res.status}): ${body}`,
+    );
+  }
+  const data = (await res.json()) as {
+    purchase_units?: Array<{
+      payments?: {
+        captures?: Array<{
+          id?: string;
+          status?: string;
+          amount?: { value?: string; currency_code?: string };
+        }>;
+      };
+    }>;
+  };
+  const capture = data.purchase_units?.[0]?.payments?.captures?.[0];
+  if (!capture?.id) {
+    throw new Error(`Could not retrieve capture details for order ${orderId}.`);
+  }
+  return {
+    captureId: capture.id,
+    status: capture.status || 'COMPLETED',
+    amount: capture.amount?.value || '0.00',
+    currency: capture.amount?.currency_code || 'USD',
+  };
+}
+
+/**
  * Capture a previously approved PayPal order and return the capture details.
  */
 export async function capturePayPalOrder(orderId: string): Promise<CaptureResult> {
@@ -154,6 +213,12 @@ export async function capturePayPalOrder(orderId: string): Promise<CaptureResult
 
   if (!res.ok) {
     const body = await res.text();
+    // PayPal returns 422 ORDER_ALREADY_CAPTURED when the order was previously
+    // captured (e.g. double-tap or retry). Re-fetch the order to return the
+    // existing capture data rather than surfacing an error to the client.
+    if (res.status === 422 && body.includes('ORDER_ALREADY_CAPTURED')) {
+      return getExistingCapture(orderId, accessToken);
+    }
     throw new Error(
       `Failed to capture PayPal order ${orderId} (${res.status}): ${body}`,
     );
