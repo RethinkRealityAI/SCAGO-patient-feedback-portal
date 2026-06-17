@@ -9,11 +9,10 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader, RefreshCw } from '
 import ReactMarkdown from 'react-markdown'
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
-import { getSurvey } from '@/app/editor/actions'
 import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
-import { updateSubmissionReviewStatus } from '@/lib/client-actions'
+import { getSurveyClient, updateSubmissionReviewStatus } from '@/lib/client-actions'
 import { isReviewedFromState } from '@/lib/review-utils'
 import Link from 'next/link'
 
@@ -111,7 +110,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         // listed in their allowedForms. Resolve the survey first so we have the
         // canonical Firestore document ID even if a slug was passed in the URL.
         const [surveyResult, { fetchSubmissionsForSurvey }] = await Promise.all([
-          getSurvey(surveyId),
+          getSurveyClient(surveyId),
           import('@/lib/submission-utils'),
         ])
 

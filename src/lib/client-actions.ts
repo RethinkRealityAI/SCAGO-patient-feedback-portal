@@ -2,7 +2,7 @@
 
 import { updateSurvey as serverUpdateSurvey } from '@/app/editor/actions';
 import { db, auth } from '@/lib/firebase';
-import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { defaultSurvey, surveyV2, consentSurvey, membershipSurvey } from '@/lib/survey-template';
 
 /**
@@ -315,5 +315,36 @@ export async function deleteSurvey(surveyId: string) {
     console.error('Error deleting survey:', err);
     const msg = err?.message || 'Failed to delete survey';
     return { error: msg };
+  }
+}
+
+/**
+ * Client-side survey config reader. Reads the survey document directly from
+ * Firestore with the authenticated user's context, avoiding server-action
+ * serialization issues (Firestore Timestamps, permission rules, etc.).
+ *
+ * Falls back to slug lookup if the direct ID lookup finds nothing.
+ * Returns { error } on failure; the full survey object on success.
+ */
+export async function getSurveyClient(id: string): Promise<Record<string, any>> {
+  try {
+    const docRef = doc(db, 'surveys', id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() };
+    }
+
+    // Slug fallback
+    const q = query(collection(db, 'surveys'), where('slug', '==', id));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const matched = snap.docs[0];
+      return { id: matched.id, ...matched.data() };
+    }
+
+    return { error: `Survey not found: ${id}` };
+  } catch (err: any) {
+    console.error('[getSurveyClient] error:', err);
+    return { error: err?.message || 'Failed to load survey' };
   }
 }
