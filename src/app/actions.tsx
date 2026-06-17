@@ -187,6 +187,7 @@ export async function getSurveys() {
         title: data.title || 'Untitled Survey',
         description: data.description || 'No description.',
         slug: typeof data.slug === 'string' && data.slug.length > 0 ? data.slug : undefined,
+        reviewConfig: data.reviewConfig ?? null,
         fieldLabels,
         fieldOrder,
       };

@@ -30,11 +30,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Activity, Heart, Users, Sparkles, ThumbsUp, Download, FileText, FileSpreadsheet,
   TrendingUp as TrendingUpIcon, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Keyboard, MapPin, Loader, AlertCircle, Calendar,
-  Clock, Building2, ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare, Trash2, Hash, LogOut
+  Clock, Building2, ClipboardList, TrendingUp, Gauge, BarChart3, Search, Filter, X, RefreshCw, MessageSquare, Trash2, Hash, LogOut, CheckCircle
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   ChartContainer,
@@ -65,6 +67,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { signOut } from '@/lib/firebase-auth'
 
 import { extractName } from '@/lib/submission-utils'
+import { updateSubmissionReviewStatus } from '@/lib/client-actions'
+import { isReviewedFromState } from '@/lib/review-utils'
 
 const SUBMISSIONS_PER_PAGE = 20
 
@@ -153,8 +157,9 @@ function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: b
 
 export default function Dashboard() {
   const { user, loading: authLoading, isAdmin, isSuperAdmin, allowedForms } = useAuth()
+  const { toast } = useToast()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
-  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string>; fieldOrder?: string[] }>>([])
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string>; fieldOrder?: string[]; reviewConfig?: { enabled?: boolean; actionLabel?: string; undoLabel?: string; reviewedLabel?: string; pendingLabel?: string } | null }>>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -180,6 +185,8 @@ export default function Dashboard() {
 
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
   const [submissionToDelete, setSubmissionToDelete] = useState<FeedbackSubmission | null>(null)
+  const [reviewOverrides, setReviewOverrides] = useState<Record<string, boolean>>({})
+  const [activeReviewTab, setActiveReviewTab] = useState<'all' | 'pending' | 'reviewed'>('all')
 
   const handleDeleteSubmission = async () => {
     if (!submissionToDelete) return
@@ -203,6 +210,18 @@ export default function Dashboard() {
       setError("Failed to delete submission")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const toggleReview = async (submission: FeedbackSubmission) => {
+    if (!submission.id || !submission.surveyId) return
+    const currentlyReviewed = isReviewedFromState(submission.id, reviewOverrides, submission.reviewed)
+    const newValue = !currentlyReviewed
+    setReviewOverrides(prev => ({ ...prev, [submission.id!]: newValue }))
+    const result = await updateSubmissionReviewStatus(submission.id!, submission.surveyId, newValue)
+    if (result.error) {
+      setReviewOverrides(prev => ({ ...prev, [submission.id!]: currentlyReviewed }))
+      toast({ variant: 'destructive', title: 'Failed to update review status', description: result.error })
     }
   }
 
@@ -359,6 +378,11 @@ export default function Dashboard() {
       setSelectedSurvey('all')
     }
   }, [selectedSurvey, surveyOptions])
+
+  // Reset review tab when survey selection changes
+  useEffect(() => {
+    setActiveReviewTab('all')
+  }, [selectedSurvey])
 
   // Reset hospital/location filter when survey changes (since available options differ per survey)
   useEffect(() => {
@@ -558,7 +582,38 @@ export default function Dashboard() {
     }
   }, [filtered, submissions, dateRange, isConsent, isAllSurveysMode, selectedSurvey])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / SUBMISSIONS_PER_PAGE))
+  const reviewEnabledSurveyIds = useMemo(
+    () => new Set(surveys.filter(s => s.reviewConfig?.enabled).map(s => s.id)),
+    [surveys]
+  )
+
+  const anyReviewEnabled = useMemo(
+    () => selectedSurvey !== 'all' && filtered.some(s => reviewEnabledSurveyIds.has(s.surveyId)),
+    [filtered, reviewEnabledSurveyIds, selectedSurvey]
+  )
+
+  const currentSurveyReviewConfig = useMemo(
+    () => surveys.find(s => s.id === selectedSurvey)?.reviewConfig ?? null,
+    [surveys, selectedSurvey]
+  )
+
+  const reviewedCount = useMemo(
+    () => anyReviewEnabled
+      ? filtered.filter(s => isReviewedFromState(s.id!, reviewOverrides, s.reviewed)).length
+      : 0,
+    [anyReviewEnabled, filtered, reviewOverrides]
+  )
+
+  const reviewFiltered = useMemo(() => {
+    if (!anyReviewEnabled || activeReviewTab === 'all') return filtered
+    return filtered.filter(s => {
+      if (!reviewEnabledSurveyIds.has(s.surveyId)) return false
+      const reviewed = isReviewedFromState(s.id!, reviewOverrides, s.reviewed)
+      return activeReviewTab === 'reviewed' ? reviewed : !reviewed
+    })
+  }, [filtered, anyReviewEnabled, activeReviewTab, reviewEnabledSurveyIds, reviewOverrides])
+
+  const totalPages = Math.max(1, Math.ceil(reviewFiltered.length / SUBMISSIONS_PER_PAGE))
 
   // Reset to page 1 if current page is out of bounds
   useEffect(() => {
@@ -573,7 +628,7 @@ export default function Dashboard() {
     }
   }
 
-  const paginatedSubmissions = filtered.slice(
+  const paginatedSubmissions = reviewFiltered.slice(
     (currentPage - 1) * SUBMISSIONS_PER_PAGE,
     currentPage * SUBMISSIONS_PER_PAGE
   )
@@ -2538,6 +2593,32 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           )}
+          {anyReviewEnabled && (
+            <Card className="border-l-4 border-l-[#C8262A]">
+              <CardContent className="py-4 px-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-[#C8262A]" />
+                    <span className="font-semibold text-sm">Review Progress</span>
+                  </div>
+                  <span className="text-sm text-muted-foreground font-medium">
+                    {Math.round(reviewedCount / Math.max(filtered.length, 1) * 100)}%
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-1.5 mb-2">
+                  <div
+                    className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round(reviewedCount / Math.max(filtered.length, 1) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="text-green-600 font-medium">{reviewedCount} Reviewed</span>
+                  <span>·</span>
+                  <span>{filtered.length - reviewedCount} Pending</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card id="submissions-table-section" className="border-t-4 border-t-[#C8262A] overflow-hidden">
             <CardHeader className="pb-4 px-4 sm:px-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2547,7 +2628,7 @@ export default function Dashboard() {
                     Recent Submissions
                   </CardTitle>
                   <CardDescription className="text-sm mt-1">
-                    Showing {paginatedSubmissions.length} of {filtered.length} submissions
+                    Showing {paginatedSubmissions.length} of {reviewFiltered.length} submissions
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -2565,6 +2646,21 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-0 sm:p-6 overflow-x-hidden">
+              {anyReviewEnabled && filtered.length > 0 && (
+                <Tabs value={activeReviewTab} onValueChange={(v) => setActiveReviewTab(v as 'all' | 'pending' | 'reviewed')} className="mb-4 px-4 sm:px-0">
+                  <TabsList>
+                    <TabsTrigger value="all">
+                      All <Badge variant="secondary" className="ml-1.5">{filtered.length}</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="pending">
+                      Pending review <Badge variant="secondary" className="ml-1.5">{filtered.filter(s => reviewEnabledSurveyIds.has(s.surveyId) && !isReviewedFromState(s.id!, reviewOverrides, s.reviewed)).length}</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="reviewed">
+                      Reviewed <Badge variant="secondary" className="ml-1.5">{filtered.filter(s => reviewEnabledSurveyIds.has(s.surveyId) && isReviewedFromState(s.id!, reviewOverrides, s.reviewed)).length}</Badge>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
               {/* Mobile Card View */}
               <div className="block md:hidden">
                 {paginatedSubmissions.length === 0 ? (
@@ -2612,6 +2708,17 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                                {anyReviewEnabled && reviewEnabledSurveyIds.has(submission.surveyId) && (
+                                  isReviewedFromState(submission.id!, reviewOverrides, submission.reviewed) ? (
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => toggleReview(submission)}>
+                                      <CheckCircle className="h-3.5 w-3.5" />
+                                    </Button>
+                                  ) : (
+                                    <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => toggleReview(submission)}>
+                                      {currentSurveyReviewConfig?.actionLabel || 'Review'}
+                                    </Button>
+                                  )
+                                )}
                                 <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)} className="h-8 px-3 text-xs">
                                   View
                                 </Button>
@@ -2688,13 +2795,14 @@ export default function Dashboard() {
                             <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Location</TableHead>
                           </>
                         ) : null}
+                        {anyReviewEnabled && <TableHead className="whitespace-nowrap text-sm font-semibold py-4">Status</TableHead>}
                         <TableHead className="text-right whitespace-nowrap sticky right-0 bg-background text-sm font-semibold py-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedSubmissions.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={isHospitalFeedback ? 7 : isConsent ? 6 : 4} className="h-64 text-center">
+                          <TableCell colSpan={(isHospitalFeedback ? 7 : isConsent ? 6 : 4) + (anyReviewEnabled ? 1 : 0)} className="h-64 text-center">
                             <div className="flex flex-col items-center justify-center space-y-4 py-8">
                               <div className="rounded-full bg-muted p-6">
                                 <ClipboardList className="h-12 w-12 text-muted-foreground" />
@@ -2780,6 +2888,22 @@ export default function Dashboard() {
                                 <TableCell className="max-w-xs truncate py-4 text-sm">{submission.hospitalInteraction || 'N/A'}</TableCell>
                               </>
                             )}
+                            {anyReviewEnabled && (
+                              <TableCell className="py-4">
+                                {reviewEnabledSurveyIds.has(submission.surveyId) ? (
+                                  isReviewedFromState(submission.id!, reviewOverrides, submission.reviewed) ? (
+                                    <Button size="sm" variant="ghost" className="text-green-600 hover:text-green-700 hover:bg-green-50 gap-1.5" onClick={() => toggleReview(submission)}>
+                                      <CheckCircle className="h-3.5 w-3.5" />
+                                      {currentSurveyReviewConfig?.reviewedLabel || 'Reviewed'}
+                                    </Button>
+                                  ) : (
+                                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => toggleReview(submission)}>
+                                      {currentSurveyReviewConfig?.actionLabel || 'Mark reviewed'}
+                                    </Button>
+                                  )
+                                ) : <span className="text-muted-foreground text-xs">—</span>}
+                              </TableCell>
+                            )}
                             <TableCell className="text-right sticky right-0 bg-background py-4">
                               <div className="flex justify-end gap-2">
                                 <Button size="sm" variant="outline" onClick={() => openSubmissionModal(submission)}>View</Button>
@@ -2800,7 +2924,7 @@ export default function Dashboard() {
               {totalPages > 1 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 py-3 sm:py-4 px-4 sm:px-6 border-t">
                   <p className="text-xs sm:text-sm text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
-                    Showing <span className="font-medium">{(currentPage - 1) * SUBMISSIONS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * SUBMISSIONS_PER_PAGE, filtered.length)}</span> of <span className="font-medium">{filtered.length}</span>
+                    Showing <span className="font-medium">{(currentPage - 1) * SUBMISSIONS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * SUBMISSIONS_PER_PAGE, reviewFiltered.length)}</span> of <span className="font-medium">{reviewFiltered.length}</span>
                   </p>
                   <Pagination className="justify-center sm:justify-end order-1 sm:order-2">
                     <PaginationContent className="gap-0.5 sm:gap-1">
