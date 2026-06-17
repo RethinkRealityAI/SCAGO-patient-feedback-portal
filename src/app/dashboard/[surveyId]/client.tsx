@@ -1,17 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircle, Loader, RefreshCw, ArrowLeft } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader, RefreshCw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-// Firestore imports removed - now using utility functions from @/lib/submission-utils
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
 import { getSurvey } from '@/app/editor/actions'
 import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
 import { useAuth } from '@/hooks/use-auth'
+import { useToast } from '@/hooks/use-toast'
+import { updateSubmissionReviewStatus } from '@/lib/client-actions'
+import { isReviewedFromState } from '@/lib/review-utils'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -21,11 +24,9 @@ function extractStringValue(value: any): string | null {
     return value.trim()
   }
   if (value && typeof value === 'object') {
-    // Check for .selection property (common pattern in survey data)
     if (typeof value.selection === 'string' && value.selection.trim()) {
       return value.selection.trim()
     }
-    // Check for .value property (another common pattern)
     if (typeof value.value === 'string' && value.value.trim()) {
       return value.value.trim()
     }
@@ -37,29 +38,48 @@ function extractStringValue(value: any): string | null {
 // Handles multiple possible field name variations for consistent data access
 // IMPORTANT: Always returns a string, never an object (fixes React error #31)
 function getHospitalName(submission: any): string {
-  return extractStringValue(submission.hospitalName) ||
+  return (
+    extractStringValue(submission.hospitalName) ||
     extractStringValue(submission.hospital) ||
     extractStringValue(submission['hospital-on']) ||
     'Hospital'
+  )
 }
 
 // Detect whether any submission in the set carries hospital-feedback fields.
 // Used to decide whether to show hospital-specific metric cards.
 function hasHospitalFields(submissions: FeedbackSubmission[]): boolean {
-  return submissions.some(s =>
-    s.rating !== undefined ||
-    !!(s as any).hospitalInteraction ||
-    !!(s as any).hospitalName ||
-    !!(s as any)['hospital-on']
+  return submissions.some(
+    s =>
+      s.rating !== undefined ||
+      !!(s as any).hospitalInteraction ||
+      !!(s as any).hospitalName ||
+      !!(s as any)['hospital-on']
   )
+}
+
+interface ReviewConfig {
+  enabled?: boolean
+  reviewedLabel?: string
+  pendingLabel?: string
+  actionLabel?: string
+  undoLabel?: string
 }
 
 interface DashboardColumn { fieldId: string; label: string }
 
+interface SurveyConfig {
+  dashboardColumns?: DashboardColumn[]
+  dashboardWidgets?: DashboardWidget[]
+  title?: string
+  reviewConfig?: ReviewConfig
+}
+
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
   const { isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
-  const [surveyConfig, setSurveyConfig] = useState<{ dashboardColumns?: DashboardColumn[]; dashboardWidgets?: DashboardWidget[]; title?: string } | null>(null)
+  const [surveyConfig, setSurveyConfig] = useState<SurveyConfig | null>(null)
+  const [resolvedSurveyId, setResolvedSurveyId] = useState<string>('')
   const [analysis, setAnalysis] = useState<{ summary?: string; error?: string } | null>(null)
   // isLoading covers only the initial data fetch (survey config + submissions).
   // isAnalyzing covers the separate AI analysis request that runs after data is loaded,
@@ -67,6 +87,12 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+  // Review workflow state
+  const [reviewOverrides, setReviewOverrides] = useState<Record<string, boolean>>({})
+  const [pendingReviews, setPendingReviews] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'reviewed'>('all')
+  const { toast } = useToast()
 
   useEffect(() => {
     // Wait for both auth AND permissions to settle before fetching.
@@ -95,11 +121,13 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             ? (surveyResult as any).id
             : surveyId
 
+        setResolvedSurveyId(resolvedId)
+
         // Enforce per-survey access for restricted admins
         if (isAdmin && !isSuperAdmin) {
           const permitted = allowedForms ?? []
           if (!permitted.includes(resolvedId)) {
-            setError('You do not have permission to view this survey\'s dashboard.')
+            setError("You do not have permission to view this survey's dashboard.")
             setIsLoading(false)
             return
           }
@@ -124,12 +152,12 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         setAnalysis(analysisResult)
         setIsAnalyzing(false)
       } catch (e: any) {
-        console.error("Error fetching survey data:", e)
-        if (e.code === 'permission-denied') {
-          setError('You do not have permission to view this data. Please ensure you are logged in as an admin.')
-        } else {
-          setError('Failed to load survey data. Please try refreshing the page.')
-        }
+        console.error('Error fetching survey data:', e)
+        setError(
+          e.code === 'permission-denied'
+            ? 'You do not have permission to view this data. Please ensure you are logged in as an admin.'
+            : 'Failed to load survey data. Please try refreshing the page.'
+        )
         setIsLoading(false)
       }
     }
@@ -137,8 +165,42 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     fetchData()
   }, [surveyId, authLoading, permissionsLoading, isAdmin, isSuperAdmin, allowedForms])
 
+  // ── Review helpers ──────────────────────────────────────────────────────────
+
+  const isReviewed = useCallback(
+    (submission: FeedbackSubmission): boolean =>
+      isReviewedFromState(submission.id, reviewOverrides, (submission as any).reviewed),
+    [reviewOverrides]
+  )
+
+  const toggleReview = useCallback(
+    async (submission: FeedbackSubmission) => {
+      // Guard: fetchData must have resolved the canonical Firestore doc ID first.
+      // resolvedSurveyId starts as '' and is set in fetchData before isLoading=false,
+      // so the UI is never visible with an empty resolvedSurveyId — but guard anyway.
+      if (!resolvedSurveyId) return
+      const newState = !isReviewed(submission)
+      // Optimistic update — UI responds immediately
+      setReviewOverrides(prev => ({ ...prev, [submission.id]: newState }))
+      setPendingReviews(prev => new Set(prev).add(submission.id))
+
+      const result = await updateSubmissionReviewStatus(submission.id, resolvedSurveyId, newState)
+
+      setPendingReviews(prev => {
+        const next = new Set(prev)
+        next.delete(submission.id)
+        return next
+      })
+      // Revert on error and notify user
+      if (result.error) {
+        setReviewOverrides(prev => ({ ...prev, [submission.id]: !newState }))
+        toast({ title: 'Could not save review status', description: result.error, variant: 'destructive' })
+      }
+    },
+    [isReviewed, resolvedSurveyId, toast]
+  )
+
   // Show loading state only until survey config + submissions are fetched.
-  // The AI analysis section has its own inline spinner (isAnalyzing).
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -150,7 +212,6 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     )
   }
 
-  // Show error state
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -174,35 +235,229 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     )
   }
 
-  // Calculate metrics
+  // ── Derived metrics ─────────────────────────────────────────────────────────
   const totalSubmissions = submissions.length
 
   // Only show hospital-specific metric cards when the survey actually has those fields.
-  // Generic surveys (job applications, membership forms, etc.) have neither `rating`
-  // nor `hospitalName` fields, so showing "0.0/10" and "Hospital" would be misleading.
   const showHospitalMetrics = hasHospitalFields(submissions)
 
-  const avgRating = totalSubmissions > 0
-    ? (submissions.reduce((acc, s) => acc + Number(s.rating || 0), 0) / totalSubmissions).toFixed(1)
-    : '0.0'
+  const avgRating =
+    totalSubmissions > 0
+      ? (submissions.reduce((acc, s) => acc + Number(s.rating || 0), 0) / totalSubmissions).toFixed(1)
+      : '0.0'
   const excellent = submissions.filter(s => (Number(s.rating) || 0) >= 8).length
   const good = submissions.filter(s => (Number(s.rating) || 0) >= 5 && (Number(s.rating) || 0) < 8).length
   const needsImprovement = submissions.filter(s => (Number(s.rating) || 0) < 5).length
-
-  // Get hospital name (only used when showHospitalMetrics is true)
   const hospitalName = submissions[0] ? getHospitalName(submissions[0]) : 'Hospital'
-
-  // Most recent submission date for generic surveys
-  const mostRecentDate = submissions.length > 0
-    ? new Date(Math.max(...submissions.map(s => new Date(s.submittedAt).getTime())))
-    : null
-
-  // Survey title to display: prefer the config title, fall back to URL param
+  const mostRecentDate =
+    submissions.length > 0
+      ? new Date(Math.max(...submissions.map(s => new Date(s.submittedAt).getTime())))
+      : null
   const surveyTitle = surveyConfig?.title || `Survey ${surveyId}`
 
+  // Review metrics
+  const reviewConfig = surveyConfig?.reviewConfig
+  const reviewEnabled = reviewConfig?.enabled ?? false
+  const reviewedCount = reviewEnabled ? submissions.filter(s => isReviewed(s)).length : 0
+  const pendingCount = reviewEnabled ? totalSubmissions - reviewedCount : 0
+  const reviewProgress = totalSubmissions > 0 ? Math.round((reviewedCount / totalSubmissions) * 100) : 0
+
+  // ── Render helpers ──────────────────────────────────────────────────────────
+
+  const renderReviewCell = (submission: FeedbackSubmission) => {
+    if (!reviewEnabled) return null
+    const reviewed = isReviewed(submission)
+    const isPending = pendingReviews.has(submission.id)
+
+    return (
+      <td className="px-4 py-3 whitespace-nowrap">
+        {isPending ? (
+          <Loader className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : reviewed ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              <CheckCircle2 className="h-3 w-3" />
+              {reviewConfig?.reviewedLabel || 'Reviewed'}
+            </span>
+            <button
+              onClick={() => toggleReview(submission)}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              {reviewConfig?.undoLabel || 'Undo'}
+            </button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleReview(submission)}
+            className="h-7 gap-1.5 text-xs whitespace-nowrap"
+          >
+            <Clock className="h-3 w-3" />
+            {reviewConfig?.actionLabel || 'Mark as Reviewed'}
+          </Button>
+        )}
+      </td>
+    )
+  }
+
+  const reviewColumnHeader = reviewEnabled ? (
+    <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Status</th>
+  ) : null
+
+  const renderSubmissionsTable = (subs: FeedbackSubmission[]) => {
+    if (subs.length === 0) {
+      return (
+        <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">
+          No submissions in this category.
+        </div>
+      )
+    }
+
+    if (surveyConfig?.dashboardColumns?.length) {
+      return (
+        <div className="rounded-lg border overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Date</th>
+                {surveyConfig.dashboardColumns.map(col => (
+                  <th key={col.fieldId} className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">
+                    {col.label}
+                  </th>
+                ))}
+                {reviewColumnHeader}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {subs.map(submission => (
+                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">
+                    {new Date(submission.submittedAt).toLocaleDateString()}
+                  </td>
+                  {surveyConfig.dashboardColumns!.map(col => (
+                    <td key={col.fieldId} className="px-4 py-3 text-sm max-w-xs">
+                      <p className="line-clamp-2">
+                        {extractStringValue((submission as any)[col.fieldId]) ?? '—'}
+                      </p>
+                    </td>
+                  ))}
+                  {renderReviewCell(submission)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (showHospitalMetrics) {
+      return (
+        <div className="rounded-lg border overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
+                <th className="px-4 py-3 text-left text-sm font-medium">Rating</th>
+                <th className="px-4 py-3 text-left text-sm font-medium">Experience</th>
+                <th className="px-4 py-3 text-left text-sm font-medium">Sentiment</th>
+                {reviewColumnHeader}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {subs.map(submission => (
+                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {new Date(submission.submittedAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-medium">{submission.rating}/10</span>
+                      <div
+                        className={`h-2 w-2 rounded-full ${
+                          (Number(submission.rating) || 0) >= 9
+                            ? 'bg-green-500'
+                            : (Number(submission.rating) || 0) >= 7
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm max-w-md">
+                    <p className="line-clamp-2">{(submission as any).hospitalInteraction}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                        (Number(submission.rating) || 0) >= 8
+                          ? 'bg-green-100 text-green-700'
+                          : (Number(submission.rating) || 0) >= 5
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {(Number(submission.rating) || 0) >= 8
+                        ? 'Excellent'
+                        : (Number(submission.rating) || 0) >= 5
+                        ? 'Good'
+                        : 'Needs Improvement'}
+                    </span>
+                  </td>
+                  {renderReviewCell(submission)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    // Generic survey fallback: date + submitter + index
+    return (
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-4 py-3 text-left text-sm font-medium">#</th>
+              <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
+              <th className="px-4 py-3 text-left text-sm font-medium">Submitter</th>
+              {reviewColumnHeader}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {subs.map((submission, idx) => {
+              const rawSub = submission as any
+              const displayName =
+                rawSub.firstName || rawSub.first_name || rawSub.fname
+                  ? `${rawSub.firstName || rawSub.first_name || rawSub.fname || ''} ${
+                      rawSub.lastName || rawSub.last_name || rawSub.lname || ''
+                    }`.trim()
+                  : rawSub.name || rawSub.fullName || rawSub.full_name || null
+              return (
+                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{idx + 1}</td>
+                  <td className="px-4 py-3 text-sm whitespace-nowrap">
+                    {new Date(submission.submittedAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {displayName || <span className="italic text-muted-foreground">Anonymous</span>}
+                  </td>
+                  {renderReviewCell(submission)}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  // ── Main render ─────────────────────────────────────────────────────────────
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="grid gap-8">
+
         {/* Header with Survey Title and Back Button */}
         <div className="space-y-4">
           <Link href="/dashboard">
@@ -211,17 +466,14 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               Back to All Surveys
             </Button>
           </Link>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">{surveyTitle}</h1>
-              <p className="text-muted-foreground mt-1">Survey Dashboard</p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold">{surveyTitle}</h1>
+            <p className="text-muted-foreground mt-1">Survey Dashboard</p>
           </div>
         </div>
 
         {/* Key Metrics */}
         {showHospitalMetrics ? (
-          // Hospital-feedback surveys: show rating, hospital, and experience breakdown
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-2">
@@ -261,7 +513,6 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             </Card>
           </div>
         ) : (
-          // Generic surveys: show total submissions and most recent date instead
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-2">
@@ -284,6 +535,45 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Review Progress Card — only shown when review workflow is enabled */}
+        {reviewEnabled && totalSubmissions > 0 && (
+          <Card className="border-l-4 border-l-primary">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  Review Progress
+                </CardTitle>
+                <span className="text-2xl font-bold tabular-nums">
+                  {reviewedCount}{' '}
+                  <span className="text-base font-normal text-muted-foreground">/ {totalSubmissions}</span>
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-500"
+                    style={{ width: `${reviewProgress}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    {reviewedCount} {reviewConfig?.reviewedLabel || 'Reviewed'}
+                  </span>
+                  <span className="font-medium">{reviewProgress}%</span>
+                  <span className="flex items-center gap-1">
+                    {pendingCount} {reviewConfig?.pendingLabel || 'Pending Review'}
+                    <Clock className="h-3 w-3 text-amber-500" />
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Custom Dashboard Widgets */}
@@ -319,12 +609,12 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
           </CardContent>
         </Card>
 
-        {/* Submissions Table */}
+        {/* Submissions */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Submissions</CardTitle>
+            <CardTitle>Submissions</CardTitle>
             <CardDescription>
-              Individual feedback responses for this survey
+              Individual responses for this survey
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -332,137 +622,50 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               <div className="text-center py-8 text-muted-foreground">
                 No submissions found for this survey.
               </div>
-            ) : surveyConfig?.dashboardColumns?.length ? (
-              // Survey has explicit column config — use it
-              <>
-                <div className="rounded-lg border overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Date</th>
-                        {surveyConfig.dashboardColumns.map((col) => (
-                          <th key={col.fieldId} className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">{col.label}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {submissions.slice(0, 10).map((submission) => (
-                        <tr key={submission.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            {new Date(submission.submittedAt).toLocaleDateString()}
-                          </td>
-                          {surveyConfig.dashboardColumns!.map((col) => (
-                            <td key={col.fieldId} className="px-4 py-3 text-sm max-w-xs">
-                              <p className="line-clamp-2">
-                                {extractStringValue((submission as any)[col.fieldId]) ?? '—'}
-                              </p>
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {totalSubmissions > 10 && (
-                  <p className="mt-4 text-sm text-muted-foreground text-center">
-                    Showing 10 of {totalSubmissions} submissions
-                  </p>
-                )}
-              </>
-            ) : showHospitalMetrics ? (
-              // Hospital-feedback fallback: show rating / experience / sentiment columns
-              <>
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Rating</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Experience</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Sentiment</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {submissions.slice(0, 10).map((submission) => (
-                        <tr key={submission.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-3 text-sm">
-                            {new Date(submission.submittedAt).toLocaleDateString()}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium">{submission.rating}/10</span>
-                              <div className={`h-2 w-2 rounded-full ${(Number(submission.rating) || 0) >= 9 ? 'bg-green-500' :
-                                  (Number(submission.rating) || 0) >= 7 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`} />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm max-w-md">
-                            <p className="line-clamp-2">{(submission as any).hospitalInteraction}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${(Number(submission.rating) || 0) >= 8 ? 'bg-green-100 text-green-700' :
-                                (Number(submission.rating) || 0) >= 5 ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-red-100 text-red-700'
-                              }`}>
-                              {(Number(submission.rating) || 0) >= 8 ? 'Excellent' :
-                                (Number(submission.rating) || 0) >= 5 ? 'Good' : 'Needs Improvement'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {totalSubmissions > 10 && (
-                  <p className="mt-4 text-sm text-muted-foreground text-center">
-                    Showing 10 of {totalSubmissions} submissions
-                  </p>
-                )}
-              </>
+            ) : reviewEnabled ? (
+              <Tabs
+                value={activeTab}
+                onValueChange={v => setActiveTab(v as typeof activeTab)}
+                className="w-full"
+              >
+                <TabsList className="mb-4 h-9">
+                  <TabsTrigger value="all" className="gap-1.5 text-xs sm:text-sm">
+                    All
+                    <span className="ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 text-xs font-medium">
+                      {submissions.length}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value="pending" className="gap-1.5 text-xs sm:text-sm">
+                    <Clock className="h-3.5 w-3.5 text-amber-500" />
+                    {reviewConfig?.pendingLabel || 'Pending'}
+                    <span className="ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      {pendingCount}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value="reviewed" className="gap-1.5 text-xs sm:text-sm">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    {reviewConfig?.reviewedLabel || 'Reviewed'}
+                    <span className="ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-green-100 px-1.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      {reviewedCount}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                  {renderSubmissionsTable(submissions)}
+                </TabsContent>
+                <TabsContent value="pending">
+                  {renderSubmissionsTable(submissions.filter(s => !isReviewed(s)))}
+                </TabsContent>
+                <TabsContent value="reviewed">
+                  {renderSubmissionsTable(submissions.filter(s => isReviewed(s)))}
+                </TabsContent>
+              </Tabs>
             ) : (
-              // Generic survey fallback: date + submission index only
-              <>
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium">#</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium">Submitter</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {submissions.slice(0, 10).map((submission, idx) => {
-                        // Try to surface any name-like field from the submission
-                        const rawSub = submission as any
-                        const displayName =
-                          rawSub.firstName || rawSub.first_name || rawSub.fname
-                            ? `${rawSub.firstName || rawSub.first_name || rawSub.fname || ''} ${rawSub.lastName || rawSub.last_name || rawSub.lname || ''}`.trim()
-                            : rawSub.name || rawSub.fullName || rawSub.full_name || null
-                        return (
-                          <tr key={submission.id} className="hover:bg-muted/20">
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{idx + 1}</td>
-                            <td className="px-4 py-3 text-sm whitespace-nowrap">
-                              {new Date(submission.submittedAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {displayName || <span className="italic text-muted-foreground">Anonymous</span>}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {totalSubmissions > 10 && (
-                  <p className="mt-4 text-sm text-muted-foreground text-center">
-                    Showing 10 of {totalSubmissions} submissions
-                  </p>
-                )}
-              </>
+              renderSubmissionsTable(submissions)
             )}
           </CardContent>
         </Card>
+
       </div>
     </div>
   )

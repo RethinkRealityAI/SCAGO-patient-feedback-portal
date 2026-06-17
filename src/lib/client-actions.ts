@@ -2,7 +2,7 @@
 
 import { updateSurvey as serverUpdateSurvey } from '@/app/editor/actions';
 import { db, auth } from '@/lib/firebase';
-import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { defaultSurvey, surveyV2, consentSurvey, membershipSurvey } from '@/lib/survey-template';
 
 /**
@@ -278,6 +278,30 @@ export async function createSurveyFromTemplate(template: any) {
       return { error: `Permission denied. Your email (${auth.currentUser?.email}) must have 'admin' role in Firebase Auth custom claims.` };
     }
     return { error: 'Failed to create survey from template' };
+  }
+}
+
+export async function updateSubmissionReviewStatus(
+  submissionId: string,
+  surveyId: string,
+  reviewed: boolean
+): Promise<{ error?: string }> {
+  try {
+    if (!submissionId || !surveyId) return { error: 'Missing required IDs' };
+    const currentUser = auth.currentUser;
+    if (!currentUser) return { error: 'You must be logged in to update submissions.' };
+    const ref = doc(db, 'surveys', String(surveyId), 'submissions', String(submissionId));
+    // Use updateDoc (not setDoc+merge) so we can use deleteField() to cleanly
+    // remove reviewedAt when un-reviewing, preventing stale timestamps.
+    await updateDoc(ref, reviewed
+      ? { reviewed: true, reviewedAt: new Date() }
+      : { reviewed: false, reviewedAt: deleteField() }
+    );
+    return {};
+  } catch (error) {
+    const err = error as any;
+    console.error('Error updating submission review status:', err);
+    return { error: err?.message || 'Failed to update review status' };
   }
 }
 

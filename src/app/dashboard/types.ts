@@ -32,6 +32,10 @@ export interface FeedbackSubmission {
   digitalSignature?: string;
   ageConfirmation?: boolean;
 
+  // Review workflow fields
+  reviewed?: boolean;
+  reviewedAt?: Date;
+
   // Index signature for flexible fields
   [key: string]: any;
 }

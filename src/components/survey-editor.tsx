@@ -10,7 +10,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 /**
  * ⚠️ CRITICAL IMPORT - DO NOT CHANGE
@@ -170,6 +170,13 @@ const surveySchema = z.object({
     label: z.string(),
     color: z.string().optional(),
   })).optional(),
+  reviewConfig: z.object({
+    enabled: z.boolean().optional(),
+    reviewedLabel: z.string().optional(),
+    pendingLabel: z.string().optional(),
+    actionLabel: z.string().optional(),
+    undoLabel: z.string().optional(),
+  }).optional(),
 });
 type SurveyFormData = z.infer<typeof surveySchema>;
 type FieldTypePath = `sections.${number}.fields.${number}`;
@@ -2051,9 +2058,120 @@ function WidgetEditorDialog({
   );
 }
 
+function DashboardReviewSection() {
+  const form = useFormContext<SurveyFormData>();
+  const enabled = form.watch('reviewConfig.enabled') ?? false;
+  const pendingLabel = form.watch('reviewConfig.pendingLabel');
+  const reviewedLabel = form.watch('reviewConfig.reviewedLabel');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CheckCircle2 className="h-4 w-4 text-primary" />
+          Review Workflow
+        </CardTitle>
+        <CardDescription>
+          Track which submissions have been reviewed. Adds a status column, action buttons, and a progress metric to the survey dashboard.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <FormField
+          control={form.control}
+          name="reviewConfig.enabled"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <FormLabel>Enable Review Workflow</FormLabel>
+                <FormDescription>Show a status column and review action buttons in the submissions table.</FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        {enabled && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="reviewConfig.actionLabel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Action button label</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Mark as Reviewed" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription className="text-xs">Shown on the button for unreviewed submissions.</FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="reviewConfig.undoLabel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Undo button label</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Undo Review" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription className="text-xs">Shown as a link to un-review a submission.</FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="reviewConfig.reviewedLabel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Reviewed badge label</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Reviewed" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription className="text-xs">Badge shown on reviewed submissions.</FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="reviewConfig.pendingLabel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Pending label</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Pending Review" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription className="text-xs">Tab label and pending status text on the dashboard.</FormDescription>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Preview</p>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-medium text-foreground">
+                  <Clock className="h-3 w-3 text-amber-500" />
+                  {pendingLabel || 'Pending Review'}
+                </span>
+                <span className="text-muted-foreground">→</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {reviewedLabel || 'Reviewed'}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardConfig() {
   return (
     <div className="space-y-6">
+      <DashboardReviewSection />
       <DashboardWidgetsSection />
       <DashboardColumnsSection />
     </div>
