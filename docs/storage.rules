@@ -97,9 +97,12 @@ service firebase.storage {
       // Allow read so the client can get the download URL after uploading. 
       allow read: if true;
       
-      // Anyone can upload attachments for a survey submission - no auth required
-      // Allow create and update (in case of upload retries)
-      allow create, update: if request.resource.size < 50 * 1024 * 1024 &&
+      // Anyone can upload (create) attachments for a survey submission - no auth required.
+      // Create only: the client writes every upload to a fresh
+      // `${Date.now()}_${filename}` path, so a retry is always a new create and
+      // never needs `update`. Granting public update would let anyone overwrite
+      // an existing attachment.
+      allow create: if request.resource.size < 50 * 1024 * 1024 &&
                       (request.resource.contentType.matches('image/.*') || 
                        request.resource.contentType.matches('application/.*') ||
                        request.resource.contentType.matches('text/.*') ||
