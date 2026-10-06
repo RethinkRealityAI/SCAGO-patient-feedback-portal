@@ -8,6 +8,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getQuestionText, formatAnswerValue } from '@/lib/question-mapping';
 import { extractName } from '@/lib/submission-utils';
 import { getSurveyContextFromId, getAnalysisPrompt, detectSurveyType, getSurveyContext } from '@/lib/survey-contexts';
+import { hospitalLabel } from '@/lib/option-labels';
 // NOTE: firebase-admin imports are loaded dynamically to prevent client bundling
 // DO NOT use static imports of firebase-admin or related modules
 // Dynamic import to prevent client bundling of server-only modules
@@ -27,24 +28,151 @@ interface AIAnalysisResult {
   suggestedActions: string[];
 }
 
-// Dynamic AI import helper
-async function getAIAnalysis() {
-  try {
-    // Initialize genkit configuration
-    await import('@/ai/genkit');
-    // Import the analysis flow
-    const { analyzeFeedback } = await import('@/ai/flows/analyze-feedback-flow');
-    return analyzeFeedback;
-  } catch (error) {
-    console.error('Failed to load AI analysis:', error);
-    // Return a fallback function that provides complete analysis structure
-    return async (input: any): Promise<AIAnalysisResult> => ({
-      summary: `Analysis based on ${input.location}: Rating ${input.rating}/10. ${input.feedbackText ? 'Feedback received.' : 'No detailed feedback available.'}`,
-      sentiment: input.rating >= 8 ? 'Positive' : input.rating >= 6 ? 'Neutral' : 'Negative',
-      keyTopics: input.feedbackText ? ['Patient Experience', 'Service Quality'] : ['No feedback available'],
-      suggestedActions: ['Continue monitoring feedback', 'Address any concerns raised']
-    });
+/**
+ * Render one submission as a line of context for the model.
+ *
+ * Submissions arrive already enriched with the derived `rating` /
+ * `hospitalInteraction` values, so this no longer emits
+ * `Rating: undefined/10, Experience: undefined` for every editor-built survey —
+ * which is what the model was previously being asked to analyse.
+ */
+function describeSubmissionForAI(submission: FeedbackSubmission): string {
+  const parts: string[] = [];
+
+  const rating = Number(submission.rating);
+  parts.push(Number.isFinite(rating) ? `Rating: ${rating}/10` : 'Rating: not answered');
+
+  // Resolve the stored slug so the model names hospitals the way people do.
+  const hospital = extractSelectionValue((submission as any).hospitalName)
+    || extractSelectionValue((submission as any).hospital)
+    || extractSelectionValue((submission as any)['hospital-on']);
+  if (hospital) parts.push(`Hospital: ${hospitalLabel(hospital)}`);
+
+  const visitType = (submission as any).visitType;
+  if (Array.isArray(visitType) && visitType.length > 0) parts.push(`Visit type: ${visitType.join(', ')}`);
+  else if (typeof visitType === 'string' && visitType) parts.push(`Visit type: ${visitType}`);
+
+  const experience = (submission.hospitalInteraction || '').replace(/\s+/g, ' ').trim();
+  parts.push(`Experience: ${experience ? experience.slice(0, 600) : 'no written feedback'}`);
+
+  return `- ${parts.join(' | ')}`;
+}
+
+/** Read a `{ selection, other }` style answer, or a plain string. */
+function extractSelectionValue(value: any): string {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object') {
+    if (value.selection === 'other' && value.other) return String(value.other).trim();
+    if (value.selection) return String(value.selection).trim();
   }
+  return '';
+}
+
+/** Mean of the submissions that carry a rating — unrated ones are excluded. */
+function averageRatingOf(submissions: FeedbackSubmission[]): { average: number | null; rated: number } {
+  const values = submissions
+    .map(s => Number(s.rating))
+    .filter(n => Number.isFinite(n));
+  if (values.length === 0) return { average: null, rated: 0 };
+  return {
+    average: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
+    rated: values.length,
+  };
+}
+
+/** Count of rated submissions in each satisfaction band. */
+function ratingBandsOf(submissions: FeedbackSubmission[]): { excellent: number; good: number; poor: number } {
+  let excellent = 0, good = 0, poor = 0;
+  for (const s of submissions) {
+    const r = Number(s.rating);
+    if (!Number.isFinite(r)) continue;
+    if (r >= 8) excellent++;
+    else if (r >= 5) good++;
+    else poor++;
+  }
+  return { excellent, good, poor };
+}
+
+/**
+ * Explicit, unambiguously-labelled breakdown lines for the report body.
+ *
+ * `AnalysisDisplay` parses these back out to fill its metric cards. Without
+ * them its loose fallback patterns latched onto unrelated lines (the word
+ * "average rating" satisfied its "good ratings" pattern), so the Satisfaction
+ * Rate card read 100% on a data set the same report called Negative.
+ */
+function ratingBreakdownLines(submissions: FeedbackSubmission[]): string[] {
+  const { excellent, good, poor } = ratingBandsOf(submissions);
+  return [
+    `- Excellent ratings (8-10): ${excellent}`,
+    `- Good ratings (5-7): ${good}`,
+    `- Poor ratings (0-4): ${poor}`,
+  ];
+}
+
+/**
+ * Short-lived cache of generated analyses, keyed by survey and data version.
+ *
+ * The per-survey dashboard runs an analysis automatically on every page load.
+ * On the Gemini free tier (~20 requests per model per day) a handful of page
+ * refreshes exhausts the day's allowance, after which every AI feature errors.
+ * Reusing a recent result for the same submission set keeps repeat views free
+ * while still regenerating as soon as a new submission arrives.
+ *
+ * Process-local by design: on serverless each instance keeps its own copy,
+ * which is fine — worst case is a cache miss.
+ */
+const ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000;
+const analysisCache = new Map<string, { at: number; result: { summary?: string; error?: string } }>();
+
+function readAnalysisCache(key: string) {
+  const hit = analysisCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > ANALYSIS_CACHE_TTL_MS) {
+    analysisCache.delete(key);
+    return null;
+  }
+  return hit.result;
+}
+
+function writeAnalysisCache(key: string, result: { summary?: string; error?: string }) {
+  analysisCache.set(key, { at: Date.now(), result });
+  // Keep the map from growing without bound across many surveys.
+  if (analysisCache.size > 50) {
+    const oldest = [...analysisCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) analysisCache.delete(oldest[0]);
+  }
+}
+
+/**
+ * Turn any AI failure into a message an admin can act on.
+ *
+ * Loaded dynamically because the AI utils pull in server-only modules.
+ */
+async function toUserFacingAIError(error: unknown): Promise<string> {
+  try {
+    const { describeAIError } = await import('@/ai/utils/error-handler');
+    return describeAIError(error);
+  } catch {
+    return error instanceof Error ? error.message : 'AI analysis failed.';
+  }
+}
+
+/**
+ * Dynamic AI import helper.
+ *
+ * This used to swallow load failures and return a hand-written "analysis"
+ * instead. On a clinical feedback dashboard that is worse than an error:
+ * the canned text is indistinguishable from a real AI summary, so a broken
+ * API key looked like a working feature producing bland results. Failures now
+ * propagate so the caller can say what actually went wrong.
+ */
+async function getAIAnalysis() {
+  // Initialize genkit configuration (throws AIConfigurationError if unset)
+  await import('@/ai/genkit');
+  // Import the analysis flow
+  const { analyzeFeedback } = await import('@/ai/flows/analyze-feedback-flow');
+  return analyzeFeedback;
 }
 
 export async function analyzeFeedback() {
@@ -61,21 +189,25 @@ export async function analyzeFeedback() {
       return { summary: 'No feedback submissions yet. Start by sharing the survey link!' };
     }
 
-    // Aggregate metrics
-    const averageRating = feedbackList.reduce((acc, f) => acc + Number(f.rating || 0), 0) / feedbackList.length;
+    // Aggregate metrics. Only rated submissions count toward the average and
+    // the NPS buckets — an unanswered rating is not a zero-star review.
+    const { average: averageRating, rated: ratedCount } = averageRatingOf(feedbackList);
     let promoters = 0, passives = 0, detractors = 0;
     for (const f of feedbackList) {
-      const r = Number(f.rating || 0);
+      const r = Number(f.rating);
+      if (!Number.isFinite(r)) continue;
       if (r >= 9) promoters++; else if (r >= 7) passives++; else detractors++;
     }
     const byDate = new Map<string, { count: number; sum: number }>();
     for (const f of feedbackList) {
+      const r = Number(f.rating);
+      if (!Number.isFinite(r)) continue;
       const raw = (f as any).submittedAt as any;
       const d = raw && typeof raw.toDate === 'function' ? raw.toDate() : (raw instanceof Date ? raw : (typeof raw === 'string' || typeof raw === 'number' ? new Date(raw) : null));
       if (!d || isNaN(d.getTime())) continue;
       const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
       const cur = byDate.get(key) || { count: 0, sum: 0 };
-      byDate.set(key, { count: cur.count + 1, sum: cur.sum + Number(f.rating || 0) });
+      byDate.set(key, { count: cur.count + 1, sum: cur.sum + r });
     }
     const sorted = Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     const last7 = sorted.slice(-7);
@@ -87,12 +219,12 @@ export async function analyzeFeedback() {
     // Build AI context text and run analysis - Limit to 100 entries to prevent token limits
     const feedbackText = feedbackList
       .slice(0, 100)
-      .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
+      .map(describeSubmissionForAI)
       .join('\n');
 
     // Scale rating from 0-10 to 1-5 to match AI schema requirements
     const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2)));
-    const normalizedRating = scaleRating(averageRating);
+    const normalizedRating = scaleRating(averageRating ?? 6);
 
     const runAnalysisFlow = await getAIAnalysis();
     const ai: AIAnalysisResult = await runAnalysisFlow({
@@ -107,7 +239,8 @@ export async function analyzeFeedback() {
       ``,
       `## Overview`,
       `- Total submissions: ${feedbackList.length}`,
-      `- Average rating: ${averageRating.toFixed(1)}/10`,
+      `- Average rating: ${averageRating === null ? 'no ratings submitted' : `${averageRating.toFixed(1)}/10 (across ${ratedCount} of ${feedbackList.length} submissions)`}`,
+      ...ratingBreakdownLines(feedbackList),
       `- NPS segments: Promoters ${promoters}, Passives ${passives}, Detractors ${detractors}`,
       `- Change in average rating (last 7 days vs prior 7 days): ${trend >= 0 ? '+' : ''}${trend.toFixed(1)}`,
       ``,
@@ -128,10 +261,7 @@ export async function analyzeFeedback() {
   } catch (error) {
     if (isRedirectError(error)) throw error;
     console.error('Error analyzing feedback:', error);
-    if (error instanceof Error) {
-      return { error: error.message };
-    }
-    return { error: 'An unknown error occurred during analysis.' };
+    return { error: await toUserFacingAIError(error) };
   }
 }
 
@@ -159,6 +289,14 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     if (feedbackList.length === 0) {
       return { summary: `No submissions yet for this ${surveyContext.title.toLowerCase()}.` };
     }
+
+    // Reuse a recent analysis of the same data rather than spending another
+    // request from the (small) daily quota on a page refresh. The key includes
+    // the submission count and newest timestamp, so new data always regenerates.
+    const newestAt = Math.max(...feedbackList.map(f => new Date(f.submittedAt).getTime() || 0));
+    const cacheKey = `${surveyId}:${feedbackList.length}:${newestAt}`;
+    const cached = readAnalysisCache(cacheKey);
+    if (cached) return cached;
 
     // Build context-aware data summary
     let feedbackText = '';
@@ -206,26 +344,34 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
         avgSubmissionsPerSurvey: Math.round(feedbackList.length / surveyBreakdown.size)
       };
     } else {
-      // Feedback-specific data summary
-      const averageRating = feedbackList.reduce((acc, f) => acc + Number(f.rating || 0), 0) / feedbackList.length;
+      // Feedback-specific data summary. Only rated submissions feed the
+      // average and the NPS buckets; a skipped rating is not a zero.
+      const { average: averageRating, rated: ratedCount } = averageRatingOf(feedbackList);
       let promoters = 0, passives = 0, detractors = 0;
       for (const f of feedbackList) {
-        const r = Number(f.rating || 0);
+        const r = Number(f.rating);
+        if (!Number.isFinite(r)) continue;
         if (r >= 9) promoters++; else if (r >= 7) passives++; else detractors++;
       }
 
       feedbackText = feedbackList
         .slice(0, 75)
-        .map(f => `- Rating: ${f.rating}/10, Experience: ${f.hospitalInteraction}`)
+        .map(describeSubmissionForAI)
         .join('\n');
 
       metrics = {
         totalSubmissions: feedbackList.length,
-        averageRating: averageRating.toFixed(1),
+        ratedSubmissions: `${ratedCount} of ${feedbackList.length}`,
+        averageRating: averageRating === null ? 'No ratings submitted' : `${averageRating.toFixed(1)}/10`,
         promoters,
         passives,
         detractors
       };
+      // Rendered verbatim below (not through the camelCase key formatter) so
+      // AnalysisDisplay can parse the bands back out of the report body.
+      (metrics as any)._extraOverviewLines = ratingBreakdownLines(feedbackList);
+      // Kept numeric for the model's 1-5 input schema below.
+      (metrics as any)._averageRatingValue = averageRating;
     }
 
     // Get context-aware AI prompt
@@ -235,7 +381,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     // Scale rating from 0-10 to 1-5 to match AI schema requirements
     const scaleRating = (val: number) => Math.max(1, Math.min(5, Math.ceil(val / 2)));
     const normalizedRating = surveyContext.type === 'feedback'
-      ? scaleRating(Number(metrics.averageRating || 0))
+      ? scaleRating(Number(metrics._averageRatingValue ?? 6))
       : 4; // Default to 4 for non-feedback surveys to avoid schema errors
 
     const aiInput = {
@@ -252,7 +398,16 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       `# ${surveyContext.title} Analysis`,
       ``,
       `## Overview`,
-      ...Object.entries(metrics).map(([key, value]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}: ${value}`),
+      // `_`-prefixed entries are internal (raw values kept for the model input).
+      // camelCase keys become sentence case, so `totalSubmissions` reads as
+      // "Total submissions" rather than "total Submissions".
+      ...Object.entries(metrics)
+        .filter(([key]) => !key.startsWith('_'))
+        .map(([key, value]) => {
+          const words = key.replace(/([A-Z])/g, ' $1').trim().toLowerCase();
+          return `- ${words.charAt(0).toUpperCase()}${words.slice(1)}: ${value}`;
+        }),
+      ...((metrics._extraOverviewLines as string[] | undefined) ?? []),
       ``,
       `## Sentiment`,
       `- Overall: ${ai.sentiment}`,
@@ -267,14 +422,13 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       ai.summary,
     ].join('\n');
 
-    return { summary: report };
+    const result = { summary: report };
+    writeAnalysisCache(cacheKey, result);
+    return result;
   } catch (error) {
     if (isRedirectError(error)) throw error;
     console.error('Error analyzing feedback for survey:', error);
-    if (error instanceof Error) {
-      return { error: error.message };
-    }
-    return { error: 'An unknown error occurred during analysis.' };
+    return { error: await toUserFacingAIError(error) };
   }
 }
 
@@ -723,7 +877,7 @@ export async function analyzeSingleFeedback(input: { rating: number; hospitalInt
     return { summary: report };
   } catch (e) {
     console.error('Error analyzing single feedback:', e);
-    return { error: 'Failed to analyze this submission.' };
+    return { error: await toUserFacingAIError(e) };
   }
 }
 
@@ -765,8 +919,7 @@ User question: ${query}`;
       chatWithData = flowModule.chatWithData;
     } catch (importError) {
       console.error('[chatWithFeedbackData] Failed to import AI flow:', importError);
-      const msg = importError instanceof Error ? importError.message : String(importError);
-      return { error: `AI service initialization failed: ${msg}. Please check the server logs.` };
+      return { error: await toUserFacingAIError(importError) };
     }
 
     // Process the request
@@ -775,8 +928,7 @@ User question: ${query}`;
       return { response };
     } catch (processError) {
       console.error('[chatWithFeedbackData] Processing failed:', processError);
-      const msg = processError instanceof Error ? processError.message : String(processError);
-      return { error: `Unable to process request: ${msg}` };
+      return { error: await toUserFacingAIError(processError) };
     }
 
   } catch (e) {

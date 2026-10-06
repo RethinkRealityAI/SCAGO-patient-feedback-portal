@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader, RefreshCw } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { MarkdownReport } from '@/components/markdown-report'
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
 import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
@@ -14,6 +14,21 @@ import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { getSurveyClient, updateSubmissionReviewStatus } from '@/lib/client-actions'
 import { isReviewedFromState } from '@/lib/review-utils'
+import {
+  buildSurveySchema,
+  enrichSubmissions,
+  summariseRatings,
+  type SubmissionMetrics,
+  type SurveySchema,
+} from '@/lib/submission-metrics'
+import {
+  RATING_BADGE_CLASS,
+  RATING_DOT_CLASS,
+  RATING_TONE_LABEL,
+  formatRating,
+  ratingTone,
+} from '@/components/rating-indicator'
+import { hospitalLabel } from '@/lib/option-labels'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -23,6 +38,11 @@ function extractStringValue(value: any): string | null {
     return value.trim()
   }
   if (value && typeof value === 'object') {
+    // `{ selection: 'other', other: 'St Josephs' }` — the free-text entry is the
+    // real answer; returning the literal 'other' showed a column full of "Other".
+    if (value.selection === 'other' && typeof value.other === 'string' && value.other.trim()) {
+      return value.other.trim()
+    }
     if (typeof value.selection === 'string' && value.selection.trim()) {
       return value.selection.trim()
     }
@@ -37,12 +57,12 @@ function extractStringValue(value: any): string | null {
 // Handles multiple possible field name variations for consistent data access
 // IMPORTANT: Always returns a string, never an object (fixes React error #31)
 function getHospitalName(submission: any): string {
-  return (
+  // Stored as a slug (`woodstock-hospital`); show the label the form displayed.
+  const value =
     extractStringValue(submission.hospitalName) ||
     extractStringValue(submission.hospital) ||
-    extractStringValue(submission['hospital-on']) ||
-    'Hospital'
-  )
+    extractStringValue(submission['hospital-on'])
+  return value ? hospitalLabel(value) : 'Unknown hospital'
 }
 
 // Detect whether any submission in the set carries hospital-feedback fields.
@@ -77,6 +97,7 @@ interface SurveyConfig {
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
   const { isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
+  const [submissionMetrics, setSubmissionMetrics] = useState<Map<string, SubmissionMetrics>>(new Map())
   const [surveyConfig, setSurveyConfig] = useState<SurveyConfig | null>(null)
   const [resolvedSurveyId, setResolvedSurveyId] = useState<string>('')
   const [analysis, setAnalysis] = useState<{ summary?: string; error?: string } | null>(null)
@@ -139,7 +160,18 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         // Use the resolved Firestore doc ID — never the raw URL param —
         // so submissions are always fetched from surveys/{docId}/submissions/
         const filteredSubmissions = await fetchSubmissionsForSurvey(resolvedId)
-        setSubmissions(filteredSubmissions)
+
+        // Resolve each submission's rating and narrative from the survey's own
+        // field definitions. Survey-editor fields carry generated ids, so the
+        // canonical `rating` / `hospitalInteraction` values only exist once the
+        // survey schema has been read.
+        const schema = buildSurveySchema('error' in surveyResult ? null : surveyResult)
+        const { submissions: enriched, metricsById } = enrichSubmissions(
+          filteredSubmissions,
+          () => schema
+        )
+        setSubmissions(enriched)
+        setSubmissionMetrics(metricsById)
 
         // Stop the main loading spinner now — the submissions table can render.
         // AI analysis runs separately so the page isn't blocked waiting for it.
@@ -240,14 +272,27 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   // Only show hospital-specific metric cards when the survey actually has those fields.
   const showHospitalMetrics = hasHospitalFields(submissions)
 
-  const avgRating =
-    totalSubmissions > 0
-      ? (submissions.reduce((acc, s) => acc + Number(s.rating || 0), 0) / totalSubmissions).toFixed(1)
-      : '0.0'
-  const excellent = submissions.filter(s => (Number(s.rating) || 0) >= 8).length
-  const good = submissions.filter(s => (Number(s.rating) || 0) >= 5 && (Number(s.rating) || 0) < 8).length
-  const needsImprovement = submissions.filter(s => (Number(s.rating) || 0) < 5).length
-  const hospitalName = submissions[0] ? getHospitalName(submissions[0]) : 'Hospital'
+  // Averages count only submissions that carry a rating. Dividing by every
+  // submission treated a skipped rating question as a zero-star review and
+  // dragged the headline number well below the actual scores.
+  const surveySchema = buildSurveySchema(surveyConfig)
+  const ratingSummary = summariseRatings(submissions, () => surveySchema)
+  const avgRating = ratingSummary.average === null ? null : ratingSummary.average.toFixed(1)
+  const { excellent, good, needsImprovement, rated: ratedCount } = ratingSummary
+
+  // Which hospitals this portal has heard about, busiest first. The card used to
+  // show only the first submission's hospital, which read as though every report
+  // came from that one site.
+  const hospitalBreakdown = Array.from(
+    submissions.reduce((counts, submission) => {
+      const name = getHospitalName(submission)
+      // Submissions with no hospital recorded are not a hospital.
+      if (name === 'Unknown hospital') return counts
+      return counts.set(name, (counts.get(name) ?? 0) + 1)
+    }, new Map<string, number>())
+  )
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
   const mostRecentDate =
     submissions.length > 0
       ? new Date(Math.max(...submissions.map(s => new Date(s.submittedAt).getTime())))
@@ -352,60 +397,66 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
     if (showHospitalMetrics) {
       return (
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-lg border overflow-x-auto">
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Rating</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Experience</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Sentiment</th>
+                <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Date</th>
+                {/* Hospital names are long; give the column room rather than
+                    letting it wrap to one word per line on narrow screens. */}
+                <th className="min-w-[11rem] px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Hospital</th>
+                <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Rating</th>
+                <th className="min-w-[20rem] px-4 py-3 text-left text-sm font-medium">Experience</th>
+                <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Sentiment</th>
                 {reviewColumnHeader}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {subs.map(submission => (
-                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {new Date(submission.submittedAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium">{submission.rating}/10</span>
-                      <div
-                        className={`h-2 w-2 rounded-full ${
-                          (Number(submission.rating) || 0) >= 9
-                            ? 'bg-green-500'
-                            : (Number(submission.rating) || 0) >= 7
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                        }`}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm max-w-md">
-                    <p className="line-clamp-2">{(submission as any).hospitalInteraction}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                        (Number(submission.rating) || 0) >= 8
-                          ? 'bg-green-100 text-green-700'
-                          : (Number(submission.rating) || 0) >= 5
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {(Number(submission.rating) || 0) >= 8
-                        ? 'Excellent'
-                        : (Number(submission.rating) || 0) >= 5
-                        ? 'Good'
-                        : 'Needs Improvement'}
-                    </span>
-                  </td>
-                  {renderReviewCell(submission)}
-                </tr>
-              ))}
+              {subs.map(submission => {
+                const tone = ratingTone(submission.rating)
+                const display = formatRating(submission.rating)
+                const metrics = submissionMetrics.get(submission.id)
+                const experience = metrics?.experience ?? null
+                return (
+                  <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      {new Date(submission.submittedAt).toLocaleDateString()}
+                    </td>
+                    <td className="min-w-[11rem] px-4 py-3 text-sm">{getHospitalName(submission)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        title={
+                          metrics?.rating
+                            ? `${metrics.rating.label} — answered ${metrics.rating.raw}/${metrics.rating.max}`
+                            : 'This respondent did not answer a rating question'
+                        }
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium"
+                      >
+                        <span className={`h-2 w-2 rounded-full ${RATING_DOT_CLASS[tone]}`} />
+                        {display ? `${display}/10` : <span className="text-muted-foreground">—</span>}
+                      </span>
+                    </td>
+                    <td className="min-w-[20rem] max-w-md px-4 py-3 text-sm">
+                      {experience ? (
+                        <>
+                          <p className="line-clamp-2" title={experience.text}>{experience.text}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">{experience.label}</p>
+                        </>
+                      ) : (
+                        <span className="italic text-muted-foreground/60">No written feedback</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${RATING_BADGE_CLASS[tone]}`}
+                      >
+                        {RATING_TONE_LABEL[tone]}
+                      </span>
+                    </td>
+                    {renderReviewCell(submission)}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -455,7 +506,11 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   // ── Main render ─────────────────────────────────────────────────────────────
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="grid gap-8">
+      {/* `[&>*]:min-w-0` — grid items default to `min-width: auto`, so the wide
+          submissions table pushed this whole column past the viewport and the
+          page scrolled sideways on narrow screens. With min-width cleared the
+          table scrolls inside its own `overflow-x-auto` wrapper instead. */}
+      <div className="grid gap-8 [&>*]:min-w-0">
 
         {/* Header with Survey Title and Back Button */}
         <div className="space-y-4">
@@ -473,13 +528,16 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
         {/* Key Metrics */}
         {showHospitalMetrics ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Total Submissions</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalSubmissions}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {mostRecentDate ? `Latest ${mostRecentDate.toLocaleDateString()}` : 'No submissions yet'}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -487,15 +545,26 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 <CardTitle className="text-base">Average Rating</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{avgRating}/10</div>
+                <div className="text-2xl font-bold">{avgRating ? `${avgRating}/10` : '—'}</div>
+                {/* State the denominator: unrated submissions are excluded. */}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {ratedCount > 0
+                    ? `${ratedCount} of ${totalSubmissions} rated`
+                    : 'No ratings submitted yet'}
+                </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Hospital</CardTitle>
+                <CardTitle className="text-base">Hospitals Reported</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm font-bold truncate">{hospitalName}</div>
+                <div className="text-2xl font-bold">{hospitalBreakdown.length}</div>
+                <p className="mt-1 truncate text-xs text-muted-foreground" title={hospitalBreakdown[0]?.name}>
+                  {hospitalBreakdown[0]
+                    ? `Most reported: ${hospitalBreakdown[0].name} (${hospitalBreakdown[0].count})`
+                    : 'No hospital recorded'}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -503,11 +572,22 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 <CardTitle className="text-base">Experience Breakdown</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-green-600">E: {excellent}</span>
-                  <span className="text-yellow-600">G: {good}</span>
-                  <span className="text-red-600">NI: {needsImprovement}</span>
-                </div>
+                {ratedCount > 0 ? (
+                  <>
+                    <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="bg-emerald-500" style={{ width: `${(excellent / ratedCount) * 100}%` }} />
+                      <div className="bg-amber-500" style={{ width: `${(good / ratedCount) * 100}%` }} />
+                      <div className="bg-rose-500" style={{ width: `${(needsImprovement / ratedCount) * 100}%` }} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      <span className="text-emerald-600">{excellent} excellent</span>
+                      <span className="text-amber-600">{good} good</span>
+                      <span className="text-rose-600">{needsImprovement} needs work</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No ratings submitted yet</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -601,8 +681,8 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 <AlertDescription>{analysis.error}</AlertDescription>
               </Alert>
             ) : analysis && 'summary' in analysis ? (
-              <div className="prose prose-sm max-w-none rounded-lg border bg-gradient-to-br from-primary/5 to-transparent p-6">
-                <ReactMarkdown>{analysis.summary as string}</ReactMarkdown>
+              <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-transparent p-6">
+                <MarkdownReport markdown={analysis.summary as string} />
               </div>
             ) : null}
           </CardContent>

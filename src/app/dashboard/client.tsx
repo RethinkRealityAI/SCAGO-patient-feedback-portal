@@ -69,6 +69,20 @@ import { signOut } from '@/lib/firebase-auth'
 import { extractName } from '@/lib/submission-utils'
 import { updateSubmissionReviewStatus } from '@/lib/client-actions'
 import { isReviewedFromState } from '@/lib/review-utils'
+import {
+  buildSurveySchemaMap,
+  enrichSubmissions,
+  type SubmissionMetrics,
+  type SurveySchema,
+} from '@/lib/submission-metrics'
+import {
+  RatingBadge,
+  RATING_DOT_CLASS,
+  RATING_TONE_LABEL,
+  formatRating,
+  ratingTone,
+} from '@/components/rating-indicator'
+import { cityLabel, departmentLabel, hospitalLabel } from '@/lib/option-labels'
 
 const SUBMISSIONS_PER_PAGE = 20
 
@@ -137,29 +151,33 @@ function formatValueForCSV(value: any): string {
  * Robustly extract hospital or location information from a submission.
  */
 function getHospitalOrLocation(submission: FeedbackSubmission, preferLocation: boolean = false): string {
+  // Hospital/city fields store a slug (`woodstock-hospital`); resolve it back to
+  // the label the respondent picked so the dashboard reads like the form did.
   if (preferLocation) {
     // For consent/intake forms, prefer city or primaryHospital
-    return extractStringValue(submission.city) ||
-      extractStringValue(submission.primaryHospital) ||
+    const city = extractStringValue(submission.city)
+    if (city) return cityLabel(city)
+    const location = extractStringValue(submission.primaryHospital) ||
       extractStringValue(submission.hospitalName) ||
       extractStringValue(submission.hospital) ||
-      extractStringValue(submission['hospital-on']) ||
-      'Unknown Location'
+      extractStringValue(submission['hospital-on'])
+    return location ? hospitalLabel(location) : 'Unknown Location'
   }
   // For feedback forms, prefer hospital fields
   // CRITICAL: Include primaryHospital in fallback search for consistency in "All Surveys" mode
-  return extractStringValue(submission.hospitalName) ||
+  const hospital = extractStringValue(submission.hospitalName) ||
     extractStringValue(submission.hospital) ||
     extractStringValue(submission['hospital-on']) ||
-    extractStringValue(submission.primaryHospital) ||
-    'Unknown Hospital'
+    extractStringValue(submission.primaryHospital)
+  return hospital ? hospitalLabel(hospital) : 'Unknown Hospital'
 }
 
 export default function Dashboard() {
   const { user, loading: authLoading, isAdmin, isSuperAdmin, allowedForms } = useAuth()
   const { toast } = useToast()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
-  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldLabels?: Record<string, string>; fieldOrder?: string[]; reviewConfig?: { enabled?: boolean; actionLabel?: string; undoLabel?: string; reviewedLabel?: string; pendingLabel?: string } | null }>>([])
+  const [submissionMetrics, setSubmissionMetrics] = useState<Map<string, SubmissionMetrics>>(new Map())
+  const [surveys, setSurveys] = useState<Array<{ id: string; title: string; description?: string; fieldTypes?: Record<string, string>; fieldLabels?: Record<string, string>; fieldOrder?: string[]; reviewConfig?: { enabled?: boolean; actionLabel?: string; undoLabel?: string; reviewedLabel?: string; pendingLabel?: string } | null }>>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -348,7 +366,19 @@ export default function Dashboard() {
           )
         }
 
-        setSubmissions(uniqueSubmissions)
+        // Derive the canonical `rating` / `hospitalInteraction` values from each
+        // survey's own field definitions. Surveys built in the editor name their
+        // fields whatever the editor generated, so these values can only be
+        // resolved once the survey schemas are in hand.
+        const schemaMap = buildSurveySchemaMap(surveysData)
+        const emptySchema: SurveySchema = { fieldTypes: {}, fieldLabels: {}, fieldOrder: [] }
+        const { submissions: enrichedSubmissions, metricsById } = enrichSubmissions(
+          uniqueSubmissions,
+          submission => schemaMap.get(submission.surveyId) ?? emptySchema
+        )
+
+        setSubmissions(enrichedSubmissions)
+        setSubmissionMetrics(metricsById)
         setSurveys(surveysData)
 
         // Auto-select the single survey dashboard for restricted admins
@@ -634,20 +664,24 @@ export default function Dashboard() {
   )
 
   const ratingOverTime = useMemo(() => {
-    const byDate = new Map<string, { date: string; avg: number; count: number }>()
+    // Only rated submissions contribute to the daily average. Treating an
+    // unanswered rating as 0 used to drag every point toward the floor.
+    const byDate = new Map<string, { date: string; sum: number; count: number }>()
     for (const s of filtered) {
       // Validate submittedAt date
       const d = s.submittedAt ? new Date(s.submittedAt) : null
       if (!d || isNaN(d.getTime())) continue // Skip invalid dates
 
-      const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10)
-      const current = byDate.get(key) || { date: key, avg: 0, count: 0 }
-      const nextCount = current.count + 1
       const ratingValue = Number(s.rating)
-      const nextAvg = (current.avg * current.count + (isNaN(ratingValue) ? 0 : ratingValue)) / nextCount
-      byDate.set(key, { date: key, avg: nextAvg, count: nextCount })
+      if (s.rating == null || isNaN(ratingValue)) continue
+
+      const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10)
+      const current = byDate.get(key) || { date: key, sum: 0, count: 0 }
+      byDate.set(key, { date: key, sum: current.sum + ratingValue, count: current.count + 1 })
     }
-    return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+    return Array.from(byDate.values())
+      .map(({ date, sum, count }) => ({ date, avg: Math.round((sum / count) * 10) / 10, count }))
+      .sort((a, b) => a.date.localeCompare(b.date))
   }, [filtered])
 
   const metrics = useMemo(() => {
@@ -818,6 +852,7 @@ export default function Dashboard() {
       }
 
       const npsScore = respondents > 0 ? Math.round(((promoters - detractors) / respondents) * 100) : 0
+      const passives = respondents - promoters - detractors
 
       // Group ratings by hospital
       const hospitalRatings = new Map<string, { total: number; sum: number; count: number }>()
@@ -834,18 +869,29 @@ export default function Dashboard() {
       return {
         total,
         avg: Number(avg.toFixed(1)),
+        // How many of `total` actually answered a rating question. The stat
+        // cards need this so an average can say what it is an average *of*
+        // instead of implying every submission was scored.
+        ratedCount: validRatings.length,
+        unratedCount: total - validRatings.length,
+        promoters,
+        passives,
+        detractors,
         npsScore, // NEW METRIC
         excellent,
         good,
         needsImprovement,
         surveysCount,
+        // Ranked by rating, as the card claims — it used to sort by response
+        // count, so a 7.0 could sit below a 6.5. Ties break on response count
+        // so the better-evidenced hospital ranks first.
         hospitalRatings: Array.from(hospitalRatings.entries())
           .map(([name, data]) => ({
             name,
             avgRating: data.count > 0 ? (data.sum / data.count).toFixed(1) : '0.0',
             count: data.count
           }))
-          .sort((a, b) => b.count - a.count)
+          .sort((a, b) => (Number(b.avgRating) - Number(a.avgRating)) || (b.count - a.count))
       }
     }
   }, [filtered, submissions, surveys, isConsent, isAllSurveysMode, surveyTitleMap])
@@ -1024,12 +1070,19 @@ export default function Dashboard() {
         }
       }
 
-      const dept = getSelectionValue((s as any).department) || 'Unknown'
-      const current = departmentSatisfaction.get(dept) || { total: 0, sum: 0 }
-      departmentSatisfaction.set(dept, {
-        total: current.total + 1,
-        sum: current.sum + Number(s.rating || 0)
-      })
+      // Department averages only count submissions that carry a rating —
+      // otherwise an unrated response silently registers as a zero-star review.
+      const deptRating = Number(s.rating)
+      if (s.rating != null && !isNaN(deptRating)) {
+        const deptValue = getSelectionValue((s as any).department)
+          || getSelectionValue((s as any).inpatientUnitDepartment)
+        const dept = deptValue ? departmentLabel(String(deptValue)) : 'Unknown'
+        const current = departmentSatisfaction.get(dept) || { total: 0, sum: 0 }
+        departmentSatisfaction.set(dept, {
+          total: current.total + 1,
+          sum: current.sum + deptRating
+        })
+      }
     }
 
     return {
@@ -1234,15 +1287,18 @@ export default function Dashboard() {
       const labels = surveyFieldLabelsMap.get(selectedSurvey) || {}
       const order = surveyFieldOrderMap.get(selectedSurvey) || []
 
-      // Only include rating/hospitalInteraction if they are part of this survey's field definitions
-      const hasRating = order.includes('rating') || (filtered.some(s => s.rating != null && s.rating !== 0) && order.length === 0);
-      const hasInteraction = order.includes('hospitalInteraction') || (filtered.some(s => !!s.hospitalInteraction) && order.length === 0);
+      // Include the derived Rating / Experience summary columns whenever the
+      // data actually has them. They are derived from the survey's own rating
+      // and narrative questions, so they will not appear in `order` — checking
+      // `order` alone used to drop them from every editor-built survey's export.
+      const hasRating = filtered.some(s => s.rating != null && !isNaN(Number(s.rating)));
+      const hasInteraction = filtered.some(s => !!s.hospitalInteraction);
 
       // Construct headers: Basic info + Ordered Fields
       // When a survey has a defined field order, only export those fields (no extra columns from other surveys)
       const headers = ['Date', 'ID']
 
-      if (hasRating) headers.push('Rating');
+      if (hasRating) headers.push('Rating (/10)');
       if (hasInteraction) headers.push('Experience/Feedback');
 
       headers.push(...order.map(key => labels[key] || getQuestionText(key)));
@@ -1787,11 +1843,13 @@ export default function Dashboard() {
                     <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                     Avg Rating
                   </CardTitle>
-                  <CardDescription>Across selection</CardDescription>
+                  <CardDescription>Across rated submissions</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="flex items-end justify-between">
-                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">{(metrics as any).avg || 0}/10</div>
+                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300" aria-live="polite">
+                      {(metrics as any).ratedCount > 0 ? `${(metrics as any).avg}/10` : '—'}
+                    </div>
                     {ratingTrend && ratingTrend.direction !== 'neutral' && (
                       <div className={`flex items-center gap-1 text-xs font-medium ${ratingTrend.direction === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
@@ -1800,6 +1858,13 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                  {/* Say what the average is an average *of* — unrated
+                      submissions are excluded rather than counted as zero. */}
+                  <p className="mt-1 text-xs text-emerald-600/80 dark:text-emerald-400/80">
+                    {(metrics as any).ratedCount > 0
+                      ? `${(metrics as any).ratedCount} of ${(metrics as any).total} rated`
+                      : 'No ratings in this selection'}
+                  </p>
                 </CardContent>
               </UCard>
             )}
@@ -1835,10 +1900,14 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="text-3xl font-bold text-purple-700 dark:text-purple-300" aria-live="polite">
-                      {(metrics as any).npsScore || 0}
+                      {(metrics as any).ratedCount > 0
+                        ? `${(metrics as any).npsScore > 0 ? '+' : ''}${(metrics as any).npsScore}`
+                        : '—'}
                     </div>
                     <div className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">
-                      -100 to +100
+                      {(metrics as any).ratedCount > 0
+                        ? `${(metrics as any).promoters} promoters · ${(metrics as any).passives} passive · ${(metrics as any).detractors} detractors`
+                        : 'No ratings in this selection'}
                     </div>
                   </CardContent>
                 </UCard>
@@ -1975,29 +2044,36 @@ export default function Dashboard() {
                 ) : (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Top Hospitals by Rating</CardTitle>
+                      <CardTitle className="text-base">Hospitals by Rating</CardTitle>
+                      <CardDescription className="text-xs">
+                        Average score of the submissions that included a rating
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
                         {((metrics as any).hospitalRatings || []).slice(0, 5).map((hospital: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-muted-foreground w-6">#{idx + 1}</span>
-                              <span className="text-sm truncate max-w-[200px]">{hospital.name}</span>
+                          <div key={idx} className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="w-6 flex-shrink-0 text-sm font-medium text-muted-foreground">#{idx + 1}</span>
+                              <span className="truncate text-sm" title={hospital.name}>{hospital.name}</span>
+                              {/* A single response is not a ranking — say so. */}
+                              <span className="flex-shrink-0 text-xs text-muted-foreground">
+                                ({hospital.count})
+                              </span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="flex flex-shrink-0 items-center gap-2">
+                              <div className="h-2 w-20 rounded-full bg-muted">
                                 <div
-                                  className="h-2 rounded-full bg-primary"
-                                  style={{ width: `${(parseFloat(hospital.avgRating) / 10) * 100}%` }}
+                                  className={`h-2 rounded-full ${RATING_DOT_CLASS[ratingTone(hospital.avgRating)]}`}
+                                  style={{ width: `${Math.min(100, (parseFloat(hospital.avgRating) / 10) * 100)}%` }}
                                 />
                               </div>
-                              <span className="text-sm font-bold w-12 text-right">{hospital.avgRating}</span>
+                              <span className="w-10 text-right text-sm font-bold">{hospital.avgRating}</span>
                             </div>
                           </div>
                         ))}
                         {((metrics as any).hospitalRatings?.length === 0 || !(metrics as any).hospitalRatings) && (
-                          <p className="text-sm text-muted-foreground">No hospital data available</p>
+                          <p className="text-sm text-muted-foreground">No rated submissions yet</p>
                         )}
                       </div>
                     </CardContent>
@@ -2035,9 +2111,7 @@ export default function Dashboard() {
                           onClick={() => openSubmissionModal(submission)}
                         >
                           {!isConsent ? (
-                            <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${Number(submission.rating) >= 8 ? 'bg-green-500' :
-                              Number(submission.rating) >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`} />
+                            <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${RATING_DOT_CLASS[ratingTone(submission.rating)]}`} />
                           ) : (
                             <div className="mt-1 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                           )}
@@ -2046,33 +2120,36 @@ export default function Dashboard() {
                               <p className="text-sm font-medium line-clamp-1 flex-1">
                                 {isConsent
                                   ? `${(submission as any)?.firstName || ''} ${(submission as any)?.lastName || ''}`.trim() || 'Unnamed'
-                                  : submission.hospitalInteraction || 'N/A'}
+                                  : submission.hospitalInteraction || extractName(submission) || 'No written feedback'}
                               </p>
-                              {!isConsent && (() => {
-                                const rating = Number(submission.rating)
-                                const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10
-                                return isValidRating ? (
-                                  <Badge variant="outline" className="text-xs flex-shrink-0">
-                                    {rating}/10
-                                  </Badge>
-                                ) : null
-                              })()}
+                              {!isConsent && formatRating(submission.rating) && (
+                                <span className="flex-shrink-0">
+                                  <RatingBadge rating={submission.rating} metrics={submissionMetrics.get(submission.id)} />
+                                </span>
+                              )}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5">
+                            {/* A <div>, not a <p>: Badge renders a block element,
+                                and nesting one inside a paragraph is invalid HTML
+                                that React reports as a hydration error. */}
+                            <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5">
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                                 {surveyTitleMap.get(submission.surveyId) || 'Unknown Survey'}
                               </Badge>
                               <span>•</span>
-                              {isConsent
-                                ? getHospitalOrLocation(submission, true)
-                                : getHospitalOrLocation(submission, false)}
+                              <span className="truncate max-w-[220px]">
+                                {isConsent
+                                  ? getHospitalOrLocation(submission, true)
+                                  : getHospitalOrLocation(submission, false)}
+                              </span>
                               <span>•</span>
-                              {(() => {
-                                const date = submission.submittedAt ? new Date(submission.submittedAt) : null
-                                if (!date || isNaN(date.getTime())) return 'Invalid Date'
-                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                              })()}
-                            </p>
+                              <span>
+                                {(() => {
+                                  const date = submission.submittedAt ? new Date(submission.submittedAt) : null
+                                  if (!date || isNaN(date.getTime())) return 'Invalid Date'
+                                  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                })()}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2730,28 +2807,17 @@ export default function Dashboard() {
                             {isHospitalFeedback ? (
                               <div className="space-y-1.5 text-sm mt-2 pt-2 border-t border-border/50">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-muted-foreground text-xs">Rating:</span>
-                                  <div className="flex items-center gap-1.5">
-                                    {(() => {
-                                      const rating = Number(submission.rating);
-                                      const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10;
-                                      return (
-                                        <>
-                                          <div className={`h-2 w-2 rounded-full ${isValidRating && rating >= 8 ? 'bg-green-500' :
-                                            isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`} />
-                                          <span className="font-semibold text-xs">{isValidRating ? `${rating}/10` : 'N/A'}</span>
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
+                                  <span className="text-muted-foreground text-xs">Rating</span>
+                                  <RatingBadge rating={submission.rating} metrics={submissionMetrics.get(submission.id)} />
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground text-xs">Hospital: </span>
                                   <span className="font-medium text-xs">{getHospitalOrLocation(submission, false)}</span>
                                 </div>
-                                {submission.hospitalInteraction && (
+                                {submission.hospitalInteraction ? (
                                   <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{submission.hospitalInteraction}</p>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground/60 italic mt-1">No written feedback</p>
                                 )}
                               </div>
                             ) : (
@@ -2869,23 +2935,18 @@ export default function Dashboard() {
                                     : <span className="text-sm italic text-muted-foreground">Anonymous</span>}
                                 </TableCell>
                                 <TableCell className="py-4">
-                                  <div className="flex items-center gap-2">
-                                    {(() => {
-                                      const rating = Number(submission.rating)
-                                      const isValidRating = !isNaN(rating) && rating >= 0 && rating <= 10
-                                      return (
-                                        <>
-                                          <div className={`h-2.5 w-2.5 rounded-full ${isValidRating && rating >= 8 ? 'bg-green-500' :
-                                            isValidRating && rating >= 5 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`} />
-                                          <span className="text-sm font-medium">{isValidRating ? `${rating}/10` : 'N/A'}</span>
-                                        </>
-                                      )
-                                    })()}
-                                  </div>
+                                  <RatingBadge rating={submission.rating} metrics={submissionMetrics.get(submission.id)} />
                                 </TableCell>
                                 <TableCell className="py-4 text-sm font-medium">{getHospitalOrLocation(submission, false)}</TableCell>
-                                <TableCell className="max-w-xs truncate py-4 text-sm">{submission.hospitalInteraction || 'N/A'}</TableCell>
+                                <TableCell className="max-w-xs py-4 text-sm">
+                                  {submission.hospitalInteraction ? (
+                                    <span className="line-clamp-2" title={submission.hospitalInteraction}>
+                                      {submission.hospitalInteraction}
+                                    </span>
+                                  ) : (
+                                    <span className="italic text-muted-foreground/60">No written feedback</span>
+                                  )}
+                                </TableCell>
                               </>
                             )}
                             {anyReviewEnabled && (
@@ -3007,14 +3068,25 @@ export default function Dashboard() {
                           </span>
                         </div>
                       </div>
-                      {isHospitalFeedback && activeSubmission?.rating !== undefined && (
-                        <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold self-start flex-shrink-0 ${activeSubmission.rating >= 8 ? 'bg-green-500 text-white' :
-                          activeSubmission.rating >= 5 ? 'bg-yellow-500 text-white' :
-                            'bg-white text-[#C8262A]'
-                          }`}>
-                          Rating: {activeSubmission.rating}/10
-                        </div>
-                      )}
+                      {isHospitalFeedback && activeSubmission && (() => {
+                        const activeMetrics = submissionMetrics.get(activeSubmission.id)
+                        const display = formatRating(activeSubmission.rating)
+                        return (
+                          <div className="self-start flex-shrink-0 rounded-lg bg-white/15 px-3 py-2 text-center backdrop-blur-sm ring-1 ring-inset ring-white/25">
+                            <div className="text-lg font-bold leading-none text-white">
+                              {display ? `${display}/10` : '—'}
+                            </div>
+                            <div className="mt-1 text-[10px] uppercase tracking-wide text-white/80">
+                              {display ? RATING_TONE_LABEL[ratingTone(activeSubmission.rating)] : 'Not rated'}
+                            </div>
+                            {activeMetrics?.rating && !activeMetrics.rating.isOverall && (
+                              <div className="mt-0.5 text-[10px] text-white/70">
+                                from {activeMetrics.rating.raw}/{activeMetrics.rating.max} sub-score
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                   <DialogHeader className="sr-only">
@@ -3025,17 +3097,31 @@ export default function Dashboard() {
                     <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 min-h-0">
                       {/* Modernized Submission Details Interface - Clean Q&A Layout */}
                       <div className="space-y-4 sm:space-y-5 px-4 py-4 sm:px-6 sm:py-5">
-                        {/* Experience Highlight Box - only for hospital feedback */}
-                        {isHospitalFeedback && activeSubmission.hospitalInteraction && (
-                          <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border-l-4 border-[#C8262A]">
-                            <h3 className="text-sm font-semibold text-[#C8262A] mb-2 uppercase tracking-wide">
-                              Patient Experience
-                            </h3>
-                            <p className="text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-                              {activeSubmission.hospitalInteraction}
-                            </p>
-                          </div>
-                        )}
+                        {/* Experience highlight — the narrative answers, surfaced
+                            above the raw field dump so the story reads first. */}
+                        {isHospitalFeedback && (() => {
+                          const narratives = submissionMetrics.get(activeSubmission.id)?.narratives ?? []
+                          if (narratives.length === 0) return null
+                          return (
+                            <div className="rounded-lg border-l-4 border-[#C8262A] bg-gray-50 p-4 dark:bg-gray-800">
+                              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#C8262A]">
+                                Patient Experience
+                              </h3>
+                              <div className="space-y-4">
+                                {narratives.map(narrative => (
+                                  <div key={narrative.fieldId}>
+                                    <p className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      {narrative.label}
+                                    </p>
+                                    <p className="whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-200">
+                                      {narrative.text}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })()}
 
                         {/* All Submission Data - Question on top, Answer below */}
                         {Object.entries(activeSubmission)

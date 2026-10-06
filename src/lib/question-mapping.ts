@@ -1,6 +1,8 @@
 /**
  * Mapping of survey field keys to human-readable questions
  */
+import { knownOptionLabel } from '@/lib/option-labels';
+
 export const QUESTION_MAPPING: Record<string, string> = {
     // Personal / Demographics
     firstName: "First Name",
@@ -164,6 +166,12 @@ export function formatAnswerValue(value: any): string | string[] {
 }
 
 function formatStringValue(str: string): string {
+    // Hospital / city / department / province answers are stored as option
+    // slugs. Prefer the option's real label ("Children's Hospital of Eastern
+    // Ontario") over a naive title-casing of the slug.
+    const known = knownOptionLabel(str);
+    if (known) return known;
+
     // Convert kebab-case to Title Case (e.g. "stigmatization-stereotyping" -> "Stigmatization Stereotyping")
     if (str.includes('-') && !str.includes(' ')) {
         return str

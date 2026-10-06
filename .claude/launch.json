@@ -4,19 +4,39 @@
     {
       "name": "Next.js Dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3012
+    },
+    {
+      "name": "Next.js Dev (no cache clear)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "-p",
+        "3012"
+      ],
       "port": 3012
     },
     {
       "name": "Genkit Dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "genkit:dev"],
+      "runtimeArgs": [
+        "run",
+        "genkit:dev"
+      ],
       "port": 4000
     },
     {
       "name": "Genkit Watch",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "genkit:watch"],
+      "runtimeArgs": [
+        "run",
+        "genkit:watch"
+      ],
       "port": 4000
     }
   ]

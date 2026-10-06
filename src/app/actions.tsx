@@ -11,6 +11,7 @@ import { sendWebhook } from '@/lib/webhook-sender';
 import type { SubmissionEmailConfig } from '@/lib/email-templates';
 import { verifyPayPalCapture } from '@/lib/paypal-verification';
 import { MEMBERSHIP_PLAN_BY_ID } from '@/lib/membership-plans';
+import { buildSurveySchema } from '@/lib/submission-metrics';
 
 // Note: We intentionally use the Web Firestore client on the server for writes
 // to respect Firestore security rules and avoid admin credential requirements
@@ -156,38 +157,18 @@ export async function getSurveys() {
     }
     return snapshot.docs.map((doc: DocumentData) => {
       const data = doc.data();
-      // Extract field label mapping and order from sections for use in dashboard
-      const fieldLabels: Record<string, string> = {};
-      const fieldOrder: string[] = [];
-      if (data.sections) {
-        for (const section of data.sections) {
-          for (const field of section.fields || []) {
-            if (field.id) {
-              fieldOrder.push(field.id);
-              if (field.label) {
-                fieldLabels[field.id] = field.label;
-              }
-            }
-            // Handle grouped fields
-            if (field.type === 'group' && field.fields) {
-              for (const subField of field.fields) {
-                if (subField.id) {
-                  fieldOrder.push(subField.id);
-                  if (subField.label) {
-                    fieldLabels[subField.id] = subField.label;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      // Flatten the field definitions so the dashboard can interpret submissions
+      // without knowing any survey's field ids up front. `fieldTypes` in
+      // particular is what lets the dashboard find the rating/narrative answers
+      // in surveys whose fields carry editor-generated ids.
+      const { fieldTypes, fieldLabels, fieldOrder } = buildSurveySchema(data);
       return {
         id: doc.id,
         title: data.title || 'Untitled Survey',
         description: data.description || 'No description.',
         slug: typeof data.slug === 'string' && data.slug.length > 0 ? data.slug : undefined,
         reviewConfig: data.reviewConfig ?? null,
+        fieldTypes,
         fieldLabels,
         fieldOrder,
       };

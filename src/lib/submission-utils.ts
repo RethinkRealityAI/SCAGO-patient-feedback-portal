@@ -10,6 +10,7 @@
 import { collection, collectionGroup, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { FeedbackSubmission } from '@/app/dashboard/types';
+import { buildSurveySchema, enrichSubmissions, type SurveySchema } from '@/lib/submission-metrics';
 
 /**
  * Parse Firestore timestamp to Date object
@@ -81,6 +82,45 @@ function extractSurveyIdFromPath(docRef: any): string {
 
 // The main Hospital Experience Reporting Portal survey ID - all legacy submissions map to this
 const HOSPITAL_SURVEY_ID = 'QDl3z7vLa0IQ4JgHBZ2s';
+
+const EMPTY_SCHEMA: SurveySchema = { fieldTypes: {}, fieldLabels: {}, fieldOrder: [] };
+
+/**
+ * Read every survey's field definitions with the Admin SDK.
+ *
+ * Server-side consumers (AI analysis, PDF export) need these to resolve a
+ * submission's rating and narrative: surveys built in the editor store those
+ * answers under generated field ids, so `rating` / `hospitalInteraction` cannot
+ * be read off the raw document.
+ */
+async function fetchSurveySchemasAdmin(): Promise<Map<string, SurveySchema>> {
+  const schemas = new Map<string, SurveySchema>();
+  try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const snapshot = await getAdminFirestore().collection('surveys').get();
+    for (const doc of snapshot.docs) {
+      schemas.set(doc.id, buildSurveySchema(doc.data()));
+    }
+  } catch (e) {
+    console.warn('[submission-utils] Could not load survey schemas; falling back to legacy field names.', e);
+  }
+  return schemas;
+}
+
+/**
+ * Populate the canonical `rating` / `hospitalInteraction` fields using each
+ * submission's own survey schema, so every server-side consumer sees the same
+ * derived values the dashboard shows.
+ */
+async function withDerivedMetrics(submissions: FeedbackSubmission[]): Promise<FeedbackSubmission[]> {
+  if (submissions.length === 0) return submissions;
+  const schemas = await fetchSurveySchemasAdmin();
+  if (schemas.size === 0) return submissions;
+  return enrichSubmissions(
+    submissions,
+    submission => schemas.get(submission.surveyId) ?? EMPTY_SCHEMA
+  ).submissions;
+}
 
 export async function fetchAllSubmissions(): Promise<FeedbackSubmission[]> {
   const submissions: FeedbackSubmission[] = [];
@@ -207,7 +247,7 @@ export async function fetchAllSubmissionsAdmin(): Promise<FeedbackSubmission[]> 
     submissions.push(...legacySubmissions.filter(s => !seenIds.has(s.id)));
   } catch (e) { }
 
-  return submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  return withDerivedMetrics(submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime()));
 }
 
 /**
@@ -253,49 +293,67 @@ export async function fetchSubmissionsForSurveyAdmin(surveyId: string): Promise<
   const firestore = getAdminFirestore();
   const submissions: FeedbackSubmission[] = [];
 
+  const toSubmission = (doc: any, fallbackSurveyId: string): FeedbackSubmission => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      ...d,
+      ...(d.rating != null ? { rating: Number(d.rating) } : {}),
+      submittedAt: parseFirestoreDate(d.submittedAt),
+      surveyId: d.surveyId || fallbackSurveyId,
+    } as FeedbackSubmission;
+  };
+
+  const addNew = (found: FeedbackSubmission[]) => {
+    const seen = new Set(submissions.map(s => s.id));
+    submissions.push(...found.filter(s => !seen.has(s.id)));
+  };
+
+  // Each source is guarded separately. These used to share one try/catch, so a
+  // failure in the middle stage (the collection-group query below, which needs
+  // an index the project has not deployed) silently aborted the legacy read as
+  // well — leaving the AI report quoting a smaller total than the dashboard
+  // header for the very same survey.
+
+  // 1. The survey's own submissions subcollection — the normal location.
   try {
     const snapshot = await firestore.collection('surveys').doc(surveyId).collection('submissions').get();
-    submissions.push(...snapshot.docs.map(doc => {
-      const d = doc.data();
-      return {
-        id: doc.id,
-        ...d,
-        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
-        submittedAt: parseFirestoreDate(d.submittedAt),
-        surveyId: d.surveyId || surveyId,
-      } as FeedbackSubmission;
-    }));
+    addNew(snapshot.docs.map(doc => toSubmission(doc, surveyId)));
+  } catch (e) {
+    console.warn(`[fetchSubmissionsForSurveyAdmin] Subcollection read failed for ${surveyId}:`, e);
+  }
 
+  // 2. Submissions misfiled under another survey but tagged with this surveyId.
+  //    Optional: needs a COLLECTION_GROUP index on `submissions.surveyId`
+  //    (see firestore.indexes.json). Without it this is skipped, not fatal.
+  try {
     const groupSnapshot = await firestore.collectionGroup('submissions').where('surveyId', '==', surveyId).get();
-    const groupSubs = groupSnapshot.docs.map(doc => {
-      const d = doc.data();
-      return {
-        id: doc.id,
-        ...d,
-        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
-        submittedAt: parseFirestoreDate(d.submittedAt),
-        surveyId: d.surveyId || surveyId,
-      } as FeedbackSubmission;
-    });
-    const seenIds = new Set(submissions.map(s => s.id));
-    submissions.push(...groupSubs.filter(s => !seenIds.has(s.id)));
+    addNew(groupSnapshot.docs.map(doc => toSubmission(doc, surveyId)));
+  } catch (e) {
+    console.warn(
+      `[fetchSubmissionsForSurveyAdmin] Skipping cross-survey lookup for ${surveyId} ` +
+      `(deploy the submissions.surveyId collection-group index to enable it):`,
+      e instanceof Error ? e.message : e
+    );
+  }
 
-    const legacySnapshot = await firestore.collection('feedback').where('surveyId', '==', surveyId).get();
-    const legacySubs = legacySnapshot.docs.map(doc => {
-      const d = doc.data();
-      return {
-        id: doc.id,
-        ...d,
-        ...(d.rating != null ? { rating: Number(d.rating) } : {}),
-        submittedAt: parseFirestoreDate(d.submittedAt),
-        surveyId: d.surveyId || surveyId,
-      } as FeedbackSubmission;
-    });
-    const seenIds2 = new Set(submissions.map(s => s.id));
-    submissions.push(...legacySubs.filter(s => !seenIds2.has(s.id)));
-  } catch (e) { }
+  // 3. Legacy `feedback` docs predate per-survey subcollections and some carry
+  //    no surveyId at all. The client fetcher attributes those to the hospital
+  //    portal (which is where the collection came from), so this uses the same
+  //    rule rather than a `where('surveyId','==',…)` query that skipped them.
+  //    The collection is small, so read it whole.
+  try {
+    const legacySnapshot = await firestore.collection('feedback').get();
+    addNew(
+      legacySnapshot.docs
+        .map(doc => toSubmission(doc, HOSPITAL_SURVEY_ID))
+        .filter(s => s.surveyId === surveyId)
+    );
+  } catch (e) {
+    console.warn(`[fetchSubmissionsForSurveyAdmin] Legacy feedback read failed for ${surveyId}:`, e);
+  }
 
-  return submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  return withDerivedMetrics(submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime()));
 }
 
 /**

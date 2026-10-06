@@ -30,6 +30,8 @@ interface ParsedAnalysis {
   overview: {
     totalSubmissions: number;
     averageRating: number;
+    /** False when the report carried no rating breakdown to parse. */
+    hasRatingBands: boolean;
     ratings: { excellent: number; good: number; poor: number };
     sentimentChange: number;
   };
@@ -46,10 +48,16 @@ function parseAnalysisText(text: string): ParsedAnalysis {
   // Extract numbers from overview
   const totalMatch = text.match(/Total submissions:\s*(\d+)/i);
   const avgRatingMatch = text.match(/Average rating:\s*([\d.]+)/i);
-  // Look for ratings 8-10, 5-7, and below 5
-  const excellentMatch = text.match(/excellent.*?(\d+)|8-10.*?(\d+)|high.*?rating.*?(\d+)/i);
-  const goodMatch = text.match(/good.*?(\d+)|5-7.*?(\d+)|average.*?rating.*?(\d+)/i);
-  const poorMatch = text.match(/poor.*?(\d+)|below 5.*?(\d+)|low.*?rating.*?(\d+)/i);
+  // Rating bands come from the explicit breakdown lines the report emits
+  // (see `ratingBreakdownLines` in src/app/dashboard/actions.ts). These were
+  // previously loose patterns like /good.*?(\d+)|average.*?rating.*?(\d+)/,
+  // which happily matched the "Average rating: 6.1/10" line and reported 6
+  // "good" ratings out of nowhere — pushing the Satisfaction Rate card to 100%
+  // on a data set the very same report described as Negative.
+  const excellentMatch = text.match(/Excellent ratings \(8-10\):\s*(\d+)/i);
+  const goodMatch = text.match(/Good ratings \(5-7\):\s*(\d+)/i);
+  const poorMatch = text.match(/Poor ratings \(0-4\):\s*(\d+)/i);
+  const hasRatingBands = Boolean(excellentMatch || goodMatch || poorMatch);
   const changeMatch = text.match(/Change in average rating.*?:\s*([+-]?[\d.]+)/i);
   const sentimentMatch = text.match(/Overall:\s*(\w+)/i) || text.match(/Sentiment[:\s]+(\w+)/i);
 
@@ -72,10 +80,11 @@ function parseAnalysisText(text: string): ParsedAnalysis {
     overview: {
       totalSubmissions: totalMatch ? parseInt(totalMatch[1]) : 0,
       averageRating: avgRatingMatch ? parseFloat(avgRatingMatch[1]) : 0,
+      hasRatingBands,
       ratings: {
-        excellent: excellentMatch ? parseInt(excellentMatch[1] || excellentMatch[2] || excellentMatch[3]) : 0,
-        good: goodMatch ? parseInt(goodMatch[1] || goodMatch[2] || goodMatch[3]) : 0,
-        poor: poorMatch ? parseInt(poorMatch[1] || poorMatch[2] || poorMatch[3]) : 0,
+        excellent: excellentMatch ? parseInt(excellentMatch[1]) : 0,
+        good: goodMatch ? parseInt(goodMatch[1]) : 0,
+        poor: poorMatch ? parseInt(poorMatch[1]) : 0,
       },
       sentimentChange: changeMatch ? parseFloat(changeMatch[1]) : 0,
     },
@@ -90,14 +99,16 @@ function parseAnalysisText(text: string): ParsedAnalysis {
 export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) {
   const parsed = useMemo(() => parseAnalysisText(analysisText), [analysisText]);
 
+  // Null when there is nothing to compute from, so the card can say so rather
+  // than rendering a confident 0% (or, previously, a spurious 100%).
   const satisfactionScore = useMemo(() => {
     const total = parsed.overview.ratings.excellent + parsed.overview.ratings.good + parsed.overview.ratings.poor;
-    if (total === 0) return 0;
+    if (!parsed.overview.hasRatingBands || total === 0) return null;
     // Calculate percentage of excellent and good ratings
     return Math.round(
       ((parsed.overview.ratings.excellent + parsed.overview.ratings.good) / total) * 100
     );
-  }, [parsed.overview.ratings]);
+  }, [parsed.overview.ratings, parsed.overview.hasRatingBands]);
 
   const sentimentColor = {
     'Positive': 'text-green-600 bg-green-50 border-green-200',
@@ -188,12 +199,18 @@ export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) 
           <CardContent>
             <div className={cn(
               "text-3xl font-bold",
-              satisfactionScore >= 80 ? "text-green-600" : satisfactionScore >= 60 ? "text-yellow-600" : "text-red-600"
+              satisfactionScore === null ? "text-muted-foreground"
+                : satisfactionScore >= 80 ? "text-green-600"
+                : satisfactionScore >= 60 ? "text-yellow-600"
+                : "text-red-600"
             )}>
-              {satisfactionScore}%
+              {satisfactionScore === null ? '—' : `${satisfactionScore}%`}
             </div>
             <p className="text-xs text-purple-600/70 dark:text-purple-400/70 mt-1">
-              {satisfactionScore >= 80 ? 'Excellent' : satisfactionScore >= 60 ? 'Good' : 'Needs Improvement'}
+              {satisfactionScore === null ? 'No ratings to score'
+                : satisfactionScore >= 80 ? 'Rated excellent or good'
+                : satisfactionScore >= 60 ? 'Mostly excellent or good'
+                : 'Needs improvement'}
             </p>
           </CardContent>
         </Card>
@@ -207,15 +224,22 @@ export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) 
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600 dark:text-red-400">
-              {parsed.overview.ratings.poor}
+            <div className={cn(
+              "text-3xl font-bold",
+              parsed.overview.hasRatingBands ? "text-red-600 dark:text-red-400" : "text-muted-foreground"
+            )}>
+              {parsed.overview.hasRatingBands ? parsed.overview.ratings.poor : '—'}
             </div>
-            <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">need attention</p>
+            <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">
+              {parsed.overview.hasRatingBands ? 'need attention' : 'No ratings to score'}
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Hospital Ratings Breakdown */}
+      {/* Hospital Ratings Breakdown — omitted entirely when the report had no
+          rating bands, rather than drawing three empty bars. */}
+      {parsed.overview.hasRatingBands && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -233,7 +257,7 @@ export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) 
                 </span>
                 <span className="font-semibold">{parsed.overview.ratings.excellent}</span>
               </div>
-              <Progress value={(parsed.overview.ratings.excellent / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-green-100" />
+              <Progress value={(parsed.overview.ratings.excellent / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-green-100" indicatorClassName="bg-emerald-500" />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -243,7 +267,7 @@ export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) 
                 </span>
                 <span className="font-semibold">{parsed.overview.ratings.good}</span>
               </div>
-              <Progress value={(parsed.overview.ratings.good / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-yellow-100" />
+              <Progress value={(parsed.overview.ratings.good / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-yellow-100" indicatorClassName="bg-amber-500" />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -253,11 +277,12 @@ export default function AnalysisDisplay({ analysisText }: AnalysisDisplayProps) 
                 </span>
                 <span className="font-semibold">{parsed.overview.ratings.poor}</span>
               </div>
-              <Progress value={(parsed.overview.ratings.poor / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-red-100" />
+              <Progress value={(parsed.overview.ratings.poor / (parsed.overview.totalSubmissions || 1)) * 100} className="h-2 bg-red-100" indicatorClassName="bg-rose-500" />
             </div>
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Key Topics */}
       {parsed.keyTopics.length > 0 && (
