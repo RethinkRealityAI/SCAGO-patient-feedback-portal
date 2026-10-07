@@ -238,32 +238,75 @@ export function assigneesOf(submissions: AnyRecord[], configured: string[] = [])
   return [...byKey.values()].sort((a, b) => a.localeCompare(b))
 }
 
+/** Contact details that identify a person: email, and the last 10 digits of their phone. */
+function contactKeys(s: AnyRecord): string[] {
+  const keys: string[] = []
+  if (typeof s.email === 'string' && s.email.includes('@')) keys.push(`e:${s.email.trim().toLowerCase()}`)
+  const phone = typeof s.primaryPhone === 'string' ? s.primaryPhone.replace(/\D/g, '').slice(-10) : ''
+  if (phone.length === 10) keys.push(`p:${phone}`)
+  return keys
+}
+
 /**
- * For each submission, how many other submissions came from the same person
- * (same email, or same phone number), so repeat requests stand out.
+ * Which person each submission belongs to. Requests sharing an email or a
+ * phone number are the same person, transitively: a request with a new email
+ * but the old phone number still joins the group. Returns submission id ->
+ * person key (the id of one submission in the group).
  */
-export function repeatRequestCounts(submissions: AnyRecord[]): Map<string, number> {
-  const keysOf = (s: AnyRecord): string[] => {
-    const keys: string[] = []
-    if (typeof s.email === 'string' && s.email.includes('@')) keys.push(`e:${s.email.trim().toLowerCase()}`)
-    const phone = typeof s.primaryPhone === 'string' ? s.primaryPhone.replace(/\D/g, '').slice(-10) : ''
-    if (phone.length === 10) keys.push(`p:${phone}`)
-    return keys
+export function personKeys(submissions: AnyRecord[]): Map<string, string> {
+  const parent = new Map<string, string>()
+  const find = (id: string): string => {
+    let root = id
+    while (parent.get(root) !== root) root = parent.get(root)!
+    for (let n = id; n !== root; ) { const next = parent.get(n)!; parent.set(n, root); n = next }
+    return root
   }
-  const groups = new Map<string, Set<string>>()
+  const firstWithKey = new Map<string, string>()
   for (const s of submissions) {
-    for (const key of keysOf(s)) {
-      if (!groups.has(key)) groups.set(key, new Set())
-      groups.get(key)!.add(s.id)
+    parent.set(s.id, s.id)
+    for (const key of contactKeys(s)) {
+      const other = firstWithKey.get(key)
+      if (other === undefined) firstWithKey.set(key, s.id)
+      else parent.set(find(s.id), find(other))
     }
   }
+  return new Map(submissions.map(s => [s.id, find(s.id)]))
+}
+
+/** For each submission, how many other requests the same person made, so repeat requests stand out. */
+export function repeatRequestCounts(submissions: AnyRecord[]): Map<string, number> {
+  const person = personKeys(submissions)
+  const sizes = new Map<string, number>()
+  for (const key of person.values()) sizes.set(key, (sizes.get(key) ?? 0) + 1)
   const counts = new Map<string, number>()
-  for (const s of submissions) {
-    const others = new Set<string>()
-    for (const key of keysOf(s)) groups.get(key)?.forEach(id => id !== s.id && others.add(id))
-    if (others.size > 0) counts.set(s.id, others.size)
-  }
+  for (const [id, key] of person) if (sizes.get(key)! > 1) counts.set(id, sizes.get(key)! - 1)
   return counts
+}
+
+export interface PersonGroup<T> {
+  key: string
+  /** The person's most recent request in the list; it heads their row. */
+  latest: T
+  /** Their other requests in the list, newest first. */
+  earlier: T[]
+}
+
+/**
+ * Collapse a list into one entry per person. Groups keep the list's order (a
+ * person sits where their first request in the list did), so sorting and
+ * filtering still apply; within a group the newest request leads.
+ */
+export function groupByPerson<T extends AnyRecord>(list: T[], person: Map<string, string>): PersonGroup<T>[] {
+  const groups = new Map<string, T[]>()
+  for (const s of list) {
+    const key = person.get(s.id) ?? s.id
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(s)
+  }
+  return [...groups].map(([key, members]) => {
+    const byNewest = [...members].sort((a, b) => submittedTime(b) - submittedTime(a))
+    return { key, latest: byNewest[0], earlier: byNewest.slice(1) }
+  })
 }
 
 // ─── Export ──────────────────────────────────────────────────────────────────

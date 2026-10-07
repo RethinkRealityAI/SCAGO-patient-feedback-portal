@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Loader, RefreshCw, Repeat2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Clock, Loader, RefreshCw, Repeat2 } from 'lucide-react'
 import { MarkdownReport } from '@/components/markdown-report'
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
@@ -36,7 +36,9 @@ import {
   assigneesOf,
   filterOptionsFor,
   flattenFields,
+  groupByPerson,
   isFiltering,
+  personKeys,
   repeatRequestCounts,
   toCsv,
   type CaseFilterState,
@@ -152,6 +154,9 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const [caseTab, setCaseTab] = useState<CaseTab>('all')
   const [openCaseId, setOpenCaseId] = useState<string | null>(null)
   const [caseFilters, setCaseFilters] = useState<CaseFilterState>(DEFAULT_CASE_FILTERS)
+  // One row per person, with their earlier requests tucked under the latest.
+  const [groupPeople, setGroupPeople] = useState(true)
+  const [expandedPeople, setExpandedPeople] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   useEffect(() => {
@@ -398,6 +403,23 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     : submissions
   const filteredBuckets = caseConfig ? bucketCases(filteredCases) : null
   const repeatCounts = caseConfig ? repeatRequestCounts(submissions as any[]) : new Map<string, number>()
+  const personOf = caseConfig ? personKeys(submissions as any[]) : new Map<string, string>()
+  const peopleCount = new Set(personOf.values()).size
+  const togglePerson = (key: string) =>
+    setExpandedPeople(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  const caseDate = (s: FeedbackSubmission) =>
+    new Date(s.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const shortDate = (s: FeedbackSubmission) => {
+    const d = new Date(s.submittedAt)
+    return d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' })
+  }
   const hasImported = submissions.some(s => (s as any).importedFrom)
   const openCase = openCaseId ? submissions.find(s => s.id === openCaseId) ?? null : null
 
@@ -449,9 +471,15 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
   // ── Render helpers ──────────────────────────────────────────────────────────
 
-  const renderReviewCell = (submission: FeedbackSubmission) => {
+  /**
+   * `shownWith`: how many of this person's other requests are already listed
+   * alongside it (in its group). The tag then only counts the ones not shown.
+   */
+  const renderReviewCell = (submission: FeedbackSubmission, shownWith?: number) => {
     if (caseConfig) {
       const { status, sla } = caseInfo(submission)
+      const others = repeatCounts.get(submission.id) ?? 0
+      const hidden = shownWith === undefined ? others : others - shownWith
       return (
         <td className="px-4 py-3">
           <div className="flex min-w-[11rem] flex-col items-start gap-1.5">
@@ -460,13 +488,19 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             {(submission as any).assignedTo && (
               <span className="text-xs text-muted-foreground">{(submission as any).assignedTo}</span>
             )}
-            {repeatCounts.has(submission.id) && (
+            {hidden > 0 && (
               <span
                 className="inline-flex items-center gap-1 text-xs text-violet-700 dark:text-violet-300"
-                title="Same email or phone number as another request on this form"
+                title={
+                  shownWith === undefined
+                    ? 'Same email or phone number as another request on this form'
+                    : 'This person has other requests outside the current tab or filters'
+                }
               >
                 <Repeat2 className="h-3 w-3" />
-                {repeatCounts.get(submission.id)} other request{repeatCounts.get(submission.id) === 1 ? '' : 's'}
+                {shownWith === undefined
+                  ? `${hidden} other request${hidden === 1 ? '' : 's'}`
+                  : `${hidden} more not shown`}
               </span>
             )}
           </div>
@@ -544,6 +578,94 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               </Button>
             </div>
           )}
+        </div>
+      )
+    }
+
+    if (surveyConfig?.dashboardColumns?.length && caseConfig && groupPeople) {
+      const columns = surveyConfig.dashboardColumns
+      const answerCells = (submission: FeedbackSubmission, muted = false) =>
+        columns.map(col => (
+          <td key={col.fieldId} className={`px-4 py-3 text-sm max-w-xs ${muted ? 'text-muted-foreground' : ''}`}>
+            <p className="line-clamp-2">{extractStringValue((submission as any)[col.fieldId]) ?? '—'}</p>
+          </td>
+        ))
+      return (
+        <div className="rounded-lg border overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Received</th>
+                {columns.map(col => (
+                  <th key={col.fieldId} className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">
+                    {col.label}
+                  </th>
+                ))}
+                {reviewColumnHeader}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {groupByPerson(subs, personOf).map(({ key, latest, earlier }) => {
+                const expanded = earlier.length > 0 && expandedPeople.has(key)
+                const row = caseRowProps(latest)
+                const name = [(latest as any).firstName, (latest as any).lastName].filter(Boolean).join(' ') || 'this person'
+                return (
+                  <Fragment key={key}>
+                    <tr {...row} className={`${row.className} ${expanded ? 'bg-muted/30' : ''}`}>
+                      <td className="px-4 py-3 align-top text-sm">
+                        <div className="flex items-start gap-1.5">
+                          {earlier.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); togglePerson(key) }}
+                              onKeyDown={e => e.stopPropagation()}
+                              aria-expanded={expanded}
+                              aria-label={`${expanded ? 'Hide' : 'Show'} ${earlier.length} earlier request${earlier.length === 1 ? '' : 's'} from ${name}`}
+                              className="-ml-1 mt-px rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                            </button>
+                          ) : (
+                            <span className="w-4 shrink-0" aria-hidden />
+                          )}
+                          <div className="min-w-0">
+                            <div className="whitespace-nowrap font-medium">{caseDate(latest)}</div>
+                            {earlier.length > 0 && (
+                              <div className="mt-0.5 whitespace-nowrap text-xs text-muted-foreground">
+                                also {earlier.slice(0, 2).map(shortDate).join(', ')}
+                                {earlier.length > 2 && ` +${earlier.length - 2} more`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      {answerCells(latest)}
+                      {renderReviewCell(latest, earlier.length)}
+                    </tr>
+                    {expanded &&
+                      earlier.map(s => {
+                        const sub = caseRowProps(s)
+                        return (
+                          <tr
+                            key={s.id}
+                            {...sub}
+                            aria-label={`Open earlier request from ${caseDate(s)}`}
+                            className={`${sub.className} bg-muted/20`}
+                          >
+                            <td className="py-3 pl-10 pr-4 align-top text-sm whitespace-nowrap text-muted-foreground">
+                              <span className="mr-1.5 text-muted-foreground/60" aria-hidden>↳</span>
+                              {caseDate(s)}
+                            </td>
+                            {answerCells(s, true)}
+                            {renderReviewCell(s, earlier.length)}
+                          </tr>
+                        )
+                      })}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )
     }
@@ -963,6 +1085,9 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                   showSource={hasImported}
                   shown={filteredCases.length}
                   total={totalSubmissions}
+                  people={peopleCount}
+                  groupByPerson={groupPeople}
+                  onGroupByPersonChange={setGroupPeople}
                   onExport={exportCases}
                 />
                 <TabsList className="mb-4 h-auto flex-wrap justify-start">
@@ -1043,6 +1168,15 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             sections={surveyConfig?.sections || []}
             config={caseConfig}
             onUpdated={applyCaseUpdate}
+            personRequests={
+              openCase
+                ? groupByPerson(
+                    submissions.filter(s => personOf.get(s.id) === personOf.get(openCase.id)),
+                    personOf
+                  ).flatMap(g => [g.latest, ...g.earlier])
+                : []
+            }
+            onSelectRequest={setOpenCaseId}
           />
         )}
       </div>

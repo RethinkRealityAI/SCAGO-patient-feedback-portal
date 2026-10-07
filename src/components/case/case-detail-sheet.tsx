@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader, MessageSquarePlus, UserRound } from 'lucide-react'
+import { ChevronRight, Loader, MessageSquarePlus, UserRound } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ const timestampFmt = new Intl.DateTimeFormat('en-CA', {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
+const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium' })
 
 /** Answers grouped by form section, in form order, skipping unanswered questions. */
 function answeredSections(sections: SectionDef[], submission: AnyRecord) {
@@ -69,6 +70,8 @@ export function CaseDetailSheet({
   sections,
   config,
   onUpdated,
+  personRequests = [],
+  onSelectRequest,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -77,6 +80,10 @@ export function CaseDetailSheet({
   sections: SectionDef[]
   config: CaseConfig
   onUpdated: (submissionId: string, patch: AnyRecord) => void
+  /** Every request from the same person (this one included), newest first. */
+  personRequests?: AnyRecord[]
+  /** Switch the panel to another of their requests. */
+  onSelectRequest?: (submissionId: string) => void
 }) {
   const { toast } = useToast()
   const [assignedTo, setAssignedTo] = useState('')
@@ -137,7 +144,45 @@ export function CaseDetailSheet({
           <SheetDescription>Submitted {timestampFmt.format(submittedAt)} ET</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* key: start at the top when switching to another of their requests */}
+        <div key={submission.id} className="flex-1 overflow-y-auto">
+          {personRequests.length > 1 && (
+            <nav aria-label="Requests from this person" className="border-b px-6 py-4">
+              <h3 className="mb-2 text-sm font-semibold">
+                {personRequests.length} requests from this person
+              </h3>
+              <ol className="divide-y rounded-lg border bg-background">
+                {personRequests.map((r, i) => {
+                  const current = r.id === submission.id
+                  const rStatus = caseStatusOf(r, config)
+                  const sought = Array.isArray(r.counsellingType) ? r.counsellingType.join(', ') : ''
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        disabled={current}
+                        aria-current={current ? 'true' : undefined}
+                        onClick={() => onSelectRequest?.(r.id)}
+                        className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${current ? 'bg-primary/5' : 'hover:bg-muted/50'}`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-x-2">
+                            <span className="font-medium">{dateFmt.format(new Date(r.submittedAt))}</span>
+                            {i === 0 && <span className="text-xs text-muted-foreground">Latest</span>}
+                            {current && <span className="text-xs font-medium text-primary">Viewing</span>}
+                          </span>
+                          {sought && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{sought}</span>}
+                        </span>
+                        <CaseStatusPill status={rStatus} config={config} />
+                        {!current && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
+          )}
+
           {/* Case controls */}
           <div className="grid gap-4 border-b bg-muted/30 px-6 py-5 sm:grid-cols-2">
             <div className="space-y-1.5">

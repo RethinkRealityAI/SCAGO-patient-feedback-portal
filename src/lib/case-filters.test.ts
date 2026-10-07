@@ -6,7 +6,9 @@ import {
   applyCaseFilters,
   assigneesOf,
   filterOptionsFor,
+  groupByPerson,
   matchesSearch,
+  personKeys,
   repeatRequestCounts,
   toCsv,
   type CaseFilterState,
@@ -116,6 +118,41 @@ describe('repeatRequestCounts and assigneesOf', () => {
   });
   it('merges assignee names that differ only by case', () => {
     expect(assigneesOf(subs, ['Bola'])).toEqual(['Amina', 'Bola']);
+  });
+});
+
+describe('personKeys and groupByPerson', () => {
+  const people = [
+    { id: '1', email: 'a@x.com', primaryPhone: '4165550001', submittedAt: daysAgo(30) },
+    { id: '2', email: 'new@x.com', primaryPhone: '+1 416 555 0001', submittedAt: daysAgo(1) }, // new email, same phone
+    { id: '3', email: 'A@X.com', primaryPhone: '', submittedAt: daysAgo(90) }, // same email as 1
+    { id: '4', email: 'b@x.com', primaryPhone: '6475550002', submittedAt: daysAgo(5) },
+    { id: '5', email: '', primaryPhone: '', submittedAt: daysAgo(2) }, // no contact details: on their own
+  ];
+  const person = personKeys(people);
+
+  it('links requests transitively through email or phone', () => {
+    expect(person.get('1')).toBe(person.get('2'));
+    expect(person.get('1')).toBe(person.get('3'));
+    expect(person.get('4')).not.toBe(person.get('1'));
+    expect(person.get('5')).not.toBe(person.get('1'));
+  });
+
+  it('leads each group with the newest request and keeps list order', () => {
+    const newestFirst = [...people].sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    const groups = groupByPerson(newestFirst, person);
+    expect(groups.map(g => g.latest.id)).toEqual(['2', '5', '4']);
+    expect(groups[0].earlier.map(s => s.id)).toEqual(['1', '3']);
+  });
+
+  it('only groups what is in the list', () => {
+    const groups = groupByPerson([people[0], people[3]], person);
+    expect(groups.map(g => [g.latest.id, g.earlier.length])).toEqual([['1', 0], ['4', 0]]);
+  });
+
+  it('counts repeat requests per person', () => {
+    expect(repeatRequestCounts(people).get('2')).toBe(2);
+    expect(repeatRequestCounts(people).has('4')).toBe(false);
   });
 });
 

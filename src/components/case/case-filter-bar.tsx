@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Download, ListFilter, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import {
@@ -36,6 +37,10 @@ interface CaseFilterBarProps {
   showSource: boolean
   shown: number
   total: number
+  /** Distinct people among all requests. */
+  people: number
+  groupByPerson: boolean
+  onGroupByPersonChange: (grouped: boolean) => void
   onExport: () => void
 }
 
@@ -88,6 +93,9 @@ export function CaseFilterBar({
   showSource,
   shown,
   total,
+  people,
+  groupByPerson,
+  onGroupByPersonChange,
   onExport,
 }: CaseFilterBarProps) {
   const activeCount = activeFilterCount(filters)
@@ -253,11 +261,18 @@ export function CaseFilterBar({
         </div>
       )}
 
-      {(isFiltering(filters) || chips.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
-          <span className="text-muted-foreground">
-            Showing <span className="font-semibold text-foreground tabular-nums">{shown}</span> of {total}
-          </span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div className="flex flex-1 flex-wrap items-center gap-2" aria-live="polite">
+          {isFiltering(filters) || chips.length > 0 ? (
+            <span className="text-muted-foreground">
+              Showing <span className="font-semibold text-foreground tabular-nums">{shown}</span> of {total} requests
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              <span className="font-semibold text-foreground tabular-nums">{total}</span> requests from{' '}
+              <span className="font-semibold text-foreground tabular-nums">{people}</span> {people === 1 ? 'person' : 'people'}
+            </span>
+          )}
           {chips.map(c => (
             <button
               key={c.key}
@@ -270,11 +285,17 @@ export function CaseFilterBar({
               <X className="h-3 w-3" />
             </button>
           ))}
-          <button type="button" onClick={clearAll} className="text-xs font-medium text-primary underline-offset-2 hover:underline">
-            Clear all
-          </button>
+          {isFiltering(filters) && (
+            <button type="button" onClick={clearAll} className="text-xs font-medium text-primary underline-offset-2 hover:underline">
+              Clear all
+            </button>
+          )}
         </div>
-      )}
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+          <Switch checked={groupByPerson} onCheckedChange={onGroupByPersonChange} aria-label="Group requests by person" />
+          Group by person
+        </label>
+      </div>
     </div>
   )
 }
