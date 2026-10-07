@@ -102,3 +102,17 @@ export function slaState(
   if (left <= DUE_SOON_THRESHOLD) return { kind: 'due-soon', businessDaysLeft: left, dueDate };
   return { kind: 'due', businessDaysLeft: left, dueDate };
 }
+
+/**
+ * The obvious next step for a case, shown as a one-click button:
+ * awaiting -> the first working status (e.g. Contacted); working -> closed.
+ * Closed cases get no shortcut; reopening is a deliberate menu choice.
+ */
+export function nextCaseStep(status: string, config: CaseConfig): string | null {
+  const closed = config.closedStatuses || [];
+  if (closed.includes(status)) return null;
+  if (status === config.initialStatus) {
+    return config.statuses.find(s => s.value !== config.initialStatus && !closed.includes(s.value))?.value ?? null;
+  }
+  return closed[0] ?? null;
+}

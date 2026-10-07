@@ -47,6 +47,7 @@ import {
 import { CaseStatusPill, SlaBadge } from '@/components/case/case-badges'
 import { CaseDetailSheet } from '@/components/case/case-detail-sheet'
 import { CaseFilterBar, type FieldFilter } from '@/components/case/case-filter-bar'
+import { CaseQuickActions } from '@/components/case/case-quick-actions'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -547,6 +548,20 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Status</th>
   ) : null
 
+  // Quick status changes from the list, without opening the case panel.
+  const actionsColumnHeader = caseConfig ? (
+    // Pinned to the right edge so actions stay in reach when the table scrolls sideways.
+    <th className="sticky right-0 z-10 bg-muted px-4 py-3 text-right text-sm font-medium whitespace-nowrap shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.25)]">
+      Actions
+    </th>
+  ) : null
+  const renderActionsCell = (submission: FeedbackSubmission) =>
+    caseConfig ? (
+      <td className="sticky right-0 z-10 bg-card px-3 py-3 text-right align-middle shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.25)]">
+        <CaseQuickActions submission={submission as any} config={caseConfig} surveyId={resolvedSurveyId} onUpdated={applyCaseUpdate} />
+      </td>
+    ) : null
+
   // With case tracking, a row opens the case panel (full answers + controls).
   const caseRowProps = (submission: FeedbackSubmission) =>
     caseConfig
@@ -602,6 +617,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                   </th>
                 ))}
                 {reviewColumnHeader}
+                {actionsColumnHeader}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -641,6 +657,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                       </td>
                       {answerCells(latest)}
                       {renderReviewCell(latest, earlier.length)}
+                      {renderActionsCell(latest)}
                     </tr>
                     {expanded &&
                       earlier.map(s => {
@@ -658,6 +675,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                             </td>
                             {answerCells(s, true)}
                             {renderReviewCell(s, earlier.length)}
+                            {renderActionsCell(s)}
                           </tr>
                         )
                       })}
@@ -683,6 +701,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                   </th>
                 ))}
                 {reviewColumnHeader}
+                {actionsColumnHeader}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -699,6 +718,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                     </td>
                   ))}
                   {renderReviewCell(submission)}
+                  {renderActionsCell(submission)}
                 </tr>
               ))}
             </tbody>
@@ -721,6 +741,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 <th className="min-w-[20rem] px-4 py-3 text-left text-sm font-medium">Experience</th>
                 <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Sentiment</th>
                 {reviewColumnHeader}
+                {actionsColumnHeader}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -766,6 +787,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                       </span>
                     </td>
                     {renderReviewCell(submission)}
+                    {renderActionsCell(submission)}
                   </tr>
                 )
               })}
@@ -785,6 +807,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
               <th className="px-4 py-3 text-left text-sm font-medium">Submitter</th>
               {reviewColumnHeader}
+              {actionsColumnHeader}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -806,6 +829,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                     {displayName || <span className="italic text-muted-foreground">Anonymous</span>}
                   </td>
                   {renderReviewCell(submission)}
+                  {renderActionsCell(submission)}
                 </tr>
               )
             })}
