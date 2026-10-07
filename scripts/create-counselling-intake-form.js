@@ -199,9 +199,21 @@ function buildSurvey(recipients) {
       { fieldId: 'firstName', label: 'First name' },
       { fieldId: 'lastName', label: 'Last name' },
       { fieldId: 'primaryPhone', label: 'Phone' },
+      { fieldId: 'city', label: 'City' },
       { fieldId: 'preferredContactMethod', label: 'Prefers' },
       { fieldId: 'counsellingType', label: 'Counselling sought' },
     ],
+    // Filters on the case dashboard (alongside status, assignee and date).
+    dashboardFilters: [
+      { fieldId: 'counsellingType', label: 'Counselling sought' },
+      { fieldId: 'seekingServicesFor', label: 'Seeking services for' },
+      { fieldId: 'aboutYou', label: 'Applicant is' },
+      { fieldId: 'ageGroup', label: 'Age group' },
+      { fieldId: 'city', label: 'City' },
+      { fieldId: 'preferredContactMethod', label: 'Preferred contact' },
+    ],
+    // Staff work this form from the case list; the AI summary isn't needed.
+    aiAnalysisEnabled: false,
     sections: [
       {
         id: 'intro-section',

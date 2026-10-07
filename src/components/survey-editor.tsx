@@ -158,6 +158,9 @@ const surveySchema = z.object({
   // silently switching off the applicant confirmation and case tracking.
   respondentConfirmation: z.any().optional(),
   caseConfig: z.any().optional(),
+  // Case dashboard filters and AI-summary switch; set by form scripts, kept on save.
+  dashboardFilters: z.array(z.object({ fieldId: z.string(), label: z.string() })).optional(),
+  aiAnalysisEnabled: z.boolean().optional(),
   resumeSettings: z.object({
     showResumeModal: z.boolean().default(true).optional(),
     resumeTitle: z.string().default('Resume your saved progress?').optional(),
