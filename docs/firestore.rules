@@ -51,7 +51,10 @@ service cloud.firestore {
 
       // Organized feedback submissions structure: surveys/{surveyId}/submissions/{submissionId}
       match /submissions/{submissionId} {
-        allow create: if true;  // Anyone can submit feedback
+        // Public submissions go through the submitFeedback server action (Admin
+        // SDK), which applies rate limiting and spam checks. Allowing direct
+        // client writes here would let anyone bypass both.
+        allow create: if false;
         allow read, update, delete: if canAccessForm(surveyId);
       }
     }
