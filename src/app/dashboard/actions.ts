@@ -58,6 +58,41 @@ function describeSubmissionForAI(submission: FeedbackSubmission): string {
   return `- ${parts.join(' | ')}`;
 }
 
+// Bookkeeping fields, and anything that identifies the person, never go to the model.
+const GENERAL_AI_SKIP_KEYS = new Set([
+  'id', 'surveyId', 'submittedAt', 'sessionId', 'submittedLanguage', 'reviewed', 'reviewedAt', 'reviewedBy',
+  'caseStatus', 'caseStatusUpdatedAt', 'assignedTo', 'caseNotes', 'rating', 'hospitalInteraction',
+]);
+const GENERAL_AI_PII_PATTERN = /name|email|phone|postal|address|birth|dob|signature|consent|terms|verify|agree/i;
+
+/** One line of model context for a submission to a form that isn't hospital feedback. */
+function describeGeneralSubmissionForAI(submission: FeedbackSubmission): string {
+  const parts: string[] = [];
+  for (const [key, raw] of Object.entries(submission as Record<string, unknown>)) {
+    if (GENERAL_AI_SKIP_KEYS.has(key) || GENERAL_AI_PII_PATTERN.test(key)) continue;
+    if (raw === null || raw === undefined || raw === '' || typeof raw === 'boolean') continue;
+    let value: string;
+    if (Array.isArray(raw)) value = raw.filter(v => typeof v === 'string' || typeof v === 'number').join(', ');
+    else if (typeof raw === 'object') value = extractSelectionValue(raw);
+    else value = String(raw);
+    value = value.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (value) parts.push(`${key}: ${value}`);
+  }
+  return `- ${parts.join(' | ') || 'no answers'}`;
+}
+
+/** The form's own title, so a general analysis is headed with what staff call it. */
+async function surveyTitleOf(surveyId: string): Promise<string | null> {
+  try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const snap = await getAdminFirestore().collection('surveys').doc(surveyId).get();
+    const title = snap.data()?.title;
+    return typeof title === 'string' && title.trim() ? title.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Read a `{ selection, other }` style answer, or a plain string. */
 function extractSelectionValue(value: any): string {
   if (typeof value === 'string') return value.trim();
@@ -281,7 +316,10 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     const allSubmissions = await fetchSubmissionsForSurveyAdmin(surveyId);
 
     // Get survey-specific context
-    const surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
+    let surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
+    if (surveyContext.type === 'general') {
+      surveyContext = { ...surveyContext, title: await surveyTitleOf(surveyId) ?? surveyContext.title };
+    }
 
     // Filter by surveyId (already filtered by fetchSubmissionsForSurveyAdmin, but ensure consistency)
     const feedbackList = allSubmissions.filter(f => f.surveyId && f.surveyId === surveyId);
@@ -294,7 +332,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     // request from the (small) daily quota on a page refresh. The key includes
     // the submission count and newest timestamp, so new data always regenerates.
     const newestAt = Math.max(...feedbackList.map(f => new Date(f.submittedAt).getTime() || 0));
-    const cacheKey = `${surveyId}:${feedbackList.length}:${newestAt}`;
+    const cacheKey = `${surveyId}:${surveyContext.type}:${feedbackList.length}:${newestAt}`;
     const cached = readAnalysisCache(cacheKey);
     if (cached) return cached;
 
@@ -343,6 +381,12 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
         uniqueSurveys: surveyBreakdown.size,
         avgSubmissionsPerSurvey: Math.round(feedbackList.length / surveyBreakdown.size)
       };
+    } else if (surveyContext.type === 'general') {
+      feedbackText = feedbackList
+        .slice(0, 75)
+        .map(describeGeneralSubmissionForAI)
+        .join('\n');
+      metrics = { totalSubmissions: feedbackList.length };
     } else {
       // Feedback-specific data summary. Only rated submissions feed the
       // average and the NPS buckets; a skipped rating is not a zero.
@@ -385,7 +429,7 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       : 4; // Default to 4 for non-feedback surveys to avoid schema errors
 
     const aiInput = {
-      location: surveyContext.type === 'consent' ? 'SCAGO Community' : 'Various Hospitals',
+      location: surveyContext.type === 'feedback' ? 'Various Hospitals' : 'SCAGO Community',
       rating: normalizedRating,
       feedbackText: `${contextPrompt}\n\nData (Submissions 1-${Math.min(feedbackList.length, 75)}):\n${feedbackText}`
     };

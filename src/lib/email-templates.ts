@@ -1,6 +1,18 @@
 'use server';
 
 import nodemailer from 'nodemailer';
+import { formTextFr } from '@/lib/form-text-fr';
+import {
+  buildPdfFilename,
+  confirmationLabels,
+  formatSubmissionDate,
+  generateCaseDigestTemplate,
+  generateConfirmationEmailTemplate,
+  generateSubmissionEmailTemplate,
+  getPortalUrl,
+  type ConfirmationEmailContent,
+  type DigestCase,
+} from '@/lib/submission-email-template';
 
 /**
  * Get configured email transporter
@@ -476,74 +488,8 @@ export interface SubmissionEmailConfig {
   bodyTemplate?: string; // Optional custom body text
   attachPdf?: boolean; // Whether to attach the PDF (default: true)
   senderName?: string; // Custom sender name
-}
-
-/**
- * Generate HTML email template for form submission notification
- */
-function generateSubmissionEmailTemplate(data: {
-  surveyTitle: string;
-  submissionDate: string;
-  submitterName?: string;
-  viewSubmissionLink?: string;
-  bodyText?: string;
-  attachmentNote?: string;
-}): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>New Submission - ${data.surveyTitle}</title>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #C8262A; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background-color: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; }
-        .info-box { background-color: #fff; padding: 20px; border-left: 4px solid #C8262A; margin: 20px 0; border-radius: 0 6px 6px 0; }
-        .button { display: inline-block; background-color: #C8262A; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 5px; }
-        .button-secondary { display: inline-block; background-color: #666; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 5px; }
-        .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
-        .attachment-note { background-color: #e8f4fd; padding: 15px; border-radius: 6px; margin-top: 20px; }
-        .submitter-highlight { font-size: 18px; color: #C8262A; font-weight: bold; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>📋 New Form Submission</h1>
-        <p>${data.surveyTitle}</p>
-      </div>
-      
-      <div class="content">
-        <div class="info-box">
-          ${data.submitterName ? `<p style="margin: 0 0 10px 0;"><strong>Submitted by:</strong> <span class="submitter-highlight">${data.submitterName}</span></p>` : ''}
-          <p style="margin: 0;"><strong>Survey:</strong> ${data.surveyTitle}</p>
-          <p style="margin: 10px 0 0 0;"><strong>Submitted:</strong> ${data.submissionDate}</p>
-        </div>
-        
-        ${data.bodyText ? `<p>${data.bodyText}</p>` : '<p>A new form submission has been received.</p>'}
-        
-        ${data.attachmentNote ? `
-          <div class="attachment-note">
-            <p style="margin: 0;"><strong>📎 Attachment:</strong> ${data.attachmentNote}</p>
-          </div>
-        ` : ''}
-        
-        <div style="text-align: center; margin-top: 25px;">
-          ${data.viewSubmissionLink ? `<a href="${data.viewSubmissionLink}" class="button">View Submission Details</a>` : ''}
-          <a href="${appUrl}/dashboard" class="button-secondary">Go to Dashboard</a>
-        </div>
-      </div>
-      
-      <div class="footer">
-        <p>This is an automated notification from your SCAGO Portal.</p>
-        <p>Manage notifications in the Survey Settings.</p>
-      </div>
-    </body>
-    </html>
-  `;
+  /** Field ids whose answers are listed in the email body (opt-in: puts personal info in the message). */
+  summaryFieldIds?: string[];
 }
 
 /**
@@ -565,6 +511,8 @@ export async function sendSubmissionEmail(data: {
   submissionId?: string;
   submissionData: Record<string, any>;
   pdfBuffer?: Uint8Array | null;
+  /** Pre-formatted key answers for the email body; see SubmissionEmailConfig.summaryFieldIds. */
+  summary?: Array<{ label: string; value: string }>;
 }): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
   // Validate configuration
   if (!data.config.enabled) {
@@ -584,18 +532,16 @@ export async function sendSubmissionEmail(data: {
 
   try {
     const transporter = getTransporter();
-    const submissionDate = new Date().toLocaleString();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+    const submissionDate = formatSubmissionDate(new Date());
 
     // Extract submitter name for display
     const { extractName } = await import('@/lib/submission-utils');
     const submitterName = extractName(data.submissionData);
     console.log(`[sendSubmissionEmail] Submitter name: ${submitterName || 'Anonymous'}`);
 
-    // Create view submission link (as a fallback for PDF)
-    const viewSubmissionLink = data.submissionId
-      ? `${appUrl}/dashboard?submission=${data.submissionId}`
-      : undefined;
+    // The form's own dashboard. A `?submission=` deep link was used before,
+    // but nothing reads that parameter, so it just opened the generic page.
+    const dashboardLink = `${getPortalUrl()}/dashboard/${encodeURIComponent(data.surveyId)}`;
 
     // Prepare subject - include submitter name if available
     const defaultSubject = submitterName
@@ -611,34 +557,40 @@ export async function sendSubmissionEmail(data: {
       ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate })
       : undefined;
 
-    // Generate HTML with submitter name and view link
+    // Generate HTML with submitter name and dashboard link. The attachment is
+    // named once here so the email shows the file that is actually attached
+    // (it used to always say "Submission_Details.pdf").
     const hasPdfAttachment = data.pdfBuffer && data.config.attachPdf !== false;
-    const attachmentNote = hasPdfAttachment ? 'Submission_Details.pdf' : undefined;
+    const pdfFilename = buildPdfFilename(data.surveyTitle, submitterName || undefined);
 
     const htmlContent = generateSubmissionEmailTemplate({
       surveyTitle: data.surveyTitle,
       submissionDate,
       submitterName: submitterName || undefined,
-      viewSubmissionLink,
+      dashboardLink,
       bodyText,
-      attachmentNote,
+      attachmentName: hasPdfAttachment ? pdfFilename : undefined,
+      summary: data.summary,
     });
 
     // Plain text version
-    const textContent = `
-New Form Submission
-${submitterName ? `\nSubmitted by: ${submitterName}` : ''}
-Survey: ${data.surveyTitle}
-Submitted: ${submissionDate}
-
-${bodyText || 'A new form submission has been received.'}
-
-${viewSubmissionLink ? `View submission details: ${viewSubmissionLink}` : ''}
-${attachmentNote ? `Attachment: ${attachmentNote}` : ''}
-
----
-This is an automated notification from your SCAGO Portal.
-    `;
+    const textContent = [
+      'New submission received',
+      data.surveyTitle,
+      '',
+      ...(submitterName ? [`Submitted by: ${submitterName}`] : []),
+      `Form: ${data.surveyTitle}`,
+      `Received: ${submissionDate}`,
+      '',
+      bodyText || 'A new response has been submitted. The complete set of answers is attached as a PDF.',
+      ...(data.summary && data.summary.length > 0 ? ['', 'Key details:', ...data.summary.map(r => `  ${r.label}: ${r.value}`)] : []),
+      ...(hasPdfAttachment ? ['', `Attachment: ${pdfFilename}`] : []),
+      '',
+      `View submissions: ${dashboardLink}`,
+      '',
+      '---',
+      'This email may contain personal information submitted to the Sickle Cell Awareness Group of Ontario. Please handle it confidentially and do not forward it.',
+    ].join('\n');
 
     // Build email options
     const mailOptions: any = {
@@ -651,15 +603,11 @@ This is an automated notification from your SCAGO Portal.
 
     // Add PDF attachment if available and enabled
     if (hasPdfAttachment) {
-      const safeTitle = data.surveyTitle.replace(/[^a-z0-9]/gi, '_').substring(0, 25);
-      const safeName = submitterName ? submitterName.replace(/[^a-z0-9]/gi, '_').substring(0, 20) : new Date().toISOString().split('T')[0];
-      const filename = `${safeTitle}_${safeName}.pdf`;
-
-      console.log(`[sendSubmissionEmail] Attaching PDF: ${filename} (${data.pdfBuffer!.length} bytes)`);
+      console.log(`[sendSubmissionEmail] Attaching PDF: ${pdfFilename} (${data.pdfBuffer!.length} bytes)`);
 
       mailOptions.attachments = [
         {
-          filename,
+          filename: pdfFilename,
           content: Buffer.from(data.pdfBuffer!),
           contentType: 'application/pdf',
         },
@@ -679,6 +627,155 @@ This is an automated notification from your SCAGO Portal.
       success: false,
       error: error instanceof Error ? error.message : 'Failed to send notification email',
     };
+  }
+}
+
+/**
+ * Settings for the acknowledgement emailed to whoever submitted a form.
+ * Stored on the survey document as `respondentConfirmation`.
+ */
+export interface RespondentConfirmationConfig {
+  enabled: boolean;
+  /** Id of the form field holding the respondent's email address. */
+  emailFieldId: string;
+  /** Id of the field holding their first name, for the greeting. */
+  firstNameFieldId?: string;
+  subject?: string;
+  heading?: string;
+  message?: string;
+  nextSteps?: string[];
+  urgentNotice?: string;
+  /** Shown as the contact address and used as Reply-To. */
+  replyTo?: string;
+  senderName?: string;
+  /** Wording for respondents who completed the form in French. */
+  translations?: {
+    fr?: Partial<Pick<RespondentConfirmationConfig, 'subject' | 'heading' | 'message' | 'nextSteps' | 'urgentNotice' | 'senderName'>>;
+  };
+}
+
+/**
+ * Email the respondent an acknowledgement of their submission.
+ * Never throws: a failed acknowledgement must not fail the submission itself.
+ */
+export async function sendRespondentConfirmationEmail(data: {
+  config: RespondentConfirmationConfig;
+  surveyTitle: string;
+  submissionData: Record<string, any>;
+  /** Language the respondent used; French uses `config.translations.fr` where provided. */
+  language?: 'en' | 'fr';
+}): Promise<{ success: boolean; error?: string; skipped?: boolean; recipient?: string }> {
+  if (!data.config?.enabled) return { success: false, skipped: true, error: 'Respondent confirmation is not enabled.' };
+  const language = data.language === 'fr' ? 'fr' : 'en';
+  // Overlay the French wording, field by field, so an untranslated field falls back to English.
+  const config: RespondentConfirmationConfig =
+    language === 'fr' ? { ...data.config, ...(data.config.translations?.fr || {}) } : data.config;
+  const labels = confirmationLabels(language);
+  const formTitle = (language === 'fr' && formTextFr(data.surveyTitle)) || data.surveyTitle;
+
+  const raw = data.submissionData[config.emailFieldId];
+  const to = typeof raw === 'string' ? raw.trim() : '';
+  // Basic shape check only; the form already validated the address.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return { success: false, skipped: true, error: 'No valid respondent email address on the submission.' };
+  }
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    return { success: false, error: 'Email service is not configured (SMTP_USER / SMTP_PASSWORD).', recipient: to };
+  }
+
+  const firstNameRaw = config.firstNameFieldId ? data.submissionData[config.firstNameFieldId] : undefined;
+  const firstName =
+    typeof firstNameRaw === 'string' && firstNameRaw.trim() ? firstNameRaw.trim().slice(0, 60) : undefined;
+
+  const content: ConfirmationEmailContent = {
+    firstName,
+    formTitle,
+    heading: config.heading || 'We received your submission',
+    message: config.message || 'Thank you. Your submission has been received.',
+    nextSteps: config.nextSteps,
+    urgentNotice: config.urgentNotice,
+    contactEmail: config.replyTo,
+    language,
+  };
+
+  const text = [
+    labels.greeting(firstName),
+    '',
+    content.message,
+    ...(content.nextSteps && content.nextSteps.length > 0
+      ? ['', `${labels.nextSteps}:`, ...content.nextSteps.map((step, i) => `${i + 1}. ${step}`)]
+      : []),
+    ...(content.urgentNotice ? ['', content.urgentNotice.replace(/\n/g, ' ')] : []),
+    ...(config.replyTo ? ['', `${labels.questions} ${config.replyTo}.`] : []),
+    '',
+    '---',
+    labels.org,
+  ].join('\n');
+
+  try {
+    const info = await getTransporter().sendMail({
+      from: `"${config.senderName || 'SCAGO'}" <${process.env.SMTP_USER}>`,
+      to,
+      ...(config.replyTo ? { replyTo: config.replyTo } : {}),
+      subject: config.subject || `We received your submission – ${formTitle}`,
+      text,
+      html: generateConfirmationEmailTemplate(content),
+    });
+    console.log(`[sendRespondentConfirmationEmail] Sent for "${data.surveyTitle}". MessageId: ${info.messageId}`);
+    return { success: true, recipient: to };
+  } catch (error) {
+    console.error('[sendRespondentConfirmationEmail] Failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send confirmation',
+      recipient: to,
+    };
+  }
+}
+
+/**
+ * Send a weekly case digest (see generateCaseDigestTemplate).
+ */
+export async function sendCaseDigestEmail(data: {
+  recipients: string[];
+  formTitle: string;
+  weekOf: string;
+  overdue: DigestCase[];
+  dueSoon: DigestCase[];
+  awaitingTotal: number;
+  heldForReview: number;
+  dashboardLink: string;
+}): Promise<{ success: boolean; error?: string }> {
+  if (data.recipients.length === 0) return { success: false, error: 'No digest recipients configured.' };
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+    return { success: false, error: 'Email service is not configured (SMTP_USER / SMTP_PASSWORD).' };
+  }
+
+  const line = (c: DigestCase) => `- ${c.name} (received ${c.receivedLabel}; ${c.deadlineLabel}; ${c.assignedTo || 'unassigned'})`;
+  const text = [
+    `Cases needing attention — ${data.formTitle} (week of ${data.weekOf})`,
+    '',
+    `Overdue: ${data.overdue.length}   Due within 3 days: ${data.dueSoon.length}   Awaiting contact: ${data.awaitingTotal}`,
+    ...(data.overdue.length ? ['', 'Overdue:', ...data.overdue.map(line)] : []),
+    ...(data.dueSoon.length ? ['', 'Due soon:', ...data.dueSoon.map(line)] : []),
+    ...(data.heldForReview ? ['', `${data.heldForReview} submission(s) held this week as possible spam.`] : []),
+    '',
+    `Open the dashboard: ${data.dashboardLink}`,
+  ].join('\n');
+
+  try {
+    const info = await getTransporter().sendMail({
+      from: `"SCAGO Portal" <${process.env.SMTP_USER}>`,
+      to: data.recipients.join(', '),
+      subject: `${data.overdue.length > 0 ? `${data.overdue.length} overdue — ` : ''}Weekly case summary: ${data.formTitle}`,
+      text,
+      html: generateCaseDigestTemplate(data),
+    });
+    console.log(`[sendCaseDigestEmail] Sent for "${data.formTitle}". MessageId: ${info.messageId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('[sendCaseDigestEmail] Failed:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to send digest' };
   }
 }
 

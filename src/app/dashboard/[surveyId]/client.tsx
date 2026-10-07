@@ -29,6 +29,9 @@ import {
   ratingTone,
 } from '@/components/rating-indicator'
 import { hospitalLabel } from '@/lib/option-labels'
+import { caseStatusOf, slaState, type CaseConfig } from '@/lib/case-management'
+import { CaseStatusPill, SlaBadge } from '@/components/case/case-badges'
+import { CaseDetailSheet } from '@/components/case/case-detail-sheet'
 import Link from 'next/link'
 
 // Helper function to safely extract a string value from a field
@@ -36,6 +39,11 @@ import Link from 'next/link'
 function extractStringValue(value: any): string | null {
   if (typeof value === 'string' && value.trim()) {
     return value.trim()
+  }
+  // Multi-select (checkbox) answers are arrays; list them rather than show "—".
+  if (Array.isArray(value)) {
+    const parts = value.map(extractStringValue).filter((v): v is string => !!v)
+    return parts.length > 0 ? parts.join(', ') : null
   }
   if (value && typeof value === 'object') {
     // `{ selection: 'other', other: 'St Josephs' }` — the free-text entry is the
@@ -92,7 +100,12 @@ interface SurveyConfig {
   dashboardWidgets?: DashboardWidget[]
   title?: string
   reviewConfig?: ReviewConfig
+  /** Status / assignee / notes / response-deadline tracking; replaces the review toggle. */
+  caseConfig?: CaseConfig
+  sections?: Array<{ id?: string; title?: string; fields?: any[] }>
 }
+
+type CaseTab = 'all' | 'awaiting' | 'overdue' | 'in-progress' | 'closed'
 
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
   const { isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
@@ -112,6 +125,8 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const [reviewOverrides, setReviewOverrides] = useState<Record<string, boolean>>({})
   const [pendingReviews, setPendingReviews] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'reviewed'>('all')
+  const [caseTab, setCaseTab] = useState<CaseTab>('all')
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -306,9 +321,53 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const pendingCount = reviewEnabled ? totalSubmissions - reviewedCount : 0
   const reviewProgress = totalSubmissions > 0 ? Math.round((reviewedCount / totalSubmissions) * 100) : 0
 
+  // Case tracking (status, assignee, notes, response deadline). When enabled it
+  // supersedes the simpler review toggle on this page.
+  const caseConfig = surveyConfig?.caseConfig?.enabled ? surveyConfig.caseConfig : null
+  const caseInfo = (submission: FeedbackSubmission) => {
+    const status = caseStatusOf(submission as any, caseConfig!)
+    return { status, sla: slaState(new Date(submission.submittedAt), status, caseConfig!) }
+  }
+  const caseBuckets = caseConfig
+    ? submissions.reduce(
+        (buckets, submission) => {
+          const { status, sla } = caseInfo(submission)
+          if (status === caseConfig.initialStatus) buckets.awaiting.push(submission)
+          else if ((caseConfig.closedStatuses || []).includes(status)) buckets.closed.push(submission)
+          else buckets.inProgress.push(submission)
+          if (sla.kind === 'overdue') buckets.overdue.push(submission)
+          return buckets
+        },
+        {
+          awaiting: [] as FeedbackSubmission[],
+          overdue: [] as FeedbackSubmission[],
+          inProgress: [] as FeedbackSubmission[],
+          closed: [] as FeedbackSubmission[],
+        }
+      )
+    : null
+  const openCase = openCaseId ? submissions.find(s => s.id === openCaseId) ?? null : null
+
+  const applyCaseUpdate = (submissionId: string, patch: Record<string, any>) =>
+    setSubmissions(prev => prev.map(s => (s.id === submissionId ? ({ ...s, ...patch } as FeedbackSubmission) : s)))
+
   // ── Render helpers ──────────────────────────────────────────────────────────
 
   const renderReviewCell = (submission: FeedbackSubmission) => {
+    if (caseConfig) {
+      const { status, sla } = caseInfo(submission)
+      return (
+        <td className="px-4 py-3">
+          <div className="flex min-w-[11rem] flex-col items-start gap-1.5">
+            <CaseStatusPill status={status} config={caseConfig} />
+            <SlaBadge state={sla} />
+            {(submission as any).assignedTo && (
+              <span className="text-xs text-muted-foreground">{(submission as any).assignedTo}</span>
+            )}
+          </div>
+        </td>
+      )
+    }
     if (!reviewEnabled) return null
     const reviewed = isReviewed(submission)
     const isPending = pendingReviews.has(submission.id)
@@ -345,9 +404,27 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     )
   }
 
-  const reviewColumnHeader = reviewEnabled ? (
+  const reviewColumnHeader = reviewEnabled || caseConfig ? (
     <th className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap">Status</th>
   ) : null
+
+  // With case tracking, a row opens the case panel (full answers + controls).
+  const caseRowProps = (submission: FeedbackSubmission) =>
+    caseConfig
+      ? {
+          onClick: () => setOpenCaseId(submission.id),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setOpenCaseId(submission.id)
+            }
+          },
+          tabIndex: 0,
+          role: 'button' as const,
+          'aria-label': 'Open case',
+          className: 'cursor-pointer hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none transition-colors',
+        }
+      : { className: 'hover:bg-muted/20 transition-colors' }
 
   const renderSubmissionsTable = (subs: FeedbackSubmission[]) => {
     if (subs.length === 0) {
@@ -375,7 +452,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             </thead>
             <tbody className="divide-y">
               {subs.map(submission => (
-                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                <tr key={submission.id} {...caseRowProps(submission)}>
                   <td className="px-4 py-3 text-sm whitespace-nowrap">
                     {new Date(submission.submittedAt).toLocaleDateString()}
                   </td>
@@ -418,7 +495,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 const metrics = submissionMetrics.get(submission.id)
                 const experience = metrics?.experience ?? null
                 return (
-                  <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                  <tr key={submission.id} {...caseRowProps(submission)}>
                     <td className="px-4 py-3 text-sm whitespace-nowrap">
                       {new Date(submission.submittedAt).toLocaleDateString()}
                     </td>
@@ -485,7 +562,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                     }`.trim()
                   : rawSub.name || rawSub.fullName || rawSub.full_name || null
               return (
-                <tr key={submission.id} className="hover:bg-muted/20 transition-colors">
+                <tr key={submission.id} {...caseRowProps(submission)}>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{idx + 1}</td>
                   <td className="px-4 py-3 text-sm whitespace-nowrap">
                     {new Date(submission.submittedAt).toLocaleDateString()}
@@ -592,7 +669,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
             </Card>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${caseBuckets ? 'sm:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2'}`}>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Total Submissions</CardTitle>
@@ -601,6 +678,36 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
                 <div className="text-2xl font-bold">{totalSubmissions}</div>
               </CardContent>
             </Card>
+            {caseBuckets && caseConfig && (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">
+                      {caseConfig.statuses.find(s => s.value === caseConfig.initialStatus)?.label || 'Awaiting'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{caseBuckets.awaiting.length}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {caseConfig.slaBusinessDays ? `Response due within ${caseConfig.slaBusinessDays} business days` : 'Not yet actioned'}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className={caseBuckets.overdue.length > 0 ? 'border-rose-300 dark:border-rose-800' : undefined}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Overdue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-bold ${caseBuckets.overdue.length > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}>
+                      {caseBuckets.overdue.length}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {caseBuckets.overdue.length > 0 ? 'Past the response deadline' : 'Nothing past the deadline'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
+            )}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Most Recent</CardTitle>
@@ -617,7 +724,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         )}
 
         {/* Review Progress Card — only shown when review workflow is enabled */}
-        {reviewEnabled && totalSubmissions > 0 && (
+        {reviewEnabled && !caseConfig && totalSubmissions > 0 && (
           <Card className="border-l-4 border-l-primary">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -701,6 +808,33 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
               <div className="text-center py-8 text-muted-foreground">
                 No submissions found for this survey.
               </div>
+            ) : caseBuckets && caseConfig ? (
+              <Tabs value={caseTab} onValueChange={v => setCaseTab(v as CaseTab)} className="w-full">
+                <TabsList className="mb-4 h-auto flex-wrap justify-start">
+                  {(
+                    [
+                      ['all', 'All', submissions.length, 'bg-muted'],
+                      ['awaiting', caseConfig.statuses.find(s => s.value === caseConfig.initialStatus)?.label || 'Awaiting', caseBuckets.awaiting.length, 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'],
+                      ['overdue', 'Overdue', caseBuckets.overdue.length, 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'],
+                      ['in-progress', 'In progress', caseBuckets.inProgress.length, 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'],
+                      ['closed', 'Closed', caseBuckets.closed.length, 'bg-muted'],
+                    ] as const
+                  ).map(([value, label, count, tone]) => (
+                    <TabsTrigger key={value} value={value} className="gap-1.5 text-xs sm:text-sm">
+                      {label}
+                      <span className={`ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-medium ${tone}`}>
+                        {count}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                <p className="mb-3 text-xs text-muted-foreground">Select a row to open the full request and update its status.</p>
+                <TabsContent value="all">{renderSubmissionsTable(submissions)}</TabsContent>
+                <TabsContent value="awaiting">{renderSubmissionsTable(caseBuckets.awaiting)}</TabsContent>
+                <TabsContent value="overdue">{renderSubmissionsTable(caseBuckets.overdue)}</TabsContent>
+                <TabsContent value="in-progress">{renderSubmissionsTable(caseBuckets.inProgress)}</TabsContent>
+                <TabsContent value="closed">{renderSubmissionsTable(caseBuckets.closed)}</TabsContent>
+              </Tabs>
             ) : reviewEnabled ? (
               <Tabs
                 value={activeTab}
@@ -745,6 +879,17 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
           </CardContent>
         </Card>
 
+        {caseConfig && (
+          <CaseDetailSheet
+            open={!!openCase}
+            onOpenChange={open => { if (!open) setOpenCaseId(null) }}
+            submission={openCase as any}
+            surveyId={resolvedSurveyId}
+            sections={surveyConfig?.sections || []}
+            config={caseConfig}
+            onUpdated={applyCaseUpdate}
+          />
+        )}
       </div>
     </div>
   )

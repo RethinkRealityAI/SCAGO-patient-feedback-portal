@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages, Upload as UploadIcon } from "lucide-react"
+import { TextBlock } from '@/components/text-block'
 import { submitFeedback } from "@/app/actions"
 import { storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
@@ -39,7 +40,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { sanitizeOptions, coerceSelectValue } from '@/lib/select-utils';
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -56,6 +57,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useTranslation, translateFieldLabel, translateOption, translateSectionTitle } from '@/lib/translations';
 import { LanguageToggle } from '@/components/language-toggle';
 import { FormFieldRenderer, type FieldDef } from '@/components/form-field-renderer';
+import { isConditionMet } from '@/lib/field-conditions';
+import { translateFormText } from '@/lib/form-text-fr';
 import { SignaturePad } from '@/components/signature-pad';
 import {
   MultiTextField,
@@ -290,13 +293,26 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
     }
 
     // Make base fields optional; we'll enforce conditional required in superRefine
-    schema[field.id] = fieldSchema.optional();
+    // A text box the respondent typed into and then cleared submits "" rather
+    // than undefined, which failed format checks (e.g. the 10-digit phone
+    // pattern) on optional questions. Treat blank text as "not answered";
+    // required questions still fail in superRefine, which sees undefined.
+    schema[field.id] = z.preprocess(
+      v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      fieldSchema.optional()
+    );
 
     // Add automatic "other option" fields if configured
     if ((field as any).otherOption?.enabled && (field as any).otherOption?.optionValue && ['select', 'radio', 'checkbox'].includes(field.type)) {
       const otherFieldId = `${field.id}_otherValue`;
-      const otherFieldSchema = z.string();
-      schema[otherFieldId] = (field as any).otherOption.required ? otherFieldSchema : otherFieldSchema.optional();
+      // Always optional at this level. "Required" means required *when Other
+      // is selected*, which superRefine enforces below. Requiring it here made
+      // the box mandatory even when Other wasn't ticked (it is unmounted then,
+      // so its value is undefined), blocking every submission.
+      schema[otherFieldId] = z.preprocess(
+        v => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z.string().optional()
+      );
     }
   });
   const base = z.object(schema);
@@ -351,20 +367,11 @@ function buildZodSchema(fields: FieldDef[], requiredOverrides: Set<string>) {
       }
     };
 
-    const isVisible = (f: FieldDef): boolean => {
-      if (!f.conditionField) return true;
-      const controlling = fieldMapById.get(f.conditionField);
-      const actual = values[f.conditionField];
-      const expected = f.conditionValue;
-      if (controlling && (controlling.type === 'boolean-checkbox' || controlling.type === 'anonymous-toggle' || controlling.type === 'boolean-row')) {
-        return String(actual) === String(expected);
-      }
-      // Support array-based conditions (for checkbox fields)
-      if (controlling && controlling.type === 'checkbox' && Array.isArray(actual)) {
-        return actual.includes(expected);
-      }
-      return actual === expected;
-    };
+    // Shared with the renderer's shouldShowField so a question is never hidden
+    // on screen yet still required here.
+    const isVisible = (f: FieldDef): boolean =>
+      isConditionMet(f, f.conditionField ? values[f.conditionField] : undefined,
+        f.conditionField ? fieldMapById.get(f.conditionField)?.type : undefined);
 
     for (const f of fields) {
       const must = (f.validation?.required || requiredOverrides.has(f.id)) && f.type !== 'anonymous-toggle';
@@ -759,6 +766,12 @@ export default function FeedbackForm({ survey }: { survey: any }) {
   }, [survey.sections]);
 
   const formSchema = useMemo(() => buildZodSchema(allFields, requiredOverrides), [allFields, requiredOverrides]);
+  // Spam signals sent alongside (not inside) the answers. Bots fill every
+  // input, including this one people never see, and submit far faster than
+  // a person can read a form. The server decides what to do with them.
+  const honeypotRef = useRef<HTMLInputElement>(null);
+  const formStartedAt = useRef(Date.now());
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {},
@@ -887,7 +900,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
       }
     }
 
-    const result = await submitFeedback(survey.id, processedValues, finalSessionId);
+    const result = await submitFeedback(survey.id, processedValues, finalSessionId, {
+      honeypot: honeypotRef.current?.value || '',
+      elapsedMs: Date.now() - formStartedAt.current,
+      language: isFrench ? 'fr' : 'en',
+    });
     if (result.error) {
       toast({
         title: "Submission Failed",
@@ -948,10 +965,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             </div>
           )}
           <CardTitle className="text-2xl lg:text-3xl" style={{ color: thankYou.themeColor && thankYou.icon === 'none' ? thankYou.themeColor : undefined }}>
-            {thankYou.title || t.thankYou}
+            {thankYou.title ? translateFormText(thankYou.title, isFrench ? 'fr' : 'en') : t.thankYou}
           </CardTitle>
           <CardDescription className="text-base lg:text-lg mt-2 whitespace-pre-wrap">
-            {thankYou.description || t.submissionReceived}
+            {thankYou.description ? translateFormText(thankYou.description, isFrench ? 'fr' : 'en') : t.submissionReceived}
           </CardDescription>
         </CardHeader>
         {thankYou.showButton !== false && (
@@ -982,32 +999,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
     );
   }
 
-  const shouldShowField = (fieldDef: FieldDef) => {
-    if (!fieldDef.conditionField) {
-      return true;
-    }
+  const shouldShowField = (fieldDef: FieldDef) =>
+    isConditionMet(
+      fieldDef,
+      fieldDef.conditionField ? watchedValues[fieldDef.conditionField] : undefined,
+      fieldDef.conditionField ? fieldMap.get(fieldDef.conditionField)?.type : undefined
+    );
 
-    const conditionFieldId = fieldDef.conditionField;
-    const expectedValue = fieldDef.conditionValue;
-    const actualValue = watchedValues[conditionFieldId];
-
-    const conditionField = fieldMap.get(conditionFieldId);
-    if (!conditionField) {
-      return true;
-    }
-
-    if (conditionField.type === 'boolean-checkbox' || conditionField.type === 'anonymous-toggle') {
-      const expectedBoolean = expectedValue === 'true';
-      return actualValue === expectedBoolean;
-    }
-
-    // Support array-based conditions (for checkbox fields like multi-select visitType)
-    if (conditionField.type === 'checkbox' && Array.isArray(actualValue)) {
-      return actualValue.includes(expectedValue);
-    }
-
-    return actualValue === expectedValue;
-  };
 
   const cardShadowClass = appearance.cardShadow === 'none' ? '' : appearance.cardShadow === 'lg' ? 'shadow-2xl' : appearance.cardShadow === 'md' ? 'shadow-xl' : 'shadow-lg';
   const titleSizeClass = appearance.cardTitleSize === 'xl' ? 'text-3xl' : appearance.cardTitleSize === 'md' ? 'text-xl' : appearance.cardTitleSize === 'sm' ? 'text-lg' : 'text-2xl';
@@ -1094,8 +1092,10 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                   case 'time-amount':
                     return <TimeAmountField field={field} />;
                   case 'radio':
+                    // Controlled (value, not defaultValue) so a restored draft
+                    // shows its saved choice instead of looking unanswered.
                     return (
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-row flex-wrap gap-4">
+                      <RadioGroup onValueChange={field.onChange} value={field.value ?? ''} className="flex flex-row flex-wrap gap-4">
                         {fieldConfig.options?.map((option) => (
                           <FormItem key={option.value} className="flex items-center space-x-3 space-y-0">
                             <FormControl>
@@ -1265,9 +1265,11 @@ export default function FeedbackForm({ survey }: { survey: any }) {
                     );
                   case 'text-block':
                     return (
-                      <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
-                        {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
-                      </div>
+                      <TextBlock
+                        text={translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
+                        tone={fieldConfig.tone}
+                        className={fieldConfig.className}
+                      />
                     );
                   case 'paypal-membership': {
                     // Extract payer name and email from other form fields so they
@@ -1335,7 +1337,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
             {appearance.showTitle && (
-              <CardTitle className={`${titleSizeClass} text-primary`}>{survey.title}</CardTitle>
+              <CardTitle className={`${titleSizeClass} text-primary`}>{translateFormText(survey.title, isFrench ? 'fr' : 'en')}</CardTitle>
             )}
             <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description}</CardDescription>
           </div>
@@ -1381,6 +1383,12 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-10">
+            {/* Honeypot: off-screen and skipped by keyboard and screen readers,
+                so only bots fill it. Deliberately not a react-hook-form field. */}
+            <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+              <label htmlFor="hp_check_field">Leave this field empty</label>
+              <input ref={honeypotRef} id="hp_check_field" name="hp_check_field" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
+            </div>
             {survey.sections.map((section: any) => {
               const anonField = (section.fields || []).find((f: any) => f.type === 'anonymous-toggle');
               const isAnonymous = anonField ? !!(watchedValues as any)[anonField.id] : false;
@@ -1512,7 +1520,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {survey.submitButtonLabel || t.submit}
+                  {survey.submitButtonLabel ? translateFormText(survey.submitButtonLabel, isFrench ? 'fr' : 'en') : t.submit}
                 </Button>
                 {survey.saveProgressEnabled && (
                   <Button type="button" variant="secondary" onClick={clearDraft}>{t.clearProgress}</Button>

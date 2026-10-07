@@ -52,6 +52,10 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   fields: z.array(fieldSchema).optional(),
   conditionField: z.string().optional(),
   conditionValue: z.string().optional(),
+  // Any-of visibility and text-block callout tone. Not editable here yet, but
+  // declared so saving a form in the editor doesn't strip them.
+  conditionValues: z.array(z.string()).optional(),
+  tone: z.enum(['default', 'notice', 'urgent']).optional(),
   validation: z.object({
     required: z.boolean().optional(),
     pattern: z.string().optional(),
@@ -147,7 +151,13 @@ const surveySchema = z.object({
     bodyTemplate: z.string().optional(),
     attachPdf: z.boolean().default(true).optional(),
     senderName: z.string().optional(),
+    summaryFieldIds: z.array(z.string()).optional(),
   }).optional(),
+  // Configured by script for now (see scripts/create-counselling-intake-form.js).
+  // Declared as pass-through so an editor save preserves them instead of
+  // silently switching off the applicant confirmation and case tracking.
+  respondentConfirmation: z.any().optional(),
+  caseConfig: z.any().optional(),
   resumeSettings: z.object({
     showResumeModal: z.boolean().default(true).optional(),
     resumeTitle: z.string().default('Resume your saved progress?').optional(),
@@ -220,6 +230,8 @@ interface FormFieldConfig {
   fields?: FormFieldConfig[];
   conditionField?: string;
   conditionValue?: any;
+  conditionValues?: string[];
+  tone?: 'default' | 'notice' | 'urgent';
   logoUrl?: string;
   altText?: string;
   alignment?: 'left' | 'center' | 'right';

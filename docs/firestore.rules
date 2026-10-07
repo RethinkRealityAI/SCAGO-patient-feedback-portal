@@ -30,30 +30,45 @@ service cloud.firestore {
       return isAdmin() || isYEPManager();
     }
     
+    // Is this form on the signed-in admin's list in config/page_permissions?
+    // That list is what the dashboard filters by; checking it here means the
+    // database enforces it too, rather than only the UI.
+    function formAllowed(surveyId) {
+      let forms = get(/databases/$(database)/documents/config/page_permissions).data.formsByEmail;
+      let email = request.auth.token.email;
+      return email is string && email in forms && surveyId in forms[email];
+    }
+
+    // Super-admins see every form; other admins only the forms assigned to them.
+    function canAccessForm(surveyId) {
+      return isSuperAdmin() || (isAdmin() && formAllowed(surveyId));
+    }
+
     // Surveys - Read by anyone, Write by admin only
     match /surveys/{surveyId} {
       allow read: if true;  // Anyone can view surveys
       allow create, update, delete: if isAdmin();  // Only admins can modify
-      
+
       // Organized feedback submissions structure: surveys/{surveyId}/submissions/{submissionId}
       match /submissions/{submissionId} {
         allow create: if true;  // Anyone can submit feedback
-        allow read: if isAdmin();  // Only admins can read feedback
-        allow update, delete: if isAdmin();  // Only admins can modify
+        allow read, update, delete: if canAccessForm(surveyId);
       }
     }
-    
-    // Legacy feedback submissions - Create by anyone, Read/Update/Delete by admin only
-    // Kept for backward compatibility with existing data
+
+    // Legacy feedback submissions (pre-2025 hospital survey). Read-only archive:
+    // nothing writes here any more, and the old public create rule let anyone
+    // post straight into it.
     match /feedback/{feedbackId} {
-      allow create: if true;  // Anyone can submit feedback
-      allow read: if isAdmin();  // Only admins can read feedback
-      allow update, delete: if isAdmin();  // Only admins can modify
+      allow create: if false;
+      allow read, update, delete: if isSuperAdmin() || (isAdmin() && formAllowed('QDl3z7vLa0IQ4JgHBZ2s'));
     }
 
-    // Allow collectionGroup queries on submissions for dashboard
+    // Cross-form (collectionGroup) queries span every form's submissions, so
+    // they are super-admin only. Restricted admins' dashboards fall back to
+    // reading each permitted form individually.
     match /{path=**}/submissions/{submissionId} {
-      allow read: if isAdmin();
+      allow read: if isSuperAdmin();
     }
     
     // Config collection - Read by authenticated users, Write by admin only

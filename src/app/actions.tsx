@@ -13,9 +13,8 @@ import { verifyPayPalCapture } from '@/lib/paypal-verification';
 import { MEMBERSHIP_PLAN_BY_ID } from '@/lib/membership-plans';
 import { buildSurveySchema } from '@/lib/submission-metrics';
 
-// Note: We intentionally use the Web Firestore client on the server for writes
-// to respect Firestore security rules and avoid admin credential requirements
-// in local/dev and serverless environments.
+// Note: survey reads use the Web Firestore client. Submission writes use the
+// Admin SDK (see submitFeedback) so the security rules can deny public writes.
 
 type SurveyFieldLite = {
   id: string;
@@ -179,10 +178,92 @@ export async function getSurveys() {
   }
 }
 
+/** Signals the form collects alongside the answers. Never stored as answers. */
+export interface SubmissionMeta {
+  /** Value of the off-screen honeypot input; only bots fill it. */
+  honeypot?: string;
+  /** Time from form load to submit. */
+  elapsedMs?: number;
+  /** Language the form was completed in, so replies can match it. */
+  language?: 'en' | 'fr';
+}
+
+// Per connection, per form. Generous for real people (who submit once) while
+// stopping a script from flooding a form's notification inbox.
+const SUBMISSION_RATE_LIMIT = { maxRequests: 5, windowMs: 10 * 60 * 1000 };
+
+async function getClientIp(): Promise<string> {
+  try {
+    const { headers } = await import('next/headers');
+    const h = await headers();
+    return (
+      h.get('x-nf-client-connection-ip') ||
+      h.get('x-forwarded-for')?.split(',')[0].trim() ||
+      h.get('x-real-ip') ||
+      'unknown'
+    );
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Record an email outcome under surveys/{id}/emailLogs.
+ *
+ * Written with the Admin SDK: the client SDK write this replaced was refused by
+ * the security rules (there is no emailLogs rule, so it is default-deny), so
+ * no email had ever been logged for any form.
+ */
+async function logEmailResult(
+  surveyId: string,
+  entry: {
+    type: 'staff-notification' | 'respondent-confirmation';
+    submissionId: string;
+    recipients: string[];
+    subject: string;
+    success: boolean;
+    error?: string | null;
+    skipped?: boolean;
+  }
+): Promise<void> {
+  try {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    await getAdminFirestore()
+      .collection('surveys')
+      .doc(surveyId)
+      .collection('emailLogs')
+      .add({ ...entry, error: entry.error || null, skipped: entry.skipped || false, sentAt: new Date() });
+  } catch (logError) {
+    console.error('[submitFeedback] Failed to log email result:', logError);
+  }
+}
+
+/** Answers listed in the staff email body, per emailNotifications.summaryFieldIds. */
+async function buildEmailSummary(
+  fieldIds: string[] | undefined,
+  formData: Record<string, any>,
+  fieldLabels: Record<string, string>
+): Promise<Array<{ label: string; value: string }>> {
+  if (!fieldIds || fieldIds.length === 0) return [];
+  const { formatAnswerValue } = await import('@/lib/question-mapping');
+  const rows: Array<{ label: string; value: string }> = [];
+  for (const id of fieldIds) {
+    const raw = formData[id];
+    if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && raw.length === 0)) continue;
+    const formatted = formatAnswerValue(raw);
+    let value = Array.isArray(formatted) ? formatted.join(', ') : String(formatted);
+    const otherText = formData[`${id}_otherValue`];
+    if (typeof otherText === 'string' && otherText.trim()) value += ` (Other: ${otherText.trim()})`;
+    rows.push({ label: fieldLabels[id] || id, value });
+  }
+  return rows;
+}
+
 export async function submitFeedback(
   surveyId: string,
   formData: Record<string, any>,
-  sessionId?: string
+  sessionId?: string,
+  meta?: SubmissionMeta
 ): Promise<{ error?: string; sessionId?: string }> {
   try {
     if (!surveyId) {
@@ -199,6 +280,14 @@ export async function submitFeedback(
     }
     const surveyData = surveyDoc.data();
 
+    const { checkRateLimit } = await import('@/lib/rate-limiter');
+    const ip = await getClientIp();
+    const rate = checkRateLimit(`submit:${surveyId}:${ip}`, SUBMISSION_RATE_LIMIT);
+    if (!rate.allowed) {
+      console.warn(`[submitFeedback] Rate limit hit for survey ${surveyId}`);
+      return { error: 'Too many submissions from this connection. Please wait a few minutes and try again.' };
+    }
+
     // For PayPal fields, verify capture details server-side before persisting submission.
     const paymentVerification = await verifyPayPalPaymentsForSubmission(surveyData, formData);
     if (!paymentVerification.ok) {
@@ -210,16 +299,30 @@ export async function submitFeedback(
       surveyId,
       sessionId: finalSessionId,
       submittedAt: new Date(),
+      ...(meta?.language === 'fr' ? { submittedLanguage: 'fr' } : {}),
       ...(paymentVerification.verification.length > 0
         ? { paymentVerification: paymentVerification.verification }
         : {}),
     };
 
-    // Save to organized structure: surveys/{surveyId}/submissions/{submissionId}
-    const docRef = await addDoc(
-      collection(clientDb, 'surveys', surveyId, 'submissions'),
-      submissionData
-    );
+    // Submissions are written with the Admin SDK so the security rules can
+    // refuse every direct public write; this action is the only way in, which
+    // means the spam checks below cannot be bypassed by posting to Firestore.
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const surveyRef = getAdminFirestore().collection('surveys').doc(surveyId);
+
+    const { spamReasons } = await import('@/lib/spam-signals');
+    const heldReasons = spamReasons(meta);
+    if (heldReasons.length > 0) {
+      // Likely automated. Held rather than discarded, so a false positive is
+      // never lost, but kept out of the dashboard and nobody is emailed.
+      await surveyRef.collection('heldSubmissions').add({ ...submissionData, heldReasons, heldAt: new Date() });
+      console.warn(`[submitFeedback] Held submission for survey ${surveyId}: ${heldReasons.join(', ')}`);
+      // Report success: telling a bot it was caught only helps it adapt.
+      return { sessionId: finalSessionId };
+    }
+
+    const docRef = await surveyRef.collection('submissions').add(submissionData);
 
     // Send webhook notification (await on server to ensure it completes)
     try {
@@ -251,6 +354,8 @@ export async function submitFeedback(
 
     // Send email notification if configured
     if (surveyData?.emailNotifications?.enabled) {
+      const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
+      const subjectForLog = emailConfig.subject || `New Submission: ${surveyData.title}`;
       try {
         const { sendSubmissionEmail } = await import('@/lib/email-templates');
         const { generateSubmissionPdf, extractFieldLabels, extractFieldOrder } = await import('@/lib/pdf-generator');
@@ -283,9 +388,6 @@ export async function submitFeedback(
             ? `${surveyData.title}${submitterName ? ` - ${submitterName}` : ''}`
             : `Form Submission${submitterName ? ` - ${submitterName}` : ''}`;
 
-          console.log(`[submitFeedback] Generating PDF with title: "${title}"`);
-          console.log(`[submitFeedback] orderedData keys: ${Object.keys(orderedData).length}`);
-
           pdfBuffer = await generateSubmissionPdf({
             title,
             surveyId,
@@ -294,17 +396,13 @@ export async function submitFeedback(
             fieldLabels,
           });
 
-          if (pdfBuffer) {
-            console.log(`[submitFeedback] PDF generated successfully: ${pdfBuffer.length} bytes`);
-          } else {
+          if (!pdfBuffer) {
             console.warn('[submitFeedback] PDF generation returned null - check pdf-generator.ts for errors');
           }
         } catch (pdfError) {
           console.error('[submitFeedback] PDF generation failed with exception:', pdfError);
         }
 
-        // Send email with submission ID for direct view link
-        const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
         const emailResult = await sendSubmissionEmail({
           config: emailConfig,
           surveyTitle: surveyData.title || 'Form Submission',
@@ -312,25 +410,18 @@ export async function submitFeedback(
           submissionId: docRef.id,
           submissionData: formData,
           pdfBuffer,
+          summary: await buildEmailSummary(emailConfig.summaryFieldIds, formData, fieldLabels),
         });
 
-        // Log the email notification result to Firestore for admin visibility
-        try {
-          await addDoc(
-            collection(clientDb, 'surveys', surveyId, 'emailLogs'),
-            {
-              submissionId: docRef.id,
-              recipients: emailConfig.recipients || [],
-              subject: emailConfig.subject || `New Submission: ${surveyData.title}`,
-              success: emailResult.success,
-              error: emailResult.error || null,
-              skipped: emailResult.skipped || false,
-              sentAt: new Date(),
-            }
-          );
-        } catch (logError) {
-          console.error('[submitFeedback] Failed to log email result:', logError);
-        }
+        await logEmailResult(surveyId, {
+          type: 'staff-notification',
+          submissionId: docRef.id,
+          recipients: emailConfig.recipients || [],
+          subject: subjectForLog,
+          success: emailResult.success,
+          error: emailResult.error,
+          skipped: emailResult.skipped,
+        });
 
         if (emailResult.success) {
           console.log(`[submitFeedback] Email notification sent for survey: ${surveyId}`);
@@ -339,24 +430,35 @@ export async function submitFeedback(
         }
       } catch (emailError) {
         console.error('[submitFeedback] Email notification error:', emailError);
-        // Log the failure to Firestore
-        try {
-          await addDoc(
-            collection(clientDb, 'surveys', surveyId, 'emailLogs'),
-            {
-              submissionId: docRef.id,
-              recipients: (surveyData.emailNotifications as SubmissionEmailConfig).recipients || [],
-              subject: (surveyData.emailNotifications as SubmissionEmailConfig).subject || `New Submission: ${surveyData.title}`,
-              success: false,
-              error: emailError instanceof Error ? emailError.message : 'Email notification failed',
-              skipped: false,
-              sentAt: new Date(),
-            }
-          );
-        } catch (logError) {
-          console.error('[submitFeedback] Failed to log email error:', logError);
-        }
+        await logEmailResult(surveyId, {
+          type: 'staff-notification',
+          submissionId: docRef.id,
+          recipients: emailConfig.recipients || [],
+          subject: subjectForLog,
+          success: false,
+          error: emailError instanceof Error ? emailError.message : 'Email notification failed',
+        });
       }
+    }
+
+    // Acknowledge the respondent, if this form is set up to.
+    if (surveyData?.respondentConfirmation?.enabled) {
+      const { sendRespondentConfirmationEmail } = await import('@/lib/email-templates');
+      const confirmation = await sendRespondentConfirmationEmail({
+        config: surveyData.respondentConfirmation,
+        surveyTitle: surveyData.title || 'Form Submission',
+        submissionData: formData,
+        language: meta?.language === 'fr' ? 'fr' : 'en',
+      });
+      await logEmailResult(surveyId, {
+        type: 'respondent-confirmation',
+        submissionId: docRef.id,
+        recipients: confirmation.recipient ? [confirmation.recipient] : [],
+        subject: surveyData.respondentConfirmation.subject || `We received your submission – ${surveyData.title}`,
+        success: confirmation.success,
+        error: confirmation.error,
+        skipped: confirmation.skipped,
+      });
     }
 
     return { sessionId: finalSessionId };

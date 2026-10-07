@@ -2,7 +2,7 @@
 
 import { updateSurvey as serverUpdateSurvey } from '@/app/editor/actions';
 import { db, auth } from '@/lib/firebase';
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { arrayUnion, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { defaultSurvey, surveyV2, consentSurvey, membershipSurvey } from '@/lib/survey-template';
 
 /**
@@ -302,6 +302,50 @@ export async function updateSubmissionReviewStatus(
     const err = error as any;
     console.error('Error updating submission review status:', err);
     return { error: err?.message || 'Failed to update review status' };
+  }
+}
+
+/**
+ * Update case-tracking fields on a submission: status, assignee, and/or a new
+ * note. Keeps the older `reviewed` flag in step (anything past the initial
+ * status counts as reviewed) so the main dashboard's review counts stay right.
+ */
+export async function updateSubmissionCase(
+  submissionId: string,
+  surveyId: string,
+  changes: { caseStatus?: string; assignedTo?: string; note?: string },
+  initialStatus: string
+): Promise<{ error?: string; note?: { text: string; author: string; at: string } }> {
+  try {
+    if (!submissionId || !surveyId) return { error: 'Missing required IDs' };
+    const currentUser = auth.currentUser;
+    if (!currentUser) return { error: 'You must be logged in to update submissions.' };
+
+    const author = currentUser.email || currentUser.uid;
+    const update: Record<string, any> = { caseUpdatedAt: new Date(), caseUpdatedBy: author };
+
+    if (changes.caseStatus !== undefined) {
+      update.caseStatus = changes.caseStatus;
+      const reviewed = changes.caseStatus !== initialStatus;
+      update.reviewed = reviewed;
+      update.reviewedAt = reviewed ? new Date() : deleteField();
+    }
+    if (changes.assignedTo !== undefined) {
+      update.assignedTo = changes.assignedTo.trim() || deleteField();
+    }
+
+    let note: { text: string; author: string; at: string } | undefined;
+    if (changes.note && changes.note.trim()) {
+      note = { text: changes.note.trim(), author, at: new Date().toISOString() };
+      update.caseNotes = arrayUnion(note);
+    }
+
+    await updateDoc(doc(db, 'surveys', String(surveyId), 'submissions', String(submissionId)), update);
+    return { note };
+  } catch (error) {
+    const err = error as any;
+    console.error('Error updating submission case:', err);
+    return { error: err?.message || 'Failed to update case' };
   }
 }
 

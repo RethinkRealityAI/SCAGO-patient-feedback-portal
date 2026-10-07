@@ -5,7 +5,7 @@
  * field names, and relevant insights for each survey type.
  */
 
-export type SurveyType = 'feedback' | 'consent' | 'overview'
+export type SurveyType = 'feedback' | 'consent' | 'overview' | 'general'
 
 export interface SurveyContext {
   type: SurveyType
@@ -145,6 +145,37 @@ Provide high-level strategic insights for administrators managing multiple surve
 }
 
 /**
+ * Any other form (intake, applications, registrations). Has no rating, so it
+ * must not be read as hospital feedback.
+ */
+export const GENERAL_SURVEY_CONTEXT: SurveyContext = {
+  type: 'general',
+  title: 'Form Submissions',
+  description: 'Requests and applications submitted through a SCAGO form',
+  keyFields: ['the answers to each question on the form'],
+  analysisPrompt: `You are analyzing submissions to a SCAGO form. Focus on:
+- What people are asking for most often
+- Who is submitting (patients, family members, others) and any notable patterns
+- Preferences that affect how staff should follow up
+- Gaps, unmet needs or recurring themes worth acting on
+
+Do not invent ratings or satisfaction scores; this form does not collect them. Provide practical insights for the staff who respond to these submissions.`,
+  quickInsightQuestions: [
+    'What are people asking for most often?',
+    'Who is submitting this form?',
+    'What patterns stand out in the answers?',
+    'What should staff prioritize when following up?'
+  ]
+}
+
+/** True when a submission carries hospital-feedback answers. */
+function hasFeedbackSignals(submission: any): boolean {
+  return submission.rating != null
+    || Boolean(submission.hospitalInteraction)
+    || Boolean(submission.hospitalName || submission.hospital || submission['hospital-on'])
+}
+
+/**
  * Detect survey type from submission data
  */
 export function detectSurveyType(submission: any): SurveyType {
@@ -152,12 +183,10 @@ export function detectSurveyType(submission: any): SurveyType {
   if (submission.digitalSignature || submission.ageConfirmation || submission.scdConnection || submission.primaryHospital) {
     return 'consent'
   }
-  // Check for feedback-specific fields
-  if (submission.rating !== undefined || submission.hospitalInteraction) {
+  if (hasFeedbackSignals(submission)) {
     return 'feedback'
   }
-  // Default to feedback
-  return 'feedback'
+  return 'general'
 }
 
 /**
@@ -171,6 +200,8 @@ export function getSurveyContext(type: SurveyType): SurveyContext {
       return FEEDBACK_SURVEY_CONTEXT
     case 'overview':
       return OVERVIEW_SURVEY_CONTEXT
+    case 'general':
+      return GENERAL_SURVEY_CONTEXT
     default:
       return FEEDBACK_SURVEY_CONTEXT
   }
@@ -190,9 +221,10 @@ export function getSurveyContextFromId(surveyId: string, submissions: any[]): Su
     return FEEDBACK_SURVEY_CONTEXT // Default
   }
   
-  // Detect type from first submission
-  const type = detectSurveyType(surveySubmissions[0])
-  return getSurveyContext(type)
+  // Consent is recognisable from any one submission; hospital feedback is
+  // checked across all of them because a single response can skip the rating.
+  if (detectSurveyType(surveySubmissions[0]) === 'consent') return CONSENT_SURVEY_CONTEXT
+  return surveySubmissions.some(hasFeedbackSignals) ? FEEDBACK_SURVEY_CONTEXT : GENERAL_SURVEY_CONTEXT
 }
 
 /**

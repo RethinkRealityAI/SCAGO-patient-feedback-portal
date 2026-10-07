@@ -5,6 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePathname } from 'next/navigation';
 import Header from '@/components/header';
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { ForcePasswordChange } from '@/components/auth/force-password-change';
 
 // Hide navigation for public pages, login, unauthorized, setup-admin, dashboard, and profile pages
 const HIDDEN_NAV_PATHS = ['/survey', '/login', '/unauthorized', '/setup-admin'];
@@ -21,6 +22,8 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider>
+      {/* Temporary-password accounts must choose their own before using the portal. */}
+      <ForcePasswordChange />
       {hideNav ? (
         <main className="flex-1 min-h-screen">
           <div className="relative py-6 px-4 sm:px-6 lg:px-8">

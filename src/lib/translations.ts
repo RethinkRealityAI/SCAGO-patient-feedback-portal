@@ -1,3 +1,4 @@
+import { formTextFr } from '@/lib/form-text-fr';
 // Translation library for survey forms and UI elements
 
 export interface Translation {
@@ -1111,7 +1112,8 @@ export function translateFieldLabel(label: string, language: 'en' | 'fr' = 'en')
   }
 
   // If no mapping found, return original label
-  return label;
+  // Fall back to the per-form dictionary (lib/form-text-fr) before English.
+  return language === 'fr' ? formTextFr(label) ?? label : label;
 }
 
 // Helper function to translate option values
@@ -1206,7 +1208,8 @@ export function translateOption(option: string, language: 'en' | 'fr' = 'en'): s
     return t[mappedKey];
   }
 
-  return option;
+  // Fall back to the per-form dictionary (lib/form-text-fr) before English.
+  return language === 'fr' ? formTextFr(option) ?? option : option;
 }
 
 // Helper function to translate section titles
@@ -1232,5 +1235,6 @@ export function translateSectionTitle(title: string, language: 'en' | 'fr' = 'en
     return t[mappedKey];
   }
 
-  return title;
+  // Fall back to the per-form dictionary (lib/form-text-fr) before English.
+  return language === 'fr' ? formTextFr(title) ?? title : title;
 }

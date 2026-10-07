@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Star, Check, ChevronsUpDown } from "lucide-react";
+import { TextBlock } from '@/components/text-block'
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,10 @@ export type FieldDef = {
   width?: string; // For 'logo' type
   conditionField?: string;
   conditionValue?: string;
+  /** Show when the controlling answer matches any of these (see lib/field-conditions). */
+  conditionValues?: string[];
+  /** For 'text-block': `notice` renders an info callout, `urgent` a red alert (e.g. crisis lines). */
+  tone?: 'default' | 'notice' | 'urgent';
   fields?: FieldDef[];
   rows?: { id: string; label: string; value: string }[];
   columns?: { id: string; label: string; value: string; type?: string }[];
@@ -329,9 +334,11 @@ export function FormFieldRenderer({
 
       case 'text-block':
         return (
-          <div className={cn("text-sm text-muted-foreground whitespace-pre-wrap", fieldConfig.className)}>
-            {translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
-          </div>
+          <TextBlock
+            text={translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
+            tone={fieldConfig.tone}
+            className={fieldConfig.className}
+          />
         );
 
       case 'slider':
