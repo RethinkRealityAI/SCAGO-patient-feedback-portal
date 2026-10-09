@@ -732,7 +732,13 @@ function TimeAmountField({ field }: { field: any }) {
 
 // renderField function moved inside FeedbackForm component to fix React hooks usage
 
-export default function FeedbackForm({ survey }: { survey: any }) {
+/**
+ * `embedded`: rendered inside an iframe on another site (the /embed route).
+ * The form then drops its outer card chrome, reports its height to the host
+ * page so the frame can grow with it, and avoids pop-ups that would open in
+ * the middle of a tall frame where the visitor can't see them.
+ */
+export default function FeedbackForm({ survey, embedded = false }: { survey: any; embedded?: boolean }) {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [resumeOpen, setResumeOpen] = useState(false);
@@ -788,6 +794,31 @@ export default function FeedbackForm({ survey }: { survey: any }) {
 
   // Local draft save/restore
   const draftKey = useMemo(() => `survey-draft:${survey.id}`, [survey.id]);
+
+  // Embedded: tell the host page how tall the form is, so the iframe can size
+  // itself to fit (no inner scrollbar), and bring the frame into view when the
+  // thank-you message replaces the form.
+  useEffect(() => {
+    if (!embedded || typeof window === 'undefined' || window.parent === window) return;
+    const root = document.getElementById('scago-embed-root');
+    if (!root) return;
+    let last = 0;
+    const post = () => {
+      const height = Math.ceil(root.getBoundingClientRect().height);
+      if (height === last) return;
+      last = height;
+      window.parent.postMessage({ type: 'scago-form:height', height }, '*');
+    };
+    post();
+    const observer = new ResizeObserver(post);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [embedded]);
+
+  useEffect(() => {
+    if (!embedded || !isSubmitted || typeof window === 'undefined' || window.parent === window) return;
+    window.parent.postMessage({ type: 'scago-form:scroll-top' }, '*');
+  }, [embedded, isSubmitted]);
 
   useEffect(() => {
     if (!survey.saveProgressEnabled) return;
@@ -957,8 +988,8 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         thankYou.icon === 'checkmark' ? Check : null;
 
     return (
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
-        <CardHeader className="text-center py-12">
+      <Card className={`w-full max-w-4xl mx-auto ${embedded ? 'border-0 bg-transparent shadow-none' : 'shadow-lg max-sm:border-0 max-sm:shadow-none'}`}>
+        <CardHeader className="text-center px-2 py-10 sm:px-6 sm:py-12">
           {Icon && (
             <div className="mx-auto flex items-center justify-center w-20 h-20 rounded-full bg-opacity-10 mb-6" style={{ backgroundColor: `${thankYou.themeColor || '#22c55e'}1A` }}>
               <Icon className="w-10 h-10" style={{ color: thankYou.themeColor || '#22c55e' }} />
@@ -1332,7 +1363,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
   };
 
   return (
-    <Card className={`w-full max-w-5xl mx-auto rounded-lg border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
+    <Card className={`w-full max-w-5xl mx-auto rounded-lg ${embedded ? 'border-0 bg-transparent p-0 shadow-none sm:p-1' : `border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass} max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
       <CardHeader className="p-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
@@ -1376,6 +1407,22 @@ export default function FeedbackForm({ survey }: { survey: any }) {
         </div>
       </CardHeader>
       <CardContent className="px-0 mt-4 sm:mt-6">
+        {embedded && resumeOpen && (
+          <div role="region" aria-label={isFrench ? 'Brouillon enregistré' : 'Saved draft'} className="mb-6 rounded-lg border bg-muted/40 p-4">
+            <p className="text-sm font-medium">{survey.resumeSettings?.resumeTitle || (isFrench ? 'Reprendre votre brouillon?' : 'Resume your saved progress?')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {survey.resumeSettings?.resumeDescription || (isFrench ? 'Nous avons trouvé un brouillon enregistré.' : 'We found a saved draft. Continue where you left off or start over.')}
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Button type="button" size="sm" className="w-full sm:w-auto" onClick={() => { setResumeOpen(false); if (pendingDraft) { form.reset(pendingDraft); setPendingDraft(null); } }}>
+                {survey.resumeSettings?.continueLabel || (isFrench ? 'Continuer' : 'Continue')}
+              </Button>
+              <Button type="button" size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => { setResumeOpen(false); clearDraft(); setPendingDraft(null); }}>
+                {survey.resumeSettings?.startOverLabel || (isFrench ? 'Recommencer' : 'Start over')}
+              </Button>
+            </div>
+          </div>
+        )}
         {survey.saveProgressEnabled && (
           <div className="mb-6 text-sm text-muted-foreground">
             {t.progressSaved}
@@ -1397,7 +1444,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
               const visitTypeValue = (watchedValues as any)['visitType'];
               const hideUntilVisitType = isEngagementSection && (!visitTypeValue || (Array.isArray(visitTypeValue) && visitTypeValue.length === 0));
               return (
-                <Card key={section.id} className="rounded-lg border p-3 sm:p-5 shadow-sm hover:shadow-md hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 ease-out md:hover:shadow-lg md:hover:-translate-y-2 md:hover:scale-[1.02]">
+                <Card key={section.id} className="min-w-0 rounded-lg border p-4 sm:p-5 shadow-sm transition-shadow duration-300 ease-out md:hover:shadow-md">
                   <CardHeader className="p-0">
                     <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{translateSectionTitle(section.title, isFrench ? 'fr' : 'en')}</CardTitle>
                     {section.description && (
@@ -1517,13 +1564,13 @@ export default function FeedbackForm({ survey }: { survey: any }) {
             })}
 
             <CardFooter className="px-0 pt-6 sm:pt-8 flex justify-center">
-              <div className="flex items-center gap-3">
-                <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-32">
+              <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
+                <Button type="submit" disabled={isSubmitting} size="lg" className="w-full whitespace-normal sm:w-auto sm:min-w-32">
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {survey.submitButtonLabel ? translateFormText(survey.submitButtonLabel, isFrench ? 'fr' : 'en') : t.submit}
                 </Button>
                 {survey.saveProgressEnabled && (
-                  <Button type="button" variant="secondary" onClick={clearDraft}>{t.clearProgress}</Button>
+                  <Button type="button" variant="secondary" onClick={clearDraft} className="w-full whitespace-normal sm:w-auto">{t.clearProgress}</Button>
                 )}
               </div>
             </CardFooter>
@@ -1566,7 +1613,7 @@ export default function FeedbackForm({ survey }: { survey: any }) {
           </form>
         </Form>
       </CardContent>
-      <Dialog open={resumeOpen} onOpenChange={setResumeOpen}>
+      <Dialog open={resumeOpen && !embedded} onOpenChange={setResumeOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{survey.resumeSettings?.resumeTitle || 'Resume your saved progress?'}</DialogTitle>

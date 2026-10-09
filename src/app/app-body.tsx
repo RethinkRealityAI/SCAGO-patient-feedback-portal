@@ -10,6 +10,9 @@ import { ForcePasswordChange } from '@/components/auth/force-password-change';
 // Hide navigation for public pages, login, unauthorized, setup-admin, dashboard, and profile pages
 const HIDDEN_NAV_PATHS = ['/survey', '/login', '/unauthorized', '/setup-admin'];
 
+// Bare pages meant to be shown inside an iframe on another site.
+const EMBED_PATH = '/embed';
+
 // Show sidebar only on admin page
 const ADMIN_PATH = '/admin';
 
@@ -18,15 +21,19 @@ export default function AppBody({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const hideNav = HIDDEN_NAV_PATHS.some(path => pathname.startsWith(path));
+  const isEmbed = pathname.startsWith(EMBED_PATH);
   const showSidebar = !isMobile && pathname.startsWith(ADMIN_PATH) && !hideNav;
 
   return (
     <AuthProvider>
       {/* Temporary-password accounts must choose their own before using the portal. */}
       <ForcePasswordChange />
-      {hideNav ? (
+      {isEmbed ? (
+        // No min-height or page padding: the host page sizes the frame to the form.
+        <main>{children}</main>
+      ) : hideNav ? (
         <main className="flex-1 min-h-screen">
-          <div className="relative py-6 px-4 sm:px-6 lg:px-8">
+          <div className="relative px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
             <div className="mx-auto max-w-6xl">
               {children}
             </div>

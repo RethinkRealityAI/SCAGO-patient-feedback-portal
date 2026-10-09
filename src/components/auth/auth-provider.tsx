@@ -46,6 +46,7 @@ const PUBLIC_ROUTES = [
   '/',              // Home page
   '/login',         // Login page
   '/survey',        // Survey forms (PUBLIC - no auth needed)
+  '/embed',         // The same forms, framed on other sites
   '/resources',     // Resources page
   '/unauthorized',  // Access denied page
 ];
