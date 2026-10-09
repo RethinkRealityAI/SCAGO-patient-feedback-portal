@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { completeRequiredPasswordChange } from '@/app/account/actions'
+import { signOut } from '@/lib/firebase-auth'
 
 const MIN_LENGTH = 8
 
@@ -21,6 +22,7 @@ export function ForcePasswordChange() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [required, setRequired] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -45,14 +47,17 @@ export function ForcePasswordChange() {
 
   if (!user || !required) return null
 
-  const problem =
-    password.length < MIN_LENGTH
+  const problem = !currentPassword
+    ? 'Enter the temporary password you signed in with.'
+    : password.length < MIN_LENGTH
       ? `Use at least ${MIN_LENGTH} characters.`
       : !/[A-Za-z]/.test(password) || !/\d/.test(password)
         ? 'Include at least one letter and one number.'
-        : password !== confirm
-          ? 'The two passwords do not match.'
-          : null
+        : password === currentPassword
+          ? 'Choose a password different from the temporary one.'
+          : password !== confirm
+            ? 'The two passwords do not match.'
+            : null
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,6 +68,12 @@ export function ForcePasswordChange() {
     setSaving(true)
     setError(null)
     try {
+      // Firebase only allows a password change shortly after signing in. Confirming
+      // the temporary password first makes this work however long ago the person
+      // signed in (they may have left the tab open, or come back days later).
+      if (user.email) {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword))
+      }
       await updatePassword(user, password)
       // A password change revokes every session that began before it, and a
       // refreshed token still carries the original sign-in time — so a session
@@ -90,10 +101,17 @@ export function ForcePasswordChange() {
       setRequired(false)
       toast({ title: 'Password updated', description: 'Use your new password next time you sign in.' })
     } catch (err: any) {
+      const code = err?.code as string | undefined
       setError(
-        err?.code === 'auth/requires-recent-login'
-          ? 'For security, please sign out and sign back in with your temporary password, then try again.'
-          : err?.message || 'Could not update your password. Please try again.'
+        code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials'
+          ? "That temporary password isn't right. Check it and try again."
+          : code === 'auth/too-many-requests'
+            ? 'Too many attempts. Please wait a few minutes and try again.'
+            : code === 'auth/weak-password'
+              ? 'Please choose a stronger password.'
+              : code === 'auth/requires-recent-login'
+                ? 'For security, please sign out and sign back in, then try again.'
+                : err?.message || 'Could not update your password. Please try again.'
       )
     } finally {
       setSaving(false)
@@ -114,10 +132,14 @@ export function ForcePasswordChange() {
           </div>
           <DialogTitle>Choose your own password</DialogTitle>
           <DialogDescription>
-            You signed in with a temporary password. Set a new one to continue.
+            You signed in with a temporary password. Enter it below, then choose a new one to continue.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="current-password">Temporary password</Label>
+            <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="new-password">New password</Label>
             <Input id="new-password" type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
@@ -131,6 +153,19 @@ export function ForcePasswordChange() {
           <Button type="submit" className="w-full" disabled={saving}>
             {saving ? <Loader className="h-4 w-4 animate-spin" /> : 'Save password and continue'}
           </Button>
+          {/* Always leave a way out of this screen. */}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={async () => {
+              await signOut()
+              try { await fetch('/api/auth/logout', { method: 'POST' }) } catch {}
+              window.location.href = '/login'
+            }}
+            className="w-full text-center text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+          >
+            Sign out
+          </button>
         </form>
       </DialogContent>
     </Dialog>
