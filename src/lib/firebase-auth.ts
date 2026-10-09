@@ -232,6 +232,22 @@ export async function updatePassword(
 
     // Update password
     await firebaseUpdatePassword(user, newPassword);
+
+    // A password change revokes every session that began before it, including
+    // the portal's server session cookie, so the next page load would sign the
+    // user out. Sign in again with the new password and reissue the cookie.
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, newPassword));
+      const idToken = await user.getIdToken(true);
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+    } catch (sessionError) {
+      // The password did change; at worst the user signs in again with it.
+      console.warn('Could not refresh the session after a password change:', sessionError);
+    }
     return {};
   } catch (error) {
     const authError = error as AuthError;
@@ -239,6 +255,8 @@ export async function updatePassword(
 
     switch (authError.code) {
       case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
         errorMessage = 'Current password is incorrect';
         break;
       case 'auth/weak-password':
