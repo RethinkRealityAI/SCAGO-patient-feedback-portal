@@ -67,7 +67,20 @@ export function ForcePasswordChange() {
       const token = await user.getIdToken(true)
       const result = await completeRequiredPasswordChange(token)
       if (!result.success) throw new Error(result.error)
-      await user.getIdToken(true) // pick up the cleared claim
+      // Changing a password revokes earlier sessions, and the server checks for
+      // revocation, so the portal's session cookie must be reissued from the new
+      // token — otherwise the next page load would bounce to the sign-in page.
+      const freshToken = await user.getIdToken(true) // also picks up the cleared claim
+      const session = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: freshToken }),
+      })
+      if (!session.ok) {
+        toast({ title: 'Password updated', description: 'Please sign in again with your new password.' })
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+        return
+      }
       setRequired(false)
       toast({ title: 'Password updated', description: 'Use your new password next time you sign in.' })
     } catch (err: any) {
