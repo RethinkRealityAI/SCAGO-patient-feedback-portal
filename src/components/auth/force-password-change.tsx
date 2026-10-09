@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { updatePassword } from 'firebase/auth'
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { KeyRound, Loader } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -64,12 +64,18 @@ export function ForcePasswordChange() {
     setError(null)
     try {
       await updatePassword(user, password)
+      // A password change revokes every session that began before it, and a
+      // refreshed token still carries the original sign-in time — so a session
+      // cookie made from it would be revoked too. Signing in again with the new
+      // password gives a sign-in time after the change.
+      if (user.email) {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password))
+      }
       const token = await user.getIdToken(true)
       const result = await completeRequiredPasswordChange(token)
       if (!result.success) throw new Error(result.error)
-      // Changing a password revokes earlier sessions, and the server checks for
-      // revocation, so the portal's session cookie must be reissued from the new
-      // token — otherwise the next page load would bounce to the sign-in page.
+      // Replace the portal's revoked session cookie with one from the new sign-in,
+      // or the next page load would bounce to the sign-in page.
       const freshToken = await user.getIdToken(true) // also picks up the cleared claim
       const session = await fetch('/api/auth/session', {
         method: 'POST',
