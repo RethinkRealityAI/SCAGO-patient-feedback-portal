@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { completeRequiredPasswordChange } from '@/app/account/actions'
 
-const MIN_LENGTH = 10
+const MIN_LENGTH = 8
 
 /**
  * Blocks the portal until a user flagged with `mustChangePassword` (e.g. a new
