@@ -16,13 +16,6 @@ export const FORM_TEXT_FR: Record<string, string> = {
   "We've received your counselling request. We will contact you within 14 business days to arrange a phone or virtual consultation. A confirmation has been sent to your email. If you are experiencing an emergency or crisis, please call 911 or visit your nearest Emergency Room.":
     "Nous avons bien reçu votre demande de counseling. Nous communiquerons avec vous dans un délai de 14 jours ouvrables pour organiser une consultation téléphonique ou virtuelle. Une confirmation a été envoyée à votre adresse courriel. Si vous vivez une urgence ou une crise, composez le 911 ou rendez-vous à l'urgence la plus proche.",
 
-  // Before you begin
-  'Before You Begin': 'Avant de commencer',
-  'If you are in crisis or thinking about suicide\nCall or text 988 (Suicide Crisis Helpline, available 24/7) or call 911 and go to your nearest emergency room. This form is not monitored around the clock.':
-    "Si vous êtes en situation de crise ou avez des pensées suicidaires\nAppelez ou textez le 988 (Ligne d'aide en cas de crise de suicide, accessible en tout temps) ou composez le 911 et rendez-vous à l'urgence la plus proche. Ce formulaire n'est pas surveillé en tout temps.",
-  'This form takes about 3 minutes. Questions marked * are required. Your progress is saved on this device, so you can come back to it.':
-    "Ce formulaire prend environ 3 minutes. Les questions marquées d'un * sont obligatoires. Vos réponses sont enregistrées sur cet appareil, vous pouvez donc y revenir.",
-
   // Your details
   'Your Details': 'Vos coordonnées',
   Name: 'Nom',

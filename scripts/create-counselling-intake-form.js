@@ -216,21 +216,6 @@ function buildSurvey(recipients) {
     aiAnalysisEnabled: false,
     sections: [
       {
-        id: 'intro-section',
-        title: 'Before You Begin',
-        fields: [
-          { id: 'crisisNotice', label: '', type: 'text-block', tone: 'urgent', helperText: CRISIS_NOTICE, validation: { required: false } },
-          {
-            id: 'formIntro',
-            label: '',
-            type: 'text-block',
-            helperText:
-              'This form takes about 3 minutes. Questions marked * are required. Your progress is saved on this device, so you can come back to it.',
-            validation: { required: false },
-          },
-        ],
-      },
-      {
         id: 'details-section',
         title: 'Your Details',
         fields: [
