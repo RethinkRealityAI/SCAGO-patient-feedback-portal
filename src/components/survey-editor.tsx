@@ -33,6 +33,7 @@ import { regexPresets } from '@/lib/regex-presets';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SectionTemplateSelector, BlockTemplateSelector } from '@/components/template-selectors';
 import { QuestionBankSelector } from '@/components/question-bank-selector';
+import { RegionRoutingSettings } from '@/components/region-routing-settings';
 
 // Schemas & Types
 const optionSchema = z.object({ id: z.string(), label: z.string().min(1, 'Option label is required.'), value: z.string().min(1, 'Option value is required.') });
@@ -152,6 +153,13 @@ const surveySchema = z.object({
     attachPdf: z.boolean().default(true).optional(),
     senderName: z.string().optional(),
     summaryFieldIds: z.array(z.string()).optional(),
+    // Notify regional contacts based on the respondent's city (see src/lib/region-routing.ts).
+    regionRouting: z.object({
+      enabled: z.boolean().optional(),
+      sourceFieldId: z.string().optional(),
+      routes: z.record(z.array(z.string().email())).optional(),
+      alwaysNotifyMain: z.boolean().optional(),
+    }).optional(),
   }).optional(),
   // Configured by script for now (see scripts/create-counselling-intake-form.js).
   // Declared as pass-through so an editor save preserves them instead of
@@ -2702,10 +2710,29 @@ export default function SurveyEditor({ survey }: { survey: Record<string, any> }
                         </FormItem>
                       )} />
 
+                      <FormField control={form.control} name="emailNotifications.regionRouting" render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <RegionRoutingSettings
+                              value={field.value}
+                              onChange={field.onChange}
+                              cityFields={(form.watch('sections') || [])
+                                .flatMap((s: any) => (s.fields || []).flatMap((f: any) => (f.type === 'group' ? f.fields || [] : [f])))
+                                .filter((f: any) => f.type === 'city-on')
+                                .map((f: any) => ({ id: f.id, label: f.label }))}
+                              mainRecipients={form.watch('emailNotifications.recipients') || []}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+
                       <FormField control={form.control} name="emailNotifications.subject" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Email Subject (Optional)</FormLabel>
-                          <FormDescription>Supports placeholders: {'{{surveyTitle}}'} and {'{{submissionDate}}'}.</FormDescription>
+                          <FormDescription>
+                            Supports placeholders: {'{{surveyTitle}}'}, {'{{submissionDate}}'} and {'{{region}}'}. With regional routing on, the region is added to the subject automatically unless you place {'{{region}}'} yourself.
+                          </FormDescription>
                           <FormControl><Input {...field} value={field.value ?? ''} placeholder="New Submission: {{surveyTitle}}" /></FormControl>
                           <FormMessage />
                         </FormItem>

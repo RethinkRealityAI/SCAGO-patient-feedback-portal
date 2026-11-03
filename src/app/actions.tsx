@@ -224,6 +224,9 @@ async function logEmailResult(
     success: boolean;
     error?: string | null;
     skipped?: boolean;
+    /** Regional routing: the respondent's region and whether its contacts were notified. */
+    region?: string;
+    routedToRegion?: boolean;
   }
 ): Promise<void> {
   try {
@@ -354,7 +357,28 @@ export async function submitFeedback(
 
     // Send email notification if configured
     if (surveyData?.emailNotifications?.enabled) {
-      const emailConfig = surveyData.emailNotifications as SubmissionEmailConfig;
+      const baseConfig = surveyData.emailNotifications as SubmissionEmailConfig;
+      // Regional routing: add (or substitute) the contacts for the region of the
+      // respondent's city, using the admin control center's city -> region map.
+      let routing: { recipients: string[]; region?: string; routedToRegion: boolean } = {
+        recipients: baseConfig.recipients || [],
+        routedToRegion: false,
+      };
+      if (baseConfig.regionRouting?.enabled) {
+        try {
+          const { resolveNotificationRecipients } = await import('@/lib/region-routing');
+          const { loadCityToRegionMap } = await import('@/lib/region-mappings-server');
+          routing = resolveNotificationRecipients({
+            mainRecipients: baseConfig.recipients,
+            routing: baseConfig.regionRouting,
+            submission: formData,
+            cityToRegion: await loadCityToRegionMap(),
+          });
+        } catch (routingError) {
+          console.error('[submitFeedback] Regional routing failed; notifying the main recipients.', routingError);
+        }
+      }
+      const emailConfig: SubmissionEmailConfig = { ...baseConfig, recipients: routing.recipients };
       const subjectForLog = emailConfig.subject || `New Submission: ${surveyData.title}`;
       try {
         const { sendSubmissionEmail } = await import('@/lib/email-templates');
@@ -410,12 +434,17 @@ export async function submitFeedback(
           submissionId: docRef.id,
           submissionData: formData,
           pdfBuffer,
-          summary: await buildEmailSummary(emailConfig.summaryFieldIds, formData, fieldLabels),
+          summary: [
+            ...(routing.region ? [{ label: 'Region', value: routing.region === 'Unknown' ? 'Not assigned (city not mapped to a region)' : routing.region }] : []),
+            ...(await buildEmailSummary(emailConfig.summaryFieldIds, formData, fieldLabels)),
+          ],
+          region: routing.region && routing.region !== 'Unknown' ? routing.region : undefined,
         });
 
         await logEmailResult(surveyId, {
           type: 'staff-notification',
           submissionId: docRef.id,
+          ...(routing.region ? { region: routing.region, routedToRegion: routing.routedToRegion } : {}),
           recipients: emailConfig.recipients || [],
           subject: subjectForLog,
           success: emailResult.success,

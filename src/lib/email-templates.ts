@@ -2,6 +2,7 @@
 
 import nodemailer from 'nodemailer';
 import { formTextFr } from '@/lib/form-text-fr';
+import type { RegionRoutingConfig } from '@/lib/region-routing';
 import {
   buildPdfFilename,
   confirmationLabels,
@@ -490,15 +491,18 @@ export interface SubmissionEmailConfig {
   senderName?: string; // Custom sender name
   /** Field ids whose answers are listed in the email body (opt-in: puts personal info in the message). */
   summaryFieldIds?: string[];
+  /** Also notify regional contacts, chosen from the respondent's city. See src/lib/region-routing.ts. */
+  regionRouting?: RegionRoutingConfig;
 }
 
 /**
  * Replace template placeholders in subject or body
  */
-function replacePlaceholders(template: string, data: { surveyTitle: string; submissionDate: string }): string {
+function replacePlaceholders(template: string, data: { surveyTitle: string; submissionDate: string; region?: string }): string {
   return template
     .replace(/\{\{surveyTitle\}\}/g, data.surveyTitle)
-    .replace(/\{\{submissionDate\}\}/g, data.submissionDate);
+    .replace(/\{\{submissionDate\}\}/g, data.submissionDate)
+    .replace(/\{\{region\}\}/g, data.region || '');
 }
 
 /**
@@ -513,6 +517,8 @@ export async function sendSubmissionEmail(data: {
   pdfBuffer?: Uint8Array | null;
   /** Pre-formatted key answers for the email body; see SubmissionEmailConfig.summaryFieldIds. */
   summary?: Array<{ label: string; value: string }>;
+  /** The respondent's region, when regional routing is on; shown in the subject. */
+  region?: string;
 }): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
   // Validate configuration
   if (!data.config.enabled) {
@@ -547,14 +553,15 @@ export async function sendSubmissionEmail(data: {
     const defaultSubject = submitterName
       ? `New Submission: {{surveyTitle}} from ${submitterName}`
       : `New Submission: {{surveyTitle}} - {{submissionDate}}`;
-    const subject = replacePlaceholders(
-      data.config.subject || defaultSubject,
-      { surveyTitle: data.surveyTitle, submissionDate }
-    );
+    const subjectTemplate = data.config.subject || defaultSubject;
+    let subject = replacePlaceholders(subjectTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region });
+    // Lets regional contacts spot (and filter) their region's submissions,
+    // unless a custom subject already places {{region}} itself.
+    if (data.region && !subjectTemplate.includes('{{region}}')) subject += ` [${data.region}]`;
 
     // Prepare body
     const bodyText = data.config.bodyTemplate
-      ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate })
+      ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region })
       : undefined;
 
     // Generate HTML with submitter name and dashboard link. The attachment is
