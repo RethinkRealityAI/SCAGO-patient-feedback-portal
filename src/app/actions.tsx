@@ -227,6 +227,7 @@ async function logEmailResult(
     /** Regional routing: the respondent's region and whether its contacts were notified. */
     region?: string;
     routedToRegion?: boolean;
+    area?: string;
   }
 ): Promise<void> {
   try {
@@ -360,7 +361,7 @@ export async function submitFeedback(
       const baseConfig = surveyData.emailNotifications as SubmissionEmailConfig;
       // Regional routing: add (or substitute) the contacts for the region of the
       // respondent's city, using the admin control center's city -> region map.
-      let routing: { recipients: string[]; region?: string; routedToRegion: boolean } = {
+      let routing: { recipients: string[]; region?: string; area?: string; routedToRegion: boolean } = {
         recipients: baseConfig.recipients || [],
         routedToRegion: false,
       };
@@ -435,16 +436,23 @@ export async function submitFeedback(
           submissionData: formData,
           pdfBuffer,
           summary: [
-            ...(routing.region ? [{ label: 'Region', value: routing.region === 'Unknown' ? 'Not assigned (city not mapped to a region)' : routing.region }] : []),
+            ...(routing.region
+              ? [{
+                  label: 'Region',
+                  value: routing.region === 'Unknown'
+                    ? 'Not assigned (city not mapped to a region)'
+                    : routing.area ? `${routing.region} (${routing.area})` : routing.region,
+                }]
+              : []),
             ...(await buildEmailSummary(emailConfig.summaryFieldIds, formData, fieldLabels)),
           ],
-          region: routing.region && routing.region !== 'Unknown' ? routing.region : undefined,
+          region: routing.area || (routing.region && routing.region !== 'Unknown' ? routing.region : undefined),
         });
 
         await logEmailResult(surveyId, {
           type: 'staff-notification',
           submissionId: docRef.id,
-          ...(routing.region ? { region: routing.region, routedToRegion: routing.routedToRegion } : {}),
+          ...(routing.region ? { region: routing.region, ...(routing.area ? { area: routing.area } : {}), routedToRegion: routing.routedToRegion } : {}),
           recipients: emailConfig.recipients || [],
           subject: subjectForLog,
           success: emailResult.success,

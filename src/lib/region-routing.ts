@@ -16,21 +16,46 @@ export interface RegionRoutingConfig {
   /** Region name -> email addresses for that region. */
   routes?: Record<string, string[]>;
   /**
+   * Named groups of cities with their own contacts, e.g. Windsor-Essex inside
+   * the West region. For those cities they replace the region's contacts.
+   */
+  areaRoutes?: AreaRoute[];
+  /**
    * Also send every submission to the main recipients. Default true. When
    * false, the main recipients only get submissions no region contact covers.
    */
   alwaysNotifyMain?: boolean;
 }
 
+export interface AreaRoute {
+  /** Shown to staff and in the email subject, e.g. "Windsor-Essex". */
+  name: string;
+  /** City slugs, as stored by the City (Ontario) question. */
+  cities: string[];
+  emails: string[];
+}
+
 export const UNKNOWN_REGION = 'Unknown';
+
+/** A city answer as a slug ("north-bay"), or '' when there is none. Free-text "Other" answers keep their text. */
+function citySlug(cityAnswer: unknown): string {
+  const city = normalizeCityValue(cityAnswer);
+  return city ? city.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : '';
+}
 
 /** The region for a city answer, or Unknown when it isn't mapped (including free-text "Other"). */
 export function regionForCity(cityAnswer: unknown, cityToRegion: Record<string, string>): string {
   const city = normalizeCityValue(cityAnswer);
   if (!city) return UNKNOWN_REGION;
   // Mapping keys are slugs ("north-bay"); answers may be a slug or a label.
-  const slug = city.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return cityToRegion[city] || cityToRegion[slug] || UNKNOWN_REGION;
+  return cityToRegion[city] || cityToRegion[citySlug(cityAnswer)] || UNKNOWN_REGION;
+}
+
+/** The specific area (with contacts) a city answer falls in, if any. */
+export function areaForCity(cityAnswer: unknown, areas: AreaRoute[] | undefined): AreaRoute | undefined {
+  const slug = citySlug(cityAnswer);
+  if (!slug) return undefined;
+  return (areas || []).find(a => a.cities.includes(slug) && a.emails.some(e => e && e.trim()));
 }
 
 function dedupeEmails(lists: string[][]): string[] {
@@ -50,17 +75,20 @@ export interface RoutingDecision {
   recipients: string[];
   /** Set when regional routing is on (Unknown when the city didn't map). */
   region?: string;
-  /** True when the region had its own contacts. */
+  /** The specific area whose contacts were used, if the city is in one. */
+  area?: string;
+  /** True when the region (or area) had its own contacts. */
   routedToRegion: boolean;
 }
 
 /**
  * Who receives a submission's notification.
  * - Routing off: the main recipients.
- * - Region has contacts: those contacts, plus the main recipients unless
- *   `alwaysNotifyMain` is false.
- * - No contacts for the region (or no city): the main recipients, so nothing
- *   is ever dropped.
+ * - City is in a specific area with contacts: that area's contacts (instead of
+ *   the region's), plus the main recipients unless `alwaysNotifyMain` is false.
+ * - Otherwise, region has contacts: the same, with the region's contacts.
+ * - No contacts for the area or region (or no city): the main recipients, so
+ *   nothing is ever dropped.
  */
 export function resolveNotificationRecipients(input: {
   mainRecipients?: string[];
@@ -73,13 +101,15 @@ export function resolveNotificationRecipients(input: {
   if (!routing?.enabled || !routing.sourceFieldId) {
     return { recipients: main, routedToRegion: false };
   }
-  const region = regionForCity(input.submission[routing.sourceFieldId], input.cityToRegion);
-  const regional = dedupeEmails([routing.routes?.[region] || []]);
+  const cityAnswer = input.submission[routing.sourceFieldId];
+  const region = regionForCity(cityAnswer, input.cityToRegion);
+  const area = areaForCity(cityAnswer, routing.areaRoutes);
+  const regional = dedupeEmails([area ? area.emails : routing.routes?.[region] || []]);
   if (regional.length === 0) {
     return { recipients: main, region, routedToRegion: false };
   }
   const recipients = routing.alwaysNotifyMain === false ? regional : dedupeEmails([main, regional]);
-  return { recipients, region, routedToRegion: true };
+  return { recipients, region, ...(area ? { area: area.name } : {}), routedToRegion: true };
 }
 
 /** Cities mapped to each region, for showing what a region covers. */

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Loader2, Mail, MapPinned, X } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, MapPinned, Plus, Trash2, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import {
   UNKNOWN_REGION,
   citiesByRegion,
   resolveNotificationRecipients,
+  type AreaRoute,
   type RegionRoutingConfig,
 } from '@/lib/region-routing';
 
@@ -224,6 +225,82 @@ export function RegionRoutingSettings({
                 })}
               </ul>
 
+              <div className="space-y-2">
+                <div>
+                  <h4 className="text-sm font-semibold">Specific areas</h4>
+                  <p className="text-xs text-muted-foreground">
+                    A group of cities with its own contact, e.g. Windsor-Essex within the West region. These cities go to the area’s contact instead of the region’s.
+                  </p>
+                </div>
+                {(config.areaRoutes || []).map((area, index) => {
+                  const update = (patch: Partial<AreaRoute>) =>
+                    set({ areaRoutes: (config.areaRoutes || []).map((a, i) => (i === index ? { ...a, ...patch } : a)) });
+                  const remaining = cities.filter(c => !area.cities.includes(c.value));
+                  return (
+                    <div key={index} className="space-y-3 rounded-md border p-3">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          aria-label="Area name"
+                          value={area.name}
+                          onChange={e => update({ name: e.target.value })}
+                          placeholder="Area name, e.g. Windsor-Essex"
+                          className="h-9 sm:max-w-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => set({ areaRoutes: (config.areaRoutes || []).filter((_, i) => i !== index) })}
+                          className="ml-auto inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove area
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Cities</Label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {area.cities.map(city => (
+                            <span key={city} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
+                              {cityLabel.get(city) || city}
+                              <button
+                                type="button"
+                                onClick={() => update({ cities: area.cities.filter(c => c !== city) })}
+                                className="rounded hover:text-destructive"
+                                aria-label={`Remove ${cityLabel.get(city) || city}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                          <Select value="" onValueChange={v => update({ cities: [...area.cities, v] })}>
+                            <SelectTrigger aria-label="Add a city" className="h-7 w-auto gap-1 px-2 text-xs">
+                              <SelectValue placeholder="+ Add city" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {remaining.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`area-route-${index}`} className="text-xs">Contacts</Label>
+                        <EmailChips
+                          id={`area-route-${index}`}
+                          value={area.emails}
+                          onChange={emails => update({ emails })}
+                          placeholder="Add email addresses"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => set({ areaRoutes: [...(config.areaRoutes || []), { name: '', cities: [], emails: [] }] })}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-sm text-muted-foreground hover:border-primary hover:text-primary"
+                >
+                  <Plus className="h-4 w-4" /> Add a specific area
+                </button>
+              </div>
+
               <div className="space-y-2 rounded-md bg-muted/40 p-3">
                 <Label htmlFor="region-routing-preview" className="text-sm">Check where a submission goes</Label>
                 <Select value={previewCity} onValueChange={setPreviewCity}>
@@ -237,7 +314,10 @@ export function RegionRoutingSettings({
                 </Select>
                 {preview && (
                   <p className="text-sm">
-                    <span className="font-medium">{getRegionDisplayLabel(preview.region || UNKNOWN_REGION)}</span>
+                    <span className="font-medium">
+                      {getRegionDisplayLabel(preview.region || UNKNOWN_REGION)}
+                      {preview.area && ` (${preview.area})`}
+                    </span>
                     <ArrowRight className="mx-1.5 inline h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                     {preview.recipients.length ? preview.recipients.join(', ') : <span className="text-destructive">no one (add main recipients above)</span>}
                     {!preview.routedToRegion && <span className="text-muted-foreground"> (main recipients; no regional contacts)</span>}

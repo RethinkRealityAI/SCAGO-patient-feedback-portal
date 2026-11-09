@@ -158,6 +158,11 @@ const surveySchema = z.object({
       enabled: z.boolean().optional(),
       sourceFieldId: z.string().optional(),
       routes: z.record(z.array(z.string().email())).optional(),
+      areaRoutes: z.array(z.object({
+        name: z.string(),
+        cities: z.array(z.string()),
+        emails: z.array(z.string().email()),
+      })).optional(),
       alwaysNotifyMain: z.boolean().optional(),
     }).optional(),
   }).optional(),
