@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Clock, Loader, RefreshCw, Repeat2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Clock, Download, Loader, RefreshCw, Repeat2 } from 'lucide-react'
 import { MarkdownReport } from '@/components/markdown-report'
 import { FeedbackSubmission } from '../types'
 import { analyzeFeedbackForSurvey } from '../actions'
@@ -135,7 +135,7 @@ function aiAnalysisWanted(config: SurveyConfig | null): boolean {
 type CaseTab = 'all' | 'awaiting' | 'overdue' | 'in-progress' | 'closed'
 
 export default function SurveyDashboardClient({ surveyId }: { surveyId: string }) {
-  const { isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
+  const { user, isAdmin, isSuperAdmin, allowedForms, loading: authLoading, permissionsLoading } = useAuth()
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [submissionMetrics, setSubmissionMetrics] = useState<Map<string, SubmissionMetrics>>(new Map())
   const [surveyConfig, setSurveyConfig] = useState<SurveyConfig | null>(null)
@@ -205,7 +205,10 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
         // Use the resolved Firestore doc ID — never the raw URL param —
         // so submissions are always fetched from surveys/{docId}/submissions/
-        const filteredSubmissions = await fetchSubmissionsForSurvey(resolvedId)
+        // Regional contacts see only their own region's (or area's) submissions.
+        const { loadViewerFilter } = await import('@/lib/region-visibility-client')
+        const isVisible = await loadViewerFilter([resolvedId], { email: user?.email, isSuperAdmin })
+        const filteredSubmissions = (await fetchSubmissionsForSurvey(resolvedId)).filter(s => isVisible(s as any))
 
         // Resolve each submission's rating and narrative from the survey's own
         // field definitions. Survey-editor fields carry generated ids, so the
@@ -243,7 +246,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
     }
 
     fetchData()
-  }, [surveyId, authLoading, permissionsLoading, isAdmin, isSuperAdmin, allowedForms])
+  }, [surveyId, authLoading, permissionsLoading, isAdmin, isSuperAdmin, allowedForms, user])
 
   // ── Review helpers ──────────────────────────────────────────────────────────
 
@@ -424,9 +427,12 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
   const hasImported = submissions.some(s => (s as any).importedFrom)
   const openCase = openCaseId ? submissions.find(s => s.id === openCaseId) ?? null : null
 
-  /** Download the cases currently shown, every answer included, as a spreadsheet. */
+  /**
+   * Download the submissions shown (filtered cases on case-managed forms), every
+   * answer included, as a spreadsheet. Regional contacts only ever have their
+   * own region's submissions loaded, so that is all they can export.
+   */
   const exportCases = () => {
-    if (!caseConfig) return
     const answerFields = formFields.filter(f => !['text-block', 'logo', 'group'].includes(f.type))
     const cellFor = (value: any, type?: string): string => {
       if (value === null || value === undefined) return ''
@@ -439,17 +445,37 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
       }
       return String(value)
     }
+    const answersOf = (raw: any) =>
+      answerFields.map(f => {
+        const main = cellFor(raw[f.id], f.type)
+        const other = raw[`${f.id}_otherValue`]
+        return other ? `${main} (Other: ${other})` : main
+      })
+    const received = (s: FeedbackSubmission) => new Date(s.submittedAt).toLocaleString('en-CA', { timeZone: 'America/Toronto' })
+    const download = (rows: (string | number)[][], name: string) => {
+      const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+    const fileBase = (surveyTitle || resolvedSurveyId || surveyId).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+    if (!caseConfig) {
+      const newestFirst = [...submissions].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+      download([['Received', ...answerFields.map(f => f.label || f.id)], ...newestFirst.map(s => [received(s), ...answersOf(s)])], fileBase)
+      return
+    }
+
     const header = ['Received', 'Status', 'Assigned to', 'Response due', ...answerFields.map(f => f.label || f.id), 'Notes', 'Source']
     const rows = filteredCases.map(s => {
       const raw = s as any
       const { status, sla } = caseInfo(s)
-      const answers = answerFields.flatMap(f => {
-        const main = cellFor(raw[f.id], f.type)
-        const other = raw[`${f.id}_otherValue`]
-        return [other ? `${main} (Other: ${other})` : main]
-      })
+      const answers = answersOf(raw)
       return [
-        new Date(s.submittedAt).toLocaleString('en-CA', { timeZone: 'America/Toronto' }),
+        received(s),
         caseStatusLabel(status, caseConfig),
         raw.assignedTo || '',
         sla.kind === 'none' ? '' : sla.dueDate.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }),
@@ -458,13 +484,7 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
         raw.importedFrom ? `Imported (${raw.importedFrom})` : 'Portal',
       ]
     })
-    const blob = new Blob([toCsv([header, ...rows])], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${resolvedSurveyId || surveyId}-cases-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    download([header, ...rows], `${fileBase}-cases`)
   }
 
   const applyCaseUpdate = (submissionId: string, patch: Record<string, any>) =>
@@ -1085,13 +1105,22 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
         {/* Submissions */}
         <Card id="case-list" className="scroll-mt-24">
-          <CardHeader>
-            <CardTitle>{caseConfig ? 'Requests' : 'Submissions'}</CardTitle>
-            <CardDescription>
-              {caseConfig
-                ? 'Search, filter and open a request to update its status, assignee or notes.'
-                : 'Individual responses for this survey'}
-            </CardDescription>
+          <CardHeader className={caseConfig ? undefined : 'flex flex-row flex-wrap items-start justify-between gap-3 space-y-0'}>
+            <div className="space-y-1.5">
+              <CardTitle>{caseConfig ? 'Requests' : 'Submissions'}</CardTitle>
+              <CardDescription>
+                {caseConfig
+                  ? 'Search, filter and open a request to update its status, assignee or notes.'
+                  : 'Individual responses for this survey'}
+              </CardDescription>
+            </div>
+            {/* Case-managed forms export from their filter bar instead. */}
+            {!caseConfig && totalSubmissions > 0 && (
+              <Button type="button" variant="outline" className="gap-2" onClick={exportCases} title="Download these submissions as a spreadsheet">
+                <Download className="h-4 w-4" />
+                Export CSV
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {totalSubmissions === 0 ? (

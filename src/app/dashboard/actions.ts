@@ -93,6 +93,31 @@ async function surveyTitleOf(surveyId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Limit submissions to what the signed-in viewer may see: non-super-admins get
+ * only their permitted forms, and a regional contact only their own region's
+ * (or area's) submissions on forms with regional routing.
+ */
+async function scopeToViewer<T extends { surveyId?: string }>(submissions: T[]): Promise<{ submissions: T[]; viewerKey: string }> {
+  const { getServerSession } = await getServerAuth();
+  const session = await getServerSession();
+  if (!session) return { submissions: [], viewerKey: 'none' };
+  const isSuperAdmin = session.role === 'super-admin';
+  let list = submissions;
+  if (!isSuperAdmin) {
+    const { getAdminFirestore } = await import('@/lib/firebase-admin');
+    const perms = (await getAdminFirestore().collection('config').doc('page_permissions').get()).data();
+    const allowed: string[] = perms?.formsByEmail?.[session.email] || [];
+    list = list.filter(s => !!s.surveyId && allowed.includes(s.surveyId));
+  }
+  const { loadViewerFilterServer } = await import('@/lib/region-mappings-server');
+  const isVisible = await loadViewerFilterServer(
+    list.map(s => s.surveyId || ''),
+    { email: session.email, isSuperAdmin }
+  );
+  return { submissions: list.filter(s => isVisible(s as any)), viewerKey: isSuperAdmin ? 'all' : session.email };
+}
+
 /** Read a `{ selection, other }` style answer, or a plain string. */
 function extractSelectionValue(value: any): string {
   if (typeof value === 'string') return value.trim();
@@ -218,7 +243,7 @@ export async function analyzeFeedback() {
 
     // Fetch all submissions using utility function (handles both new and legacy structures)
     const { fetchAllSubmissionsAdmin } = await getSubmissionUtils();
-    const feedbackList = await fetchAllSubmissionsAdmin();
+    const feedbackList = (await scopeToViewer(await fetchAllSubmissionsAdmin())).submissions;
 
     if (feedbackList.length === 0) {
       return { summary: 'No feedback submissions yet. Start by sharing the survey link!' };
@@ -311,9 +336,10 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
       return { error: 'Survey ID is required for analysis.' };
     }
 
-    // Fetch submissions for this survey using utility function
+    // Fetch submissions for this survey, limited to what this viewer may see
     const { fetchSubmissionsForSurveyAdmin } = await getSubmissionUtils();
-    const allSubmissions = await fetchSubmissionsForSurveyAdmin(surveyId);
+    const scoped = await scopeToViewer(await fetchSubmissionsForSurveyAdmin(surveyId));
+    const allSubmissions = scoped.submissions;
 
     // Get survey-specific context
     let surveyContext = getSurveyContextFromId(surveyId, allSubmissions);
@@ -332,7 +358,8 @@ export async function analyzeFeedbackForSurvey(surveyId: string) {
     // request from the (small) daily quota on a page refresh. The key includes
     // the submission count and newest timestamp, so new data always regenerates.
     const newestAt = Math.max(...feedbackList.map(f => new Date(f.submittedAt).getTime() || 0));
-    const cacheKey = `${surveyId}:${surveyContext.type}:${feedbackList.length}:${newestAt}`;
+    // Viewer scope is part of the key: a regional contact's summary covers only their region.
+    const cacheKey = `${surveyId}:${scoped.viewerKey}:${surveyContext.type}:${feedbackList.length}:${newestAt}`;
     const cached = readAnalysisCache(cacheKey);
     if (cached) return cached;
 
@@ -604,6 +631,7 @@ export async function generateAnalysisPdf(params: {
       } else {
         submissions = await fetchSubmissionsForSurveyAdmin(params.surveyId);
       }
+      submissions = (await scopeToViewer(submissions)).submissions;
       // Sort by submittedAt descending
       submissions.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
 
@@ -931,9 +959,10 @@ export async function chatWithFeedbackData(query: string, surveyId?: string): Pr
     const authModule = await getServerAuth();
     await authModule.enforcePagePermission('forms-dashboard');
 
-    // Fetch submissions using utility function
+    // Fetch submissions, limited to the forms (and, for regional contacts, the
+    // region) this viewer may see. "All surveys" previously meant every form.
     const utilsModule = await getSubmissionUtils();
-    const allSubmissions = await utilsModule.fetchAllSubmissionsAdmin();
+    const allSubmissions = (await scopeToViewer(await utilsModule.fetchAllSubmissionsAdmin())).submissions;
     const surveyContext = getSurveyContextFromId(surveyId || 'all', allSubmissions);
 
     // Filter by survey if surveyId is provided

@@ -112,6 +112,41 @@ export function resolveNotificationRecipients(input: {
   return { recipients, region, ...(area ? { area: area.name } : {}), routedToRegion: true };
 }
 
+/** Whether `email` is a regional or area contact in this routing. */
+export function isRoutingContact(email: string, routing: RegionRoutingConfig | undefined): boolean {
+  if (!routing?.enabled) return false;
+  const me = email.trim().toLowerCase();
+  if (!me) return false;
+  const lists = [...Object.values(routing.routes || {}), ...(routing.areaRoutes || []).map(a => a.emails)];
+  return lists.some(list => list.some(e => e.trim().toLowerCase() === me));
+}
+
+/**
+ * What a viewer may see of a form with regional routing: a regional contact
+ * sees only the submissions routed to them (their region or area); everyone
+ * else (super-admins, main recipients, other staff) sees all of them.
+ */
+export function visibleToViewer(
+  submission: Record<string, unknown>,
+  routing: RegionRoutingConfig | undefined,
+  cityToRegion: Record<string, string>,
+  viewer: { email: string; isSuperAdmin: boolean }
+): boolean {
+  if (viewer.isSuperAdmin || !routing?.enabled || !routing.sourceFieldId) return true;
+  if (!isRoutingContact(viewer.email, routing)) return true;
+  const me = viewer.email.trim().toLowerCase();
+  const { recipients } = resolveNotificationRecipients({ mainRecipients: [], routing, submission, cityToRegion });
+  return recipients.some(r => r.toLowerCase() === me);
+}
+
+/** The city -> region map in effect: a saved, non-empty map replaces the built-in defaults. */
+export function effectiveCityToRegion(
+  saved: Record<string, string> | null | undefined,
+  defaults: Record<string, string>
+): Record<string, string> {
+  return saved && Object.keys(saved).length > 0 ? saved : { ...defaults };
+}
+
 /** Cities mapped to each region, for showing what a region covers. */
 export function citiesByRegion(cityToRegion: Record<string, string>): Record<string, string[]> {
   const out: Record<string, string[]> = {};

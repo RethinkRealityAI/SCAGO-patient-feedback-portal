@@ -366,6 +366,13 @@ export default function Dashboard() {
           )
         }
 
+        // Regional contacts see only their own region's (or area's) submissions.
+        {
+          const { loadViewerFilter } = await import('@/lib/region-visibility-client')
+          const isVisible = await loadViewerFilter(surveysData.map(s => s.id), { email: user?.email, isSuperAdmin })
+          uniqueSubmissions = uniqueSubmissions.filter(s => isVisible(s as any))
+        }
+
         // Derive the canonical `rating` / `hospitalInteraction` values from each
         // survey's own field definitions. Surveys built in the editor name their
         // fields whatever the editor generated, so these values can only be
@@ -1209,6 +1216,12 @@ export default function Dashboard() {
         feedbackList = feedbackList.filter(s =>
           authorizedIds.includes(s.surveyId)
         )
+      }
+
+      {
+        const { loadViewerFilter } = await import('@/lib/region-visibility-client')
+        const isVisible = await loadViewerFilter(surveysData.map(s => s.id), { email: user?.email, isSuperAdmin })
+        feedbackList = feedbackList.filter(s => isVisible(s as any))
       }
 
       setSubmissions(feedbackList)

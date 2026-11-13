@@ -9,6 +9,7 @@
  */
 import { DEFAULT_CITY_TO_REGION } from '@/lib/city-to-region';
 import { DEFAULT_REGIONS } from '@/types/patient';
+import { isRoutingContact, visibleToViewer, type RegionRoutingConfig } from '@/lib/region-routing';
 
 const slug = (value: string) =>
   value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -37,4 +38,32 @@ export async function loadCityToRegionMap(): Promise<Record<string, string>> {
     console.error('[region-mappings] Could not load region mappings; using defaults.', error);
     return { ...DEFAULT_CITY_TO_REGION };
   }
+}
+
+/**
+ * Server-side counterpart of loadViewerFilter (src/lib/region-visibility-client.ts),
+ * for server code that reads submissions on a viewer's behalf (e.g. AI summaries):
+ * a regional contact sees only their region's submissions on routed forms.
+ */
+export async function loadViewerFilterServer(
+  surveyIds: string[],
+  viewer: { email: string; isSuperAdmin: boolean }
+): Promise<(submission: { surveyId?: string } & Record<string, any>) => boolean> {
+  const email = (viewer.email || '').toLowerCase();
+  if (viewer.isSuperAdmin || !email) return () => true;
+  const { getAdminFirestore } = await import('@/lib/firebase-admin');
+  const firestore = getAdminFirestore();
+  const routings = new Map<string, RegionRoutingConfig>();
+  await Promise.all(
+    [...new Set(surveyIds.filter(Boolean))].map(async id => {
+      const routing = (await firestore.collection('surveys').doc(id).get()).data()?.emailNotifications?.regionRouting;
+      if (isRoutingContact(email, routing)) routings.set(id, routing);
+    })
+  );
+  if (routings.size === 0) return () => true;
+  const cityToRegion = await loadCityToRegionMap();
+  return submission => {
+    const routing = submission.surveyId ? routings.get(submission.surveyId) : undefined;
+    return routing ? visibleToViewer(submission, routing, cityToRegion, { email, isSuperAdmin: false }) : true;
+  };
 }

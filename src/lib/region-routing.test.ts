@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { citiesByRegion, regionForCity, resolveNotificationRecipients } from './region-routing';
+import { citiesByRegion, regionForCity, resolveNotificationRecipients, visibleToViewer } from './region-routing';
 
 const cityToRegion = { toronto: 'GTA', mississauga: 'GTA', hamilton: 'Hamilton-Wentworth', ottawa: 'East' };
 const routing = {
@@ -73,6 +73,31 @@ describe('specific areas', () => {
     const d = resolveNotificationRecipients({ mainRecipients: main, routing: empty, submission: { city: { selection: 'windsor' } }, cityToRegion: map });
     expect(d.recipients).toEqual(['tech@scago.ca', 'swo@scago.ca']);
     expect(d.area).toBeUndefined();
+  });
+});
+
+describe('visibleToViewer', () => {
+  const map = { ...cityToRegion, windsor: 'West', london: 'West' };
+  const r = {
+    ...routing,
+    routes: { ...routing.routes, West: ['swo@scago.ca'] },
+    areaRoutes: [{ name: 'Windsor-Essex', cities: ['windsor'], emails: ['windsor@scago.ca'] }],
+  };
+  const sub = (city: string) => ({ city: { selection: city } });
+  const viewer = (email: string, isSuperAdmin = false) => ({ email, isSuperAdmin });
+
+  it('shows a regional contact only their region, and an area contact only their area', () => {
+    expect(visibleToViewer(sub('london'), r, map, viewer('SWO@scago.ca'))).toBe(true);
+    expect(visibleToViewer(sub('windsor'), r, map, viewer('swo@scago.ca'))).toBe(false);
+    expect(visibleToViewer(sub('toronto'), r, map, viewer('swo@scago.ca'))).toBe(false);
+    expect(visibleToViewer(sub('windsor'), r, map, viewer('windsor@scago.ca'))).toBe(true);
+    expect(visibleToViewer(sub('london'), r, map, viewer('windsor@scago.ca'))).toBe(false);
+  });
+
+  it('shows everything to super-admins, non-contacts, and when routing is off', () => {
+    expect(visibleToViewer(sub('toronto'), r, map, viewer('swo@scago.ca', true))).toBe(true);
+    expect(visibleToViewer(sub('toronto'), r, map, viewer('someone@scago.ca'))).toBe(true);
+    expect(visibleToViewer(sub('toronto'), { ...r, enabled: false }, map, viewer('swo@scago.ca'))).toBe(true);
   });
 });
 
