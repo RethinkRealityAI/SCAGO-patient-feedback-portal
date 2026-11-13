@@ -49,7 +49,7 @@ import { Line, LineChart, CartesianGrid, XAxis, YAxis, Bar, BarChart, Pie, PieCh
 import { Card as UCard } from '@/components/ui/card'
 
 import { FeedbackSubmission } from './types'
-import { analyzeFeedback, generateAnalysisPdf, exportSubmissionsPdf, exportSubmissionPdf } from './actions'
+import { analyzeFeedback, generateAnalysisPdf, exportSubmissionsPdf, exportSubmissionPdf, getViewerScopedSubmissions } from './actions'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
 import { useNotificationCenter, useAnalyticsNotifications } from '@/hooks/use-notifications'
@@ -325,6 +325,21 @@ export default function Dashboard() {
     return ['all', ...locations.sort()]
   }, [submissions, selectedSurvey, isAdmin, isSuperAdmin, allowedForms])
 
+  /**
+   * For forms where the viewer is a regional contact, swap in the server's
+   * region-scoped submissions (direct reads of those forms are denied).
+   */
+  const withRegionallyScopedForms = async (list: FeedbackSubmission[], surveyIds: string[]) => {
+    const { regionallyScopedForms } = await import('@/lib/region-visibility-client')
+    const scoped = await regionallyScopedForms(surveyIds, { email: user?.email, isSuperAdmin })
+    if (scoped.size === 0) return list
+    const fromServer = await Promise.all([...scoped].map(id => getViewerScopedSubmissions(id)))
+    return [
+      ...list.filter(s => !scoped.has(s.surveyId)),
+      ...fromServer.flatMap(result => ('error' in result ? [] : result)),
+    ]
+  }
+
   // Fetch data on mount or when auth state changes
   useEffect(() => {
     async function fetchData() {
@@ -366,12 +381,9 @@ export default function Dashboard() {
           )
         }
 
-        // Regional contacts see only their own region's (or area's) submissions.
-        {
-          const { loadViewerFilter } = await import('@/lib/region-visibility-client')
-          const isVisible = await loadViewerFilter(surveysData.map(s => s.id), { email: user?.email, isSuperAdmin })
-          uniqueSubmissions = uniqueSubmissions.filter(s => isVisible(s as any))
-        }
+        // Regional contacts can't read routed forms directly (Firestore rules);
+        // the server gives them only their own region's (or area's) submissions.
+        uniqueSubmissions = await withRegionallyScopedForms(uniqueSubmissions, surveysData.map(s => s.id))
 
         // Derive the canonical `rating` / `hospitalInteraction` values from each
         // survey's own field definitions. Surveys built in the editor name their
@@ -1218,11 +1230,7 @@ export default function Dashboard() {
         )
       }
 
-      {
-        const { loadViewerFilter } = await import('@/lib/region-visibility-client')
-        const isVisible = await loadViewerFilter(surveysData.map(s => s.id), { email: user?.email, isSuperAdmin })
-        feedbackList = feedbackList.filter(s => isVisible(s as any))
-      }
+      feedbackList = await withRegionallyScopedForms(feedbackList, surveysData.map(s => s.id))
 
       setSubmissions(feedbackList)
       setSurveys(surveysData)

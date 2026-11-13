@@ -25,6 +25,12 @@ export interface RegionRoutingConfig {
    * false, the main recipients only get submissions no region contact covers.
    */
   alwaysNotifyMain?: boolean;
+  /**
+   * Every regional and area contact, lowercased. Derived (see routingContacts)
+   * and saved alongside the settings so Firestore rules can stop these people
+   * reading the form's submissions directly; they get theirs from the server.
+   */
+  contacts?: string[];
 }
 
 export interface AreaRoute {
@@ -110,6 +116,12 @@ export function resolveNotificationRecipients(input: {
   }
   const recipients = routing.alwaysNotifyMain === false ? regional : dedupeEmails([main, regional]);
   return { recipients, region, ...(area ? { area: area.name } : {}), routedToRegion: true };
+}
+
+/** Every regional and area contact in this routing, lowercased and de-duplicated. */
+export function routingContacts(routing: RegionRoutingConfig | undefined): string[] {
+  const lists = [...Object.values(routing?.routes || {}), ...(routing?.areaRoutes || []).map(a => a.emails)];
+  return [...new Set(lists.flat().map(e => (e || '').trim().toLowerCase()).filter(Boolean))].sort();
 }
 
 /** Whether `email` is a regional or area contact in this routing. */

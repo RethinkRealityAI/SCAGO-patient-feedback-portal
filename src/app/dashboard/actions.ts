@@ -519,6 +519,26 @@ export async function getSubmissions(): Promise<FeedbackSubmission[] | { error: 
   }
 }
 
+/**
+ * Submissions for a form, limited to what the signed-in viewer may see. Regional
+ * contacts on a routed form can't read its submissions directly (Firestore rules
+ * deny them), so their dashboards load through here and get only their region's.
+ */
+export async function getViewerScopedSubmissions(surveyId: string): Promise<FeedbackSubmission[] | { error: string }> {
+  noStore();
+  try {
+    const { enforcePagePermission } = await getServerAuth();
+    await enforcePagePermission('forms-dashboard');
+    if (!surveyId || surveyId.trim() === '') return { error: 'Survey ID is required.' };
+    const { fetchSubmissionsForSurveyAdmin } = await getSubmissionUtils();
+    return (await scopeToViewer(await fetchSubmissionsForSurveyAdmin(surveyId))).submissions;
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    console.error('[getViewerScopedSubmissions] Failed:', e);
+    return { error: 'Could not load submissions. Please refresh and try again.' };
+  }
+}
+
 export async function getSubmissionsForSurvey(surveyId: string): Promise<FeedbackSubmission[] | { error: string }> {
   noStore();
   try {

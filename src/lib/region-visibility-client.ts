@@ -1,49 +1,33 @@
 /**
- * Dashboard-side filter so a regional contact sees only their region's (or
- * area's) submissions on forms with regional routing. Rules live in
- * visibleToViewer (src/lib/region-routing.ts); this loads what they need.
+ * Which forms the signed-in viewer is a regional (or area) contact on.
+ *
+ * Firestore rules stop regional contacts reading those forms' submissions
+ * directly (docs/firestore.rules, isRegionalContact), so dashboards load them
+ * through the getViewerScopedSubmissions server action instead, which returns
+ * only the viewer's own region. Everyone else reads as before.
  */
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { DEFAULT_CITY_TO_REGION } from '@/lib/city-to-region';
-import { effectiveCityToRegion, isRoutingContact, visibleToViewer, type RegionRoutingConfig } from '@/lib/region-routing';
+import { isRoutingContact, type RegionRoutingConfig } from '@/lib/region-routing';
 
-export type ViewerFilter = (submission: { surveyId?: string } & Record<string, any>) => boolean;
-
-const showAll: ViewerFilter = () => true;
-
-export async function loadViewerFilter(
+export async function regionallyScopedForms(
   surveyIds: string[],
   viewer: { email: string | null | undefined; isSuperAdmin: boolean }
-): Promise<ViewerFilter> {
+): Promise<Set<string>> {
   const email = (viewer.email || '').toLowerCase();
-  if (viewer.isSuperAdmin || !email) return showAll;
-
-  const ids = [...new Set(surveyIds.filter(Boolean))];
-  const routings = new Map<string, RegionRoutingConfig>();
+  const scoped = new Set<string>();
+  if (viewer.isSuperAdmin || !email) return scoped;
   await Promise.all(
-    ids.map(async id => {
+    [...new Set(surveyIds.filter(Boolean))].map(async id => {
       try {
-        const snap = await getDoc(doc(db, 'surveys', id));
-        const routing = snap.data()?.emailNotifications?.regionRouting as RegionRoutingConfig | undefined;
-        if (isRoutingContact(email, routing)) routings.set(id, routing!);
+        const routing = (await getDoc(doc(db, 'surveys', id))).data()?.emailNotifications?.regionRouting as
+          | RegionRoutingConfig
+          | undefined;
+        if (isRoutingContact(email, routing)) scoped.add(id);
       } catch {
-        // Unreadable survey: leave its submissions as they are.
+        // Unreadable form: treat as not scoped; the rules still decide what loads.
       }
     })
   );
-  if (routings.size === 0) return showAll;
-
-  let saved: Record<string, string> | null = null;
-  try {
-    saved = ((await getDoc(doc(db, 'config', 'region_mappings'))).data()?.mappings as Record<string, string>) || null;
-  } catch {
-    // Fall back to the built-in map.
-  }
-  const cityToRegion = effectiveCityToRegion(saved, DEFAULT_CITY_TO_REGION);
-
-  return submission => {
-    const routing = submission.surveyId ? routings.get(submission.surveyId) : undefined;
-    return routing ? visibleToViewer(submission, routing, cityToRegion, { email, isSuperAdmin: false }) : true;
-  };
+  return scoped;
 }

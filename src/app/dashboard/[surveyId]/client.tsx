@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Clock, Download, Loader, RefreshCw, Repeat2 } from 'lucide-react'
 import { MarkdownReport } from '@/components/markdown-report'
 import { FeedbackSubmission } from '../types'
-import { analyzeFeedbackForSurvey } from '../actions'
+import { analyzeFeedbackForSurvey, getViewerScopedSubmissions } from '../actions'
 import { DashboardWidgets, type DashboardWidget } from '@/components/dashboard-widgets'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
@@ -205,10 +205,18 @@ export default function SurveyDashboardClient({ surveyId }: { surveyId: string }
 
         // Use the resolved Firestore doc ID — never the raw URL param —
         // so submissions are always fetched from surveys/{docId}/submissions/
-        // Regional contacts see only their own region's (or area's) submissions.
-        const { loadViewerFilter } = await import('@/lib/region-visibility-client')
-        const isVisible = await loadViewerFilter([resolvedId], { email: user?.email, isSuperAdmin })
-        const filteredSubmissions = (await fetchSubmissionsForSurvey(resolvedId)).filter(s => isVisible(s as any))
+        // Regional contacts can't read a routed form directly (Firestore rules);
+        // the server gives them only their own region's (or area's) submissions.
+        const { regionallyScopedForms } = await import('@/lib/region-visibility-client')
+        const scoped = await regionallyScopedForms([resolvedId], { email: user?.email, isSuperAdmin })
+        let filteredSubmissions: FeedbackSubmission[]
+        if (scoped.has(resolvedId)) {
+          const result = await getViewerScopedSubmissions(resolvedId)
+          if ('error' in result) throw new Error(result.error)
+          filteredSubmissions = result
+        } else {
+          filteredSubmissions = await fetchSubmissionsForSurvey(resolvedId)
+        }
 
         // Resolve each submission's rating and narrative from the survey's own
         // field definitions. Survey-editor fields carry generated ids, so the

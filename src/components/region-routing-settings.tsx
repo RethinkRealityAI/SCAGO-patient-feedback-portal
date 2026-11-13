@@ -13,6 +13,7 @@ import {
   UNKNOWN_REGION,
   citiesByRegion,
   resolveNotificationRecipients,
+  routingContacts,
   type AreaRoute,
   type RegionRoutingConfig,
 } from '@/lib/region-routing';
@@ -104,7 +105,12 @@ export function RegionRoutingSettings({
     return () => { cancelled = true; };
   }, []);
 
-  const set = (patch: Partial<RegionRoutingConfig>) => onChange({ ...config, ...patch });
+  // `contacts` is kept in step with the routes: the database rules use it to
+  // keep regional contacts to their own region's submissions.
+  const set = (patch: Partial<RegionRoutingConfig>) => {
+    const next = { ...config, ...patch };
+    onChange({ ...next, contacts: routingContacts(next) });
+  };
   const setRoute = (region: string, emails: string[]) => set({ routes: { ...(config.routes || {}), [region]: emails } });
 
   const cityLabel = useMemo(() => new Map(cities.map(c => [c.value, c.label])), [cities]);

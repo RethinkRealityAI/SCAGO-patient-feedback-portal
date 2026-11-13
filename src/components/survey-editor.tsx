@@ -164,6 +164,7 @@ const surveySchema = z.object({
         emails: z.array(z.string().email()),
       })).optional(),
       alwaysNotifyMain: z.boolean().optional(),
+      contacts: z.array(z.string()).optional(),
     }).optional(),
   }).optional(),
   // Configured by script for now (see scripts/create-counselling-intake-form.js).
