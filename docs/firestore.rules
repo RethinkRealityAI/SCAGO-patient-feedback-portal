@@ -48,7 +48,12 @@ service cloud.firestore {
       let routing = get(/databases/$(database)/documents/surveys/$(surveyId)).data
         .get('emailNotifications', {}).get('regionRouting', {});
       return routing.get('enabled', false) == true
-        && request.auth.token.email in routing.get('contacts', []);
+        && request.auth.token.email.lower() in routing.get('contacts', []);
+    }
+
+    function regionRoutingUnchanged() {
+      return request.resource.data.get('emailNotifications', {}).get('regionRouting', null)
+        == resource.data.get('emailNotifications', {}).get('regionRouting', null);
     }
 
     // Super-admins see every form; other admins only the forms assigned to them,
@@ -60,7 +65,13 @@ service cloud.firestore {
     // Surveys - Read by anyone, Write by admin only
     match /surveys/{surveyId} {
       allow read: if true;  // Anyone can view surveys
-      allow create, update, delete: if isAdmin();  // Only admins can modify
+      allow create: if isAdmin();
+      // Regional routing decides who sees which submissions (see isRegionalContact),
+      // so only super-admins may change it, and a form's own regional contacts
+      // may not edit or delete that form at all.
+      allow update: if isSuperAdmin()
+        || (isAdmin() && !isRegionalContact(surveyId) && regionRoutingUnchanged());
+      allow delete: if isSuperAdmin() || (isAdmin() && !isRegionalContact(surveyId));
 
       // Organized feedback submissions structure: surveys/{surveyId}/submissions/{submissionId}
       match /submissions/{submissionId} {
@@ -90,7 +101,10 @@ service cloud.firestore {
     // Config collection - Read by authenticated users, Write by admin only
     match /config/{docId} {
       allow read: if isAuthenticated();  // Authenticated users can check admin status
-      allow write: if isAdmin();  // Only admins can modify
+      // Permissions and the city -> region map decide who can see what; they are
+      // written by server actions (Admin SDK), never directly by a browser.
+      allow write: if isSuperAdmin()
+        || (isAdmin() && !(docId in ['page_permissions', 'region_mappings', 'regions']));
     }
     
     // User tracking - Anyone can write (for login tracking), Admin can read
