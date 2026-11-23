@@ -142,12 +142,22 @@ const FormDescription = React.forwardRef<
 })
 FormDescription.displayName = "FormDescription"
 
+/**
+ * Translates validation messages for display (e.g. into French). Messages are
+ * written once, in English, by the schema; a form that offers another
+ * language provides a translator here. Defaults to showing them as written.
+ */
+const FormMessageTranslationContext = React.createContext<(message: string) => string>(
+  (message) => message
+)
+
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, children, ...props }, ref) => {
   const { error, formMessageId } = useFormField()
-  const body = error ? String(error?.message ?? "") : children
+  const translate = React.useContext(FormMessageTranslationContext)
+  const body = error ? translate(String(error?.message ?? "")) : children
 
   if (!body) {
     return null
@@ -167,6 +177,7 @@ const FormMessage = React.forwardRef<
 FormMessage.displayName = "FormMessage"
 
 export {
+  FormMessageTranslationContext,
   useFormField,
   Form,
   FormItem,

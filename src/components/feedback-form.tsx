@@ -12,6 +12,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormMessageTranslationContext,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Slider as UiSlider } from "@/components/ui/slider"
@@ -58,7 +59,7 @@ import { useTranslation, translateFieldLabel, translateOption, translateSectionT
 import { LanguageToggle } from '@/components/language-toggle';
 import { FormFieldRenderer, type FieldDef } from '@/components/form-field-renderer';
 import { isConditionMet } from '@/lib/field-conditions';
-import { translateFormText } from '@/lib/form-text-fr';
+import { translateFormText, translateValidationMessage } from '@/lib/form-text-fr';
 import { SignaturePad } from '@/components/signature-pad';
 import {
   MultiTextField,
@@ -738,14 +739,28 @@ function TimeAmountField({ field }: { field: any }) {
  * page so the frame can grow with it, and avoids pop-ups that would open in
  * the middle of a tall frame where the visitor can't see them.
  */
-export default function FeedbackForm({ survey, embedded = false }: { survey: any; embedded?: boolean }) {
+const identityMessage = (message: string) => message;
+
+export default function FeedbackForm({
+  survey,
+  embedded = false,
+  initialLanguage = 'en',
+  hideLanguageToggle = false,
+}: {
+  survey: any;
+  embedded?: boolean;
+  /** Language to start in, e.g. French when embedded on the site's French pages. */
+  initialLanguage?: 'en' | 'fr';
+  /** Hide the EN/FR switch, when the host page already decides the language. */
+  hideLanguageToggle?: boolean;
+}) {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [resumeOpen, setResumeOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<any | null>(null);
   const [submitErrors, setSubmitErrors] = useState<{ id: string; label: string }[]>([]);
   const [showAllMissing, setShowAllMissing] = useState(false);
-  const [isFrench, setIsFrench] = useState(false);
+  const [isFrench, setIsFrench] = useState(initialLanguage === 'fr');
   const appearance = survey.appearance || {};
   const t = useTranslation(isFrench ? 'fr' : 'en');
 
@@ -938,8 +953,8 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
     });
     if (result.error) {
       toast({
-        title: "Submission Failed",
-        description: result.error,
+        title: isFrench ? "Échec de l'envoi" : "Submission Failed",
+        description: isFrench ? translateValidationMessage(result.error) : result.error,
         variant: "destructive",
       });
     } else {
@@ -957,7 +972,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
     try {
       const ids = Object.keys(errors || {});
       if (ids.length > 0) {
-        const items = ids.map((id) => ({ id, label: (fieldMap.get(id) as any)?.label || id }));
+        const items = ids.map((id) => ({ id, label: translateFieldLabel((fieldMap.get(id) as any)?.label || id, isFrench ? 'fr' : 'en') }));
         setSubmitErrors(items);
         const firstId = ids[0];
         const el = document.getElementById(`field-${firstId}`);
@@ -965,8 +980,10 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         toast({
-          title: 'Please complete required fields',
-          description: `${ids.length} field${ids.length > 1 ? 's' : ''} need${ids.length > 1 ? '' : 's'} your attention.`,
+          title: isFrench ? 'Veuillez remplir les champs obligatoires' : 'Please complete required fields',
+          description: isFrench
+            ? `${ids.length} champ${ids.length > 1 ? 's' : ''} à vérifier.`
+            : `${ids.length} field${ids.length > 1 ? 's' : ''} need${ids.length > 1 ? '' : 's'} your attention.`,
           variant: 'destructive'
         });
       }
@@ -1022,7 +1039,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
                 color: thankYou.themeColor ? '#fff' : undefined
               }}
             >
-              {thankYou.buttonText || t.submitAnother}
+              {thankYou.buttonText ? translateFormText(thankYou.buttonText, isFrench ? 'fr' : 'en') : t.submitAnother}
             </Button>
           </CardContent>
         )}
@@ -1049,6 +1066,34 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
 
     // Translate the field label
     const translatedLabel = translateFieldLabel(fieldConfig.label, isFrench ? 'fr' : 'en');
+
+    // A single tick box reads as "[ ] statement": box first, and the whole
+    // statement is its label, so clicking the text ticks it too.
+    if (fieldConfig.type === 'boolean-checkbox') {
+      return (
+        <FormField
+          key={fieldConfig.id}
+          control={control}
+          name={fieldConfig.id}
+          render={({ field }) => (
+            <FormItem className={fieldConfig.className}>
+              <div className="flex items-start gap-3">
+                <FormControl>
+                  <Checkbox className="mt-0.5 h-5 w-5 rounded-[4px]" checked={field.value === true} onCheckedChange={(v) => field.onChange(v === true)} />
+                </FormControl>
+                <FormLabel className="font-normal leading-snug cursor-pointer">
+                  {translatedLabel}
+                  {fieldConfig.validation?.required && (
+                    <span className="text-destructive ml-1" aria-hidden="true">*</span>
+                  )}
+                </FormLabel>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      );
+    }
 
     return (
       <FormField
@@ -1364,21 +1409,24 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
 
   return (
     <Card className={`w-full max-w-5xl mx-auto rounded-lg ${embedded ? 'border-0 bg-transparent p-0 shadow-none sm:p-1' : `border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass} max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
+      {(appearance.showTitle || survey.description || !hideLanguageToggle || survey.shareButtonEnabled) && (
       <CardHeader className="p-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
             {appearance.showTitle && (
               <CardTitle className={`${titleSizeClass} text-primary`}>{translateFormText(survey.title, isFrench ? 'fr' : 'en')}</CardTitle>
             )}
-            <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description}</CardDescription>
+            <CardDescription className={appearance.showTitle ? "mt-1" : ""}>{survey.description ? translateFormText(survey.description, isFrench ? 'fr' : 'en') : null}</CardDescription>
           </div>
           <div className="flex items-center gap-2 shrink-0 self-start">
             {/* Language Toggle */}
-            <LanguageToggle
-              isFrench={isFrench}
-              onLanguageChange={setIsFrench}
-              size="sm"
-            />
+            {!hideLanguageToggle && (
+              <LanguageToggle
+                isFrench={isFrench}
+                onLanguageChange={setIsFrench}
+                size="sm"
+              />
+            )}
             {survey.shareButtonEnabled && (
               <Button
                 type="button"
@@ -1406,7 +1454,8 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-0 mt-4 sm:mt-6">
+      )}
+      <CardContent className={`px-0 ${appearance.showTitle || survey.description || !hideLanguageToggle || survey.shareButtonEnabled ? 'mt-4 sm:mt-6' : ''}`}>
         {embedded && resumeOpen && (
           <div role="region" aria-label={isFrench ? 'Brouillon enregistré' : 'Saved draft'} className="mb-6 rounded-lg border bg-muted/40 p-4">
             <p className="text-sm font-medium">{survey.resumeSettings?.resumeTitle || (isFrench ? 'Reprendre votre brouillon?' : 'Resume your saved progress?')}</p>
@@ -1429,6 +1478,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
           </div>
         )}
         <Form {...form}>
+          <FormMessageTranslationContext.Provider value={isFrench ? translateValidationMessage : identityMessage}>
           <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-10">
             {/* Honeypot: off-screen and skipped by keyboard and screen readers,
                 so only bots fill it. Deliberately not a react-hook-form field. */}
@@ -1448,7 +1498,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
                   <CardHeader className="p-0">
                     <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{translateSectionTitle(section.title, isFrench ? 'fr' : 'en')}</CardTitle>
                     {section.description && (
-                      <CardDescription className="mt-2">{section.description}</CardDescription>
+                      <CardDescription className="mt-2">{translateFormText(section.description, isFrench ? 'fr' : 'en')}</CardDescription>
                     )}
                   </CardHeader>
                   <CardContent className="px-0 sm:px-2 mt-4 sm:mt-6">
@@ -1594,7 +1644,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
                           }
                         }}
                         className="block text-left underline underline-offset-2"
-                        aria-label={`Scroll to ${e.label}`}
+                        aria-label={`${isFrench ? 'Aller à' : 'Scroll to'} ${e.label}`}
                       >
                         {e.label}
                       </button>
@@ -1611,6 +1661,7 @@ export default function FeedbackForm({ survey, embedded = false }: { survey: any
               </div>
             )}
           </form>
+          </FormMessageTranslationContext.Provider>
         </Form>
       </CardContent>
       <Dialog open={resumeOpen && !embedded} onOpenChange={setResumeOpen}>
