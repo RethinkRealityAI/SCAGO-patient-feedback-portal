@@ -278,6 +278,8 @@ export async function submitFeedback(
     const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Fetch survey first so we can validate payment fields against survey definition
+    const { ensureContactForm } = await import('@/lib/ensure-contact-form');
+    await ensureContactForm(surveyId);
     const surveyDoc = await getDoc(doc(clientDb, 'surveys', surveyId));
     if (!surveyDoc.exists()) {
       return { error: 'Survey not found.' };

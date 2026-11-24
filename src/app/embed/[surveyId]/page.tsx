@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import FeedbackForm from '@/components/feedback-form';
 import { getSurvey } from '@/app/editor/actions';
+import { ensureContactForm } from '@/lib/ensure-contact-form';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -30,6 +31,7 @@ export default async function EmbedSurveyPage({ params, searchParams }: EmbedPag
   const { lang: langParam } = await searchParams;
   const rawLang = (Array.isArray(langParam) ? langParam[0] : langParam)?.toLowerCase();
   const lang = rawLang?.startsWith('fr') ? 'fr' : rawLang?.startsWith('en') ? 'en' : undefined;
+  await ensureContactForm(surveyId);
   const surveyData = await getSurvey(surveyId);
 
   return (
