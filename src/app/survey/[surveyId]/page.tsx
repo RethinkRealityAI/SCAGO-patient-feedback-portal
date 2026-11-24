@@ -1,5 +1,6 @@
 import FeedbackForm from '@/components/feedback-form'
 import { getSurvey } from '@/app/editor/actions';
+import { ensureContactForm } from '@/lib/ensure-contact-form';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -11,6 +12,7 @@ type SurveyPageProps = {
 
 export default async function SurveyPage({ params }: SurveyPageProps) {
   const { surveyId } = await params;
+  await ensureContactForm(surveyId);
   const surveyData = await getSurvey(surveyId);
 
   if ('error' in surveyData) {

@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { CONTACT_FORM_ID, createSeededContactForm } from '@/lib/contact-form-template';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -218,6 +219,12 @@ export async function getSurvey(id: string) {
     if (!querySnapshot.empty) {
       const matchedDoc = querySnapshot.docs[0];
       return { id: matchedDoc.id, ...matchedDoc.data() };
+    }
+
+    // The website Contact Us form must never fall back to the default patient
+    // survey: if its document can't be created yet, render it from the template.
+    if (id === CONTACT_FORM_ID) {
+      return createSeededContactForm();
     }
 
     // Fallback to new survey if neither found

@@ -2,6 +2,7 @@
 
 import nodemailer from 'nodemailer';
 import { formTextFr } from '@/lib/form-text-fr';
+import { replacePlaceholders, replyToFromSubmission } from '@/lib/email-placeholders';
 import type { RegionRoutingConfig } from '@/lib/region-routing';
 import {
   buildPdfFilename,
@@ -493,16 +494,12 @@ export interface SubmissionEmailConfig {
   summaryFieldIds?: string[];
   /** Also notify regional contacts, chosen from the respondent's city. See src/lib/region-routing.ts. */
   regionRouting?: RegionRoutingConfig;
-}
-
-/**
- * Replace template placeholders in subject or body
- */
-function replacePlaceholders(template: string, data: { surveyTitle: string; submissionDate: string; region?: string }): string {
-  return template
-    .replace(/\{\{surveyTitle\}\}/g, data.surveyTitle)
-    .replace(/\{\{submissionDate\}\}/g, data.submissionDate)
-    .replace(/\{\{region\}\}/g, data.region || '');
+  /**
+   * Id of the field holding the respondent's email. When set (and the answer
+   * looks like an address), it becomes the Reply-To, so staff can answer the
+   * person straight from the notification.
+   */
+  replyToFieldId?: string;
 }
 
 /**
@@ -554,14 +551,14 @@ export async function sendSubmissionEmail(data: {
       ? `New Submission: {{surveyTitle}} from ${submitterName}`
       : `New Submission: {{surveyTitle}} - {{submissionDate}}`;
     const subjectTemplate = data.config.subject || defaultSubject;
-    let subject = replacePlaceholders(subjectTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region });
+    let subject = replacePlaceholders(subjectTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region, answers: data.submissionData });
     // Lets regional contacts spot (and filter) their region's submissions,
     // unless a custom subject already places {{region}} itself.
     if (data.region && !subjectTemplate.includes('{{region}}')) subject += ` [${data.region}]`;
 
     // Prepare body
     const bodyText = data.config.bodyTemplate
-      ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region })
+      ? replacePlaceholders(data.config.bodyTemplate, { surveyTitle: data.surveyTitle, submissionDate, region: data.region, answers: data.submissionData })
       : undefined;
 
     // Generate HTML with submitter name and dashboard link. The attachment is
@@ -607,6 +604,9 @@ export async function sendSubmissionEmail(data: {
       text: textContent,
       html: htmlContent,
     };
+
+    const replyTo = replyToFromSubmission(data.config.replyToFieldId, data.submissionData || {});
+    if (replyTo) mailOptions.replyTo = replyTo;
 
     // Add PDF attachment if available and enabled
     if (hasPdfAttachment) {

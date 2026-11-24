@@ -6,7 +6,8 @@
  * fall back to the English text, so a missing entry degrades to English rather
  * than breaking anything.
  *
- * Currently: the Counselling Intake Form (scripts/create-counselling-intake-form.js).
+ * Currently: the Counselling Intake Form (scripts/create-counselling-intake-form.js)
+ * and the website Contact Us form (src/lib/contact-form-template.ts).
  */
 export const FORM_TEXT_FR: Record<string, string> = {
   // Form chrome
@@ -79,7 +80,80 @@ export const FORM_TEXT_FR: Record<string, string> = {
   'I hereby verify that all information provided on this form is true':
     'Je confirme que tous les renseignements fournis dans ce formulaire sont exacts',
   'I agree to these terms.': "J'accepte ces conditions.",
+  // Website Contact Us form (src/lib/contact-form-template.ts)
+  'Contact Us': 'Nous joindre',
+  'Send message': 'Envoyer le message',
+  'Thank you for reaching out': "Merci d'avoir communiqué avec nous",
+  "Your message has been sent to the SCAGO team and we'll get back to you as soon as we can. We've also emailed you a confirmation. If this is a medical emergency, call 911.":
+    "Votre message a été transmis à l'équipe de SCAGO et nous vous répondrons dès que possible. Nous vous avons également envoyé une confirmation par courriel. S'il s'agit d'une urgence médicale, composez le 911.",
+  'Send another message': 'Envoyer un autre message',
+  'How can we help?': 'Comment pouvons-nous vous aider?',
+  'Need urgent medical help?\nIf you or someone you care for is having a sickle cell crisis or another medical emergency, call 911 or go to your nearest emergency department. This form is not monitored around the clock.':
+    "Besoin d'une aide médicale urgente?\nSi vous ou une personne dont vous prenez soin vivez une crise drépanocytaire ou une autre urgence médicale, composez le 911 ou rendez-vous au service d'urgence le plus proche. Ce formulaire n'est pas surveillé en tout temps.",
+  'What is your message about?': 'Quel est le sujet de votre message?',
+  'General question': 'Question générale',
+  'Support for patients and families': 'Soutien aux patients et aux familles',
+  'Counselling services': 'Services de counseling',
+  'Financial assistance': 'Aide financière',
+  'Programs and events': 'Programmes et événements',
+  'Volunteering and getting involved': 'Bénévolat et engagement',
+  'Donations and fundraising': 'Dons et collectes de fonds',
+  Membership: 'Adhésion',
+  'Healthcare professional inquiry': "Demande d'un professionnel de la santé",
+  'Media, partnerships or speaking requests': 'Médias, partenariats ou demandes de conférence',
+  'Website or technical issue': 'Site Web ou problème technique',
+  'Something else': 'Autre chose',
+  'Looking for counselling?\nCounselling requests go through the Counselling Intake Form on our Counselling page, which reaches our counselling team directly. You can still send a general question here.':
+    "Vous cherchez du counseling?\nLes demandes de counseling se font au moyen du formulaire d'admission au counseling, sur notre page Counseling; il est transmis directement à notre équipe de counseling. Vous pouvez tout de même nous envoyer une question générale ici.",
+  'Applying for financial assistance?\nApplications are made through the form on our Financial Assistance page. You can still send a general question here.':
+    "Vous souhaitez demander une aide financière?\nLes demandes se font au moyen du formulaire de notre page Aide financière. Vous pouvez tout de même nous envoyer une question générale ici.",
+  'Which best describes you?': 'Lequel de ces énoncés vous décrit le mieux?',
+  'A person living with sickle cell disease': 'Une personne atteinte de drépanocytose',
+  'A parent, family member or caregiver': 'Un parent, un membre de la famille ou un proche aidant',
+  'A healthcare professional': 'Un professionnel de la santé',
+  'A student or researcher': 'Un étudiant ou un chercheur',
+  'A community member or supporter': 'Un membre de la communauté ou un sympathisant',
+  'Representing an organization': 'Je représente un organisme',
+  'Organization or workplace (optional)': 'Organisme ou milieu de travail (facultatif)',
+  'Subject (optional)': 'Objet (facultatif)',
+  'A few words about your message': 'Quelques mots sur votre message',
+  'Your message': 'Votre message',
+  "Tell us how we can help. Please don't include detailed medical information.":
+    "Dites-nous comment nous pouvons vous aider. Veuillez ne pas inclure de renseignements médicaux détaillés.",
+  'How can we reach you?': 'Comment pouvons-nous vous joindre?',
+  'Phone (optional)': 'Téléphone (facultatif)',
+  'e.g. 416-555-0123': 'p. ex. 416-555-0123',
+  'How would you like us to reply?': 'Comment souhaitez-vous que nous vous répondions?',
+  Email: 'Courriel',
+  'City or town (optional)': 'Ville ou municipalité (facultatif)',
+  "I agree that SCAGO may use the information I've shared to respond to my message.":
+    "J'accepte que SCAGO utilise les renseignements fournis pour répondre à mon message.",
+  'Send me SCAGO news, events and program updates by email (optional).':
+    "Envoyez-moi par courriel les nouvelles, les événements et les programmes de SCAGO (facultatif).",
 };
+
+/**
+ * French for the validation and submission messages the form engine raises
+ * (written once, in English, in components/feedback-form and app/actions).
+ */
+export const VALIDATION_MESSAGES_FR: Record<string, string> = {
+  'This field is required.': 'Ce champ est obligatoire.',
+  'Invalid email address.': 'Adresse courriel non valide.',
+  'Invalid phone number format.': 'Numéro de téléphone non valide.',
+  'Invalid format.': 'Format non valide.',
+  'Invalid URL.': 'Adresse URL non valide.',
+  'Please specify': 'Veuillez préciser',
+  'Too many submissions from this connection. Please wait a few minutes and try again.':
+    'Trop d’envois à partir de cette connexion. Veuillez patienter quelques minutes, puis réessayer.',
+  'An unexpected error occurred while submitting your feedback.':
+    "Une erreur inattendue s'est produite lors de l'envoi. Veuillez réessayer.",
+};
+
+/** French for a validation message when known, otherwise the message unchanged. */
+export function translateValidationMessage(message: string): string {
+  return VALIDATION_MESSAGES_FR[message] ?? message;
+}
+
 
 /** French for `text` when known, otherwise `undefined` so callers can fall back. */
 export function formTextFr(text: string | undefined | null): string | undefined {
