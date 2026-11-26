@@ -49,19 +49,55 @@ function citySlug(cityAnswer: unknown): string {
   return city ? city.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : '';
 }
 
-/** The region for a city answer, or Unknown when it isn't mapped (including free-text "Other"). */
+/**
+ * The known city a free-text answer names, when it names one as whole words:
+ * "Waterloo, ON" -> waterloo, "Kitchener-Waterloo" -> kitchener (the first one
+ * named). Returns '' when none is named. Only whole words count, so "Middlesex"
+ * never matches "essex".
+ */
+export function knownCityInText(slug: string, knownCities: Iterable<string>): string {
+  if (!slug) return '';
+  const words = `-${slug}-`;
+  let best = '';
+  let bestAt = Infinity;
+  for (const city of knownCities) {
+    if (!city || city === 'other') continue;
+    const at = words.indexOf(`-${city}-`);
+    // The earliest city named wins; on a tie the longer name ("greater-sudbury" over "sudbury").
+    if (at !== -1 && (at < bestAt || (at === bestAt && city.length > best.length))) {
+      best = city;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
+/** A city answer as a mapped city slug: exact first, then a known city named in free text. */
+function resolvedCitySlug(cityAnswer: unknown, knownCities: Iterable<string>): string {
+  const slug = citySlug(cityAnswer);
+  if (!slug) return '';
+  const known = new Set(knownCities);
+  return known.has(slug) ? slug : knownCityInText(slug, known) || slug;
+}
+
+/**
+ * The region for a city answer, or Unknown when it isn't mapped. A free-text
+ * "Other" answer that names a mapped city ("Waterloo, ON") counts as that city.
+ */
 export function regionForCity(cityAnswer: unknown, cityToRegion: Record<string, string>): string {
   const city = normalizeCityValue(cityAnswer);
   if (!city) return UNKNOWN_REGION;
   // Mapping keys are slugs ("north-bay"); answers may be a slug or a label.
-  return cityToRegion[city] || cityToRegion[citySlug(cityAnswer)] || UNKNOWN_REGION;
+  if (cityToRegion[city]) return cityToRegion[city];
+  return cityToRegion[resolvedCitySlug(cityAnswer, Object.keys(cityToRegion))] || UNKNOWN_REGION;
 }
 
 /** The specific area (with contacts) a city answer falls in, if any. */
 export function areaForCity(cityAnswer: unknown, areas: AreaRoute[] | undefined): AreaRoute | undefined {
-  const slug = citySlug(cityAnswer);
+  const withContacts = (areas || []).filter(a => a.emails.some(e => e && e.trim()));
+  const slug = resolvedCitySlug(cityAnswer, withContacts.flatMap(a => a.cities));
   if (!slug) return undefined;
-  return (areas || []).find(a => a.cities.includes(slug) && a.emails.some(e => e && e.trim()));
+  return withContacts.find(a => a.cities.includes(slug));
 }
 
 function dedupeEmails(lists: string[][]): string[] {

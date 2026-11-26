@@ -106,3 +106,49 @@ describe('citiesByRegion', () => {
     expect(citiesByRegion(cityToRegion)).toEqual({ GTA: ['mississauga', 'toronto'], 'Hamilton-Wentworth': ['hamilton'], East: ['ottawa'] });
   });
 });
+
+describe('sub-regions: nearby towns count toward a region', () => {
+  // Imported lazily so the tests above keep their small hand-written map.
+  it('assigns every city in the form list to a region', async () => {
+    const { ontarioCities } = await import('./location-data');
+    const { DEFAULT_CITY_TO_REGION } = await import('./city-to-region');
+    const missing = ontarioCities.map(c => c.value).filter(v => v !== 'other' && !DEFAULT_CITY_TO_REGION[v]);
+    expect(missing).toEqual([]);
+  });
+
+  it('keeps London and Hamilton where they were, and adds their neighbours', async () => {
+    const { DEFAULT_CITY_TO_REGION: map } = await import('./city-to-region');
+    expect(regionForCity({ selection: 'london' }, map)).toBe('West');
+    expect(regionForCity({ selection: 'hamilton' }, map)).toBe('Hamilton-Wentworth');
+    for (const c of ['kitchener', 'waterloo', 'cambridge', 'guelph', 'stratford', 'woodstock']) {
+      expect(regionForCity({ selection: c }, map)).toBe('West');
+    }
+    for (const c of ['stoney-creek', 'ancaster', 'dundas', 'st-catharines', 'brantford']) {
+      expect(regionForCity({ selection: c }, map)).toBe('Hamilton-Wentworth');
+    }
+  });
+
+  it('reads a known city out of a free-text "Other" answer', () => {
+    const map = { kitchener: 'West', waterloo: 'West', essex: 'West', 'greater-sudbury': 'North', sudbury: 'North' };
+    expect(regionForCity({ selection: 'other', other: 'Waterloo, ON' }, map)).toBe('West');
+    expect(regionForCity({ selection: 'other', other: 'Kitchener-Waterloo' }, map)).toBe('West');
+    expect(regionForCity({ selection: 'other', other: 'Middlesex Centre' }, map)).toBe('Unknown');
+    expect(regionForCity({ selection: 'other', other: 'Montreal' }, map)).toBe('Unknown');
+  });
+
+  it('routes Kitchener to the London lead and Windsor-Essex to the Windsor lead', async () => {
+    const { DEFAULT_CITY_TO_REGION: map } = await import('./city-to-region');
+    const herp = {
+      enabled: true,
+      sourceFieldId: 'city',
+      routes: { West: ['swo@scago.ca'], 'Hamilton-Wentworth': ['hamilton@scago.ca'] },
+      areaRoutes: [{ name: 'Windsor-Essex', cities: ['windsor', 'essex', 'leamington', 'tecumseh', 'amherstburg'], emails: ['windsor@scago.ca'] }],
+    };
+    const to = (city: unknown) => resolveNotificationRecipients({ mainRecipients: main, routing: herp, submission: { city }, cityToRegion: map });
+    expect(to({ selection: 'kitchener' }).recipients).toEqual(['tech@scago.ca', 'swo@scago.ca']);
+    expect(to({ selection: 'london' }).recipients).toEqual(['tech@scago.ca', 'swo@scago.ca']);
+    expect(to({ selection: 'hamilton' }).recipients).toEqual(['tech@scago.ca', 'hamilton@scago.ca']);
+    expect(to({ selection: 'niagara-falls' }).recipients).toEqual(['tech@scago.ca', 'hamilton@scago.ca']);
+    expect(to({ selection: 'other', other: 'Tecumseh ON' })).toMatchObject({ area: 'Windsor-Essex', recipients: ['tech@scago.ca', 'windsor@scago.ca'] });
+  });
+});
