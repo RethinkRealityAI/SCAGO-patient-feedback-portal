@@ -1,26 +1,51 @@
 'use client'
 
-import { AlertTriangle, Info } from 'lucide-react'
+import { AlertTriangle, Info, Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Tone = 'default' | 'notice' | 'urgent'
+type Tone = 'default' | 'notice' | 'urgent' | 'subtle'
+type IconName = 'info' | 'phone'
 
 /**
  * Read-only text inside a form. `notice` and `urgent` render as callouts so
  * safety information (e.g. crisis lines) is impossible to miss; `urgent` is
- * announced to screen readers as an alert.
+ * announced to screen readers as an alert. `subtle` is a quiet, neutral note
+ * (soft grey panel, small icon in the form's accent colour) for guidance that
+ * should be visible without dominating the form.
  */
 export function TextBlock({
   text,
   tone = 'default',
+  icon,
   className,
 }: {
   text: string
   tone?: Tone
+  icon?: IconName
   className?: string
 }) {
   if (tone === 'default') {
     return <div className={cn('text-sm text-muted-foreground whitespace-pre-wrap', className)}>{text}</div>
+  }
+
+  if (tone === 'subtle') {
+    const [heading, ...rest] = text.split('\n')
+    const body = rest.join('\n').trim()
+    const SubtleIcon = icon === 'phone' ? Phone : Info
+    return (
+      <div role="note" className={cn('flex items-start gap-3 rounded-xl bg-muted/60 px-4 py-3.5', className)}>
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-background text-[color:var(--form-accent,hsl(var(--primary)))] shadow-sm ring-1 ring-black/5"
+        >
+          <SubtleIcon className="h-3.5 w-3.5" />
+        </span>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">{heading}</span>
+          {body && <> {body}</>}
+        </p>
+      </div>
+    )
   }
 
   const urgent = tone === 'urgent'

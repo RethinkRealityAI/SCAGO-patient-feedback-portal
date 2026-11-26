@@ -56,7 +56,8 @@ const fieldSchema: z.ZodType<FormFieldConfig> = z.lazy(() => z.object({
   // Any-of visibility and text-block callout tone. Not editable here yet, but
   // declared so saving a form in the editor doesn't strip them.
   conditionValues: z.array(z.string()).optional(),
-  tone: z.enum(['default', 'notice', 'urgent']).optional(),
+  tone: z.enum(['default', 'notice', 'urgent', 'subtle']).optional(),
+  icon: z.enum(['info', 'phone']).optional(),
   validation: z.object({
     required: z.boolean().optional(),
     pattern: z.string().optional(),
@@ -248,7 +249,8 @@ interface FormFieldConfig {
   conditionField?: string;
   conditionValue?: any;
   conditionValues?: string[];
-  tone?: 'default' | 'notice' | 'urgent';
+  tone?: 'default' | 'notice' | 'urgent' | 'subtle';
+  icon?: 'info' | 'phone';
   logoUrl?: string;
   altText?: string;
   alignment?: 'left' | 'center' | 'right';

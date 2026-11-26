@@ -58,7 +58,8 @@ export type FieldDef = {
   /** Show when the controlling answer matches any of these (see lib/field-conditions). */
   conditionValues?: string[];
   /** For 'text-block': `notice` renders an info callout, `urgent` a red alert (e.g. crisis lines). */
-  tone?: 'default' | 'notice' | 'urgent';
+  tone?: 'default' | 'notice' | 'urgent' | 'subtle';
+  icon?: 'info' | 'phone';
   fields?: FieldDef[];
   rows?: { id: string; label: string; value: string }[];
   columns?: { id: string; label: string; value: string; type?: string }[];
@@ -337,6 +338,7 @@ export function FormFieldRenderer({
           <TextBlock
             text={translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
             tone={fieldConfig.tone}
+            icon={fieldConfig.icon}
             className={fieldConfig.className}
           />
         );

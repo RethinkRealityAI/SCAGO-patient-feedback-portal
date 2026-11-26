@@ -4,6 +4,7 @@ import { translateFieldLabel, translateOption, translateSectionTitle } from './t
 import { CONTACT_FORM_ID, createContactFormTemplate } from './contact-form-template';
 import { replacePlaceholders, replyToFromSubmission } from './email-placeholders';
 import { isConditionMet } from './field-conditions';
+import { keptRecipients } from './ensure-contact-form';
 
 /** Every string a visitor can see on the form. */
 function visibleStrings(survey: any): string[] {
@@ -119,5 +120,20 @@ describe('Notification email helpers', () => {
   it('translates validation messages to French', () => {
     expect(translateValidationMessage('This field is required.')).toBe('Ce champ est obligatoire.');
     expect(translateValidationMessage('Something new')).toBe('Something new');
+  });
+
+  it('is a two-step form with quiet notices', () => {
+    const survey: any = createContactFormTemplate();
+    expect(survey.multiStep).toBe(true);
+    expect(survey.sections).toHaveLength(2);
+    const notices = allFields(survey).filter((f: any) => f.type === 'text-block');
+    expect(notices.length).toBeGreaterThan(0);
+    for (const n of notices) expect(n.tone).toBe('subtle');
+  });
+
+  it('keeps configured recipients when the template is upgraded', () => {
+    expect(keptRecipients({ emailNotifications: { recipients: ['a@x.org'] } })).toEqual(['a@x.org']);
+    expect(keptRecipients({ emailNotifications: { recipients: [] } })).toEqual(['info@sicklecellanemia.ca']);
+    expect(keptRecipients({})).toEqual(['info@sicklecellanemia.ca']);
   });
 });
