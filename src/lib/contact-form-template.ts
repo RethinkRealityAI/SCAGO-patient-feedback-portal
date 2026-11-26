@@ -13,7 +13,7 @@
  */
 
 export const CONTACT_FORM_ID = 'website-contact';
-export const CONTACT_FORM_TEMPLATE_VERSION = 1;
+export const CONTACT_FORM_TEMPLATE_VERSION = 2;
 export const CONTACT_FORM_DEFAULT_RECIPIENTS = ['info@sicklecellanemia.ca'];
 
 // Option values are the visible English labels, so the email, CSV and
@@ -82,6 +82,9 @@ export function createContactFormTemplate(recipients: string[] = CONTACT_FORM_DE
       showTitle: false,
     },
     submitButtonLabel: 'Send message',
+    // One section per screen ("Step 1 of 2"), so the form never reads as a
+    // long scroll of stacked boxes.
+    multiStep: true,
     // A short form; a saved draft would also linger on shared computers.
     saveProgressEnabled: false,
     shareButtonEnabled: false,
@@ -176,7 +179,7 @@ export function createContactFormTemplate(recipients: string[] = CONTACT_FORM_DE
         id: 'contact-message-section',
         title: 'How can we help?',
         fields: [
-          { id: 'emergencyNotice', label: '', type: 'text-block', tone: 'notice', helperText: EMERGENCY_NOTICE, validation: { required: false } },
+          { id: 'emergencyNotice', label: '', type: 'text-block', tone: 'subtle', icon: 'phone', helperText: EMERGENCY_NOTICE, validation: { required: false } },
           {
             id: 'inquiryType',
             label: 'What is your message about?',
@@ -188,7 +191,7 @@ export function createContactFormTemplate(recipients: string[] = CONTACT_FORM_DE
             id: 'counsellingNotice',
             label: '',
             type: 'text-block',
-            tone: 'notice',
+            tone: 'subtle',
             helperText: COUNSELLING_NOTICE,
             conditionField: 'inquiryType',
             conditionValues: ['Counselling services'],
@@ -199,7 +202,7 @@ export function createContactFormTemplate(recipients: string[] = CONTACT_FORM_DE
             id: 'financialNotice',
             label: '',
             type: 'text-block',
-            tone: 'notice',
+            tone: 'subtle',
             helperText: FINANCIAL_NOTICE,
             conditionField: 'inquiryType',
             conditionValues: ['Financial assistance'],

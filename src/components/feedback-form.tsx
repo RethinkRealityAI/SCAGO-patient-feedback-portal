@@ -27,7 +27,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages, Upload as UploadIcon } from "lucide-react"
+import { Loader2, Star, PartyPopper, Check, ChevronsUpDown, Share2, Languages, Upload as UploadIcon, ArrowLeft, ArrowRight } from "lucide-react"
 import { TextBlock } from '@/components/text-block'
 import { submitFeedback } from "@/app/actions"
 import { storage } from "@/lib/firebase"
@@ -763,6 +763,13 @@ export default function FeedbackForm({
   const [isFrench, setIsFrench] = useState(initialLanguage === 'fr');
   const appearance = survey.appearance || {};
   const t = useTranslation(isFrench ? 'fr' : 'en');
+  // Step-by-step mode: one section per screen with Back / Continue, so a
+  // multi-section form doesn't read as one long scroll.
+  const multiStep = survey.multiStep === true && (survey.sections || []).length > 1;
+  const stepCount = multiStep ? survey.sections.length : 1;
+  const [step, setStep] = useState(0);
+  const isLastStep = !multiStep || step >= stepCount - 1;
+  const formRootRef = useRef<HTMLDivElement>(null);
 
   // Flatten all fields (including groups) from all sections for schema
   const allFields: FieldDef[] = survey.sections.flatMap((section: any) =>
@@ -968,9 +975,41 @@ export default function FeedbackForm({
     }
   }
 
+  function sectionFieldIds(section: any): string[] {
+    return (section?.fields || []).flatMap((f: any) =>
+      f.type === 'group' ? (f.fields || []).map((sf: any) => sf.id) : f.type === 'text-block' ? [] : [f.id]
+    );
+  }
+
+  function scrollFormToTop() {
+    if (typeof window === 'undefined') return;
+    if (embedded && window.parent !== window) {
+      window.parent.postMessage({ type: 'scago-form:scroll-top' }, '*');
+    } else {
+      formRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function goToStep(next: number) {
+    setStep(next);
+    setSubmitErrors([]);
+    scrollFormToTop();
+  }
+
+  async function goNext() {
+    const ids = sectionFieldIds(survey.sections[step]);
+    const ok = ids.length === 0 ? true : await form.trigger(ids as any, { shouldFocus: true });
+    if (ok) goToStep(Math.min(step + 1, stepCount - 1));
+  }
+
   function onInvalid(errors: any) {
     try {
       const ids = Object.keys(errors || {});
+      if (ids.length > 0 && multiStep) {
+        // Send the visitor back to the first step that still has a problem.
+        const firstStep = survey.sections.findIndex((section: any) => sectionFieldIds(section).some((id) => ids.includes(id)));
+        if (firstStep >= 0 && firstStep !== step) setStep(firstStep);
+      }
       if (ids.length > 0) {
         const items = ids.map((id) => ({ id, label: translateFieldLabel((fieldMap.get(id) as any)?.label || id, isFrench ? 'fr' : 'en') }));
         setSubmitErrors(items);
@@ -1029,6 +1068,7 @@ export default function FeedbackForm({
                 } else {
                   clearDraft();
                   setIsSubmitted(false);
+                  setStep(0);
                   try { (form as any)?.reset({}); } catch { }
                 }
               }}
@@ -1344,6 +1384,7 @@ export default function FeedbackForm({
                       <TextBlock
                         text={translateFieldLabel(fieldConfig.helperText || fieldConfig.label, isFrench ? 'fr' : 'en')}
                         tone={fieldConfig.tone}
+                        icon={fieldConfig.icon}
                         className={fieldConfig.className}
                       />
                     );
@@ -1408,7 +1449,7 @@ export default function FeedbackForm({
   };
 
   return (
-    <Card className={`w-full max-w-5xl mx-auto rounded-lg ${embedded ? 'border-0 bg-transparent p-0 shadow-none sm:p-1' : `border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass} max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined }}>
+    <Card className={`w-full max-w-5xl mx-auto rounded-lg ${embedded ? 'border-0 bg-transparent p-0 shadow-none sm:p-1' : `border p-3 sm:p-5 md:p-6 shadow-sm ${cardShadowClass} max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`}`} style={{ ['--ring' as any]: appearance.themeColor ? appearance.themeColor : undefined, ['--form-accent' as any]: appearance.themeColor || undefined }}>
       {(appearance.showTitle || survey.description || !hideLanguageToggle || survey.shareButtonEnabled) && (
       <CardHeader className="p-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -1479,14 +1520,48 @@ export default function FeedbackForm({
         )}
         <Form {...form}>
           <FormMessageTranslationContext.Provider value={isFrench ? translateValidationMessage : identityMessage}>
-          <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-10">
+          <form
+            ref={formRootRef as any}
+            onSubmit={(event) => {
+              // Enter on an earlier step moves forward instead of submitting.
+              if (!isLastStep) {
+                event.preventDefault();
+                void goNext();
+                return;
+              }
+              return form.handleSubmit(onSubmit, onInvalid)(event);
+            }}
+            className={multiStep ? 'space-y-8 scroll-mt-6' : 'space-y-10'}
+          >
+            {multiStep && (
+              <div className="space-y-2.5">
+                <div className="flex items-baseline justify-between gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <span>{isFrench ? `Étape ${step + 1} sur ${stepCount}` : `Step ${step + 1} of ${stepCount}`}</span>
+                  {step < stepCount - 1 && (
+                    <span className="truncate normal-case tracking-normal">
+                      {isFrench ? 'Ensuite : ' : 'Next: '}
+                      {translateSectionTitle(survey.sections[step + 1]?.title || '', isFrench ? 'fr' : 'en')}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5" aria-hidden="true">
+                  {survey.sections.map((section: any, index: number) => (
+                    <div
+                      key={section.id}
+                      className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${index <= step ? '' : 'bg-muted'}`}
+                      style={index <= step ? { background: appearance.themeColor || 'hsl(var(--primary))' } : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Honeypot: off-screen and skipped by keyboard and screen readers,
                 so only bots fill it. Deliberately not a react-hook-form field. */}
             <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
               <label htmlFor="hp_check_field">Leave this field empty</label>
               <input ref={honeypotRef} id="hp_check_field" name="hp_check_field" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
             </div>
-            {survey.sections.map((section: any) => {
+            {survey.sections.map((section: any, sectionIndex: number) => {
               const anonField = (section.fields || []).find((f: any) => f.type === 'anonymous-toggle');
               const isAnonymous = anonField ? !!(watchedValues as any)[anonField.id] : false;
               // Engagement gating: if this is the V2 engagement section, hide all except visitType until selected
@@ -1494,15 +1569,21 @@ export default function FeedbackForm({
               const visitTypeValue = (watchedValues as any)['visitType'];
               const hideUntilVisitType = isEngagementSection && (!visitTypeValue || (Array.isArray(visitTypeValue) && visitTypeValue.length === 0));
               return (
-                <Card key={section.id} className="min-w-0 rounded-lg border p-4 sm:p-5 shadow-sm transition-shadow duration-300 ease-out md:hover:shadow-md">
+                <Card
+                  key={section.id}
+                  hidden={multiStep && sectionIndex !== step}
+                  className={multiStep
+                    ? 'min-w-0 border-0 bg-transparent p-0 shadow-none animate-in fade-in-0 slide-in-from-right-2 duration-300'
+                    : 'min-w-0 rounded-lg border p-4 sm:p-5 shadow-sm transition-shadow duration-300 ease-out md:hover:shadow-md'}
+                >
                   <CardHeader className="p-0">
                     <CardTitle className={`${sectionTitleSizeClass} font-semibold text-primary`}>{translateSectionTitle(section.title, isFrench ? 'fr' : 'en')}</CardTitle>
                     {section.description && (
                       <CardDescription className="mt-2">{translateFormText(section.description, isFrench ? 'fr' : 'en')}</CardDescription>
                     )}
                   </CardHeader>
-                  <CardContent className="px-0 sm:px-2 mt-4 sm:mt-6">
-                    <div className="space-y-8">
+                  <CardContent className={multiStep ? 'px-0 mt-5 sm:mt-6' : 'px-0 sm:px-2 mt-4 sm:mt-6'}>
+                    <div className={multiStep ? 'space-y-6 [&_*]:!max-w-none' : 'space-y-8'}>
                       {hideUntilVisitType && (
                         <div className="text-sm text-muted-foreground">
                           {t.selectEncounter}
@@ -1525,7 +1606,7 @@ export default function FeedbackForm({
                         }
                         if (field.type === 'group') {
                           return (
-                            <div key={field.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                            <div key={field.id} className={multiStep ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5' : 'grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6'}>
                               {field.fields?.map((subField) => {
                                 const subFieldDef = fieldMap.get(subField.id);
                                 if (!subFieldDef || !shouldShowField(subFieldDef)) return null;
@@ -1613,6 +1694,37 @@ export default function FeedbackForm({
               );
             })}
 
+            {multiStep ? (
+              <CardFooter className="flex flex-col-reverse gap-3 border-t px-0 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                {step > 0 ? (
+                  <Button type="button" variant="ghost" size="lg" onClick={() => goToStep(step - 1)} className="w-full sm:w-auto">
+                    <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {isFrench ? 'Retour' : 'Back'}
+                  </Button>
+                ) : <span className="hidden sm:block" />}
+                {isLastStep ? (
+                  <Button key="submit" type="submit" disabled={isSubmitting} size="lg" className="w-full whitespace-normal sm:w-auto sm:min-w-40">
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {survey.submitButtonLabel ? translateFormText(survey.submitButtonLabel, isFrench ? 'fr' : 'en') : t.submit}
+                  </Button>
+                ) : (
+                  <Button
+                    key="continue"
+                    type="button"
+                    size="lg"
+                    onClick={(event) => {
+                      // Never let this click turn into a submit once the next step renders.
+                      event.preventDefault();
+                      void goNext();
+                    }}
+                    className="w-full sm:w-auto sm:min-w-40"
+                  >
+                    {isFrench ? 'Continuer' : 'Continue'}
+                    <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </Button>
+                )}
+              </CardFooter>
+            ) : (
             <CardFooter className="px-0 pt-6 sm:pt-8 flex justify-center">
               <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                 <Button type="submit" disabled={isSubmitting} size="lg" className="w-full whitespace-normal sm:w-auto sm:min-w-32">
@@ -1624,8 +1736,9 @@ export default function FeedbackForm({
                 )}
               </div>
             </CardFooter>
+            )}
 
-            {submitErrors.length > 0 && (
+            {submitErrors.length > 0 && !multiStep && (
               <div className="px-0">
                 <Card className="mt-4 border-destructive/30">
                   <CardHeader className="pb-2">
