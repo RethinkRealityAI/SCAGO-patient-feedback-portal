@@ -33,6 +33,7 @@ import {
   type RegionCityOption,
 } from '@/app/admin/user-actions';
 import { ontarioCities } from '@/lib/location-data';
+import { DEFAULT_CITY_TO_REGION } from '@/lib/city-to-region';
 import { getRegionDisplayLabel } from '@/types/patient';
 
 type MappingState = Record<string, string>;
@@ -239,6 +240,33 @@ export function RegionConfigEditor() {
       return { ...prev, [cityValue]: nextRegion };
     });
     markDirty();
+  };
+
+  // Unassigned cities that have a suggested region (the built-in defaults), so
+  // nearby towns can count toward their closest region in one step. Never
+  // touches a city that is already assigned.
+  const suggestedForUnmapped = useMemo(() => {
+    const valid = new Set(editableRegions);
+    return unmappedCities.flatMap((city) => {
+      const region = DEFAULT_CITY_TO_REGION[city.value];
+      return region && valid.has(region) ? [{ city, region }] : [];
+    });
+  }, [unmappedCities, editableRegions]);
+
+  const handleApplySuggested = () => {
+    if (suggestedForUnmapped.length === 0) return;
+    setMappings((prev) => {
+      const next = { ...prev };
+      suggestedForUnmapped.forEach(({ city, region }) => {
+        if (!next[city.value]) next[city.value] = region;
+      });
+      return next;
+    });
+    markDirty();
+    toast({
+      title: 'Suggested regions applied',
+      description: `${suggestedForUnmapped.length} ${suggestedForUnmapped.length === 1 ? 'city was' : 'cities were'} assigned. Review them, then save.`,
+    });
   };
 
   const handleBulkAddToRegion = () => {
@@ -754,9 +782,21 @@ export function RegionConfigEditor() {
                 <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <p className="font-semibold text-sm">Unmapped Cities ({unmappedCities.length})</p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                These cities resolve to &ldquo;Not assigned region&rdquo;. Assign them to a region for proper routing.
-              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  These cities resolve to &ldquo;Not assigned region&rdquo;. Assign them to a region for proper routing.
+                </p>
+                {suggestedForUnmapped.length > 0 && (
+                  <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={handleApplySuggested}>
+                    Use suggested regions ({suggestedForUnmapped.length})
+                  </Button>
+                )}
+              </div>
+              {suggestedForUnmapped.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Suggested: {suggestedForUnmapped.map(({ city, region }) => `${city.label} → ${region}`).join(', ')}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {unmappedCities.map((city) => (
                   <div key={city.value} className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5">
